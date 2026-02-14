@@ -1,0 +1,331 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.*"
+
+env:
+  CARGO_TERM_COLOR: always
+  GIT_CLIFF_VERSION: "2.8.0"
+  UPX_VERSION: "5.1.0"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  changelog:
+    name: Generate changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache git-cliff
+        id: cache-cliff
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/git-cliff
+          key: git-cliff-${{ env.GIT_CLIFF_VERSION }}-${{ runner.os }}
+
+      - name: Install git-cliff
+        if: steps.cache-cliff.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL \
+            "https://github.com/orhun/git-cliff/releases/download/v${{ env.GIT_CLIFF_VERSION }}/git-cliff-${{ env.GIT_CLIFF_VERSION }}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz -C /tmp/
+          find /tmp -name 'git-cliff' -type f | head -1 | xargs -I{} cp {} /usr/local/bin/git-cliff
+          chmod +x /usr/local/bin/git-cliff
+
+      - name: Generate changelog with git-cliff
+        id: cliff
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+        run: git-cliff --config cliff.toml --latest --strip header --output CHANGELOG_RELEASE.md
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG_RELEASE.md
+
+  build:
+    name: Build ${{ matrix.variant }} / ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    needs: changelog
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── default (avec reqwest, chargement HTTP des molds) ───────────────
+          - { target: x86_64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: default, features: "" }
+          - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: default, features: "" }
+          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: default, features: "" }
+          - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: default, features: "" }
+          # ── slim (sans reqwest, binaire léger) ───────────────────────────
+          - { target: x86_64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
+          - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
+          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: slim, features: "--no-default-features" }
+          - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: slim, features: "--no-default-features" }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "cargo-registry"
+          key: ${{ matrix.target }}-${{ matrix.variant }}
+
+      - name: Install cross (Linux musl targets)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      # UPX — Linux : download épinglé + cache
+      - name: Cache UPX
+        id: cache-upx
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/upx
+          key: upx-${{ env.UPX_VERSION }}-linux
+
+      - name: Install UPX (Linux)
+        if: runner.os == 'Linux' && steps.cache-upx.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL \
+            "https://github.com/upx/upx/releases/download/v${{ env.UPX_VERSION }}/upx-${{ env.UPX_VERSION }}-amd64_linux.tar.xz" \
+            | tar xJ -C /tmp/
+          find /tmp -name 'upx' -type f | head -1 | xargs -I{} cp {} /usr/local/bin/upx
+          chmod +x /usr/local/bin/upx
+
+      # UPX — Windows : download épinglé dans System32 (pas de cache nécessaire)
+      - name: Install UPX (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/upx/upx/releases/download/v${{ env.UPX_VERSION }}/upx-${{ env.UPX_VERSION }}-win64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\upx.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\upx.zip" -DestinationPath "$env:RUNNER_TEMP\upx_dir"
+          $exe = (Get-ChildItem -Recurse "$env:RUNNER_TEMP\upx_dir" -Filter upx.exe | Select-Object -First 1).FullName
+          Copy-Item $exe "$env:SystemRoot\System32\upx.exe"
+
+      - name: Build with cross
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }} ${{ matrix.features }}
+
+      - name: Build with cargo
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --target ${{ matrix.target }} ${{ matrix.features }}
+
+      - name: Set binary metadata
+        id: bin
+        shell: bash
+        run: |
+          EXT=$([[ "${{ matrix.target }}" == *windows* ]] && echo ".exe" || echo "")
+          PREFIX=$([[ "${{ matrix.variant }}" == "slim" ]] && echo "fimod-slim" || echo "fimod")
+          echo "path=target/${{ matrix.target }}/release/fimod${EXT}"                       >> "$GITHUB_OUTPUT"
+          echo "asset=${PREFIX}-${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.ext }}" >> "$GITHUB_OUTPUT"
+
+      # UPX — Linux et Windows (skippé macOS : support ARM expérimental instable)
+      - name: Compress binary with UPX
+        if: runner.os != 'macOS'
+        shell: bash
+        run: upx --best --lzma "${{ steps.bin.outputs.path }}"
+
+      - name: Package (tar.gz)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          SRC="${{ steps.bin.outputs.path }}"
+          tar czf "${{ steps.bin.outputs.asset }}" -C "$(dirname $SRC)" "$(basename $SRC)"
+
+      - name: Package (zip, Windows)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: Compress-Archive -Path "${{ steps.bin.outputs.path }}" -DestinationPath "${{ steps.bin.outputs.asset }}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.variant }}-${{ matrix.target }}
+          path: ${{ steps.bin.outputs.asset }}
+
+  release:
+    name: Publish GitHub Release
+    needs: [changelog, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Generate VERSION file
+        run: echo "${GITHUB_REF_NAME}" > VERSION
+
+      - name: Bundle molds
+        shell: bash
+        run: |
+          if [ -d molds ] && [ "$(ls -A molds)" ]; then
+            tar czf "fimod-${GITHUB_REF_NAME}-molds.tar.gz" molds/
+            echo "molds_asset=fimod-${GITHUB_REF_NAME}-molds.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - name: Compute SHA256 checksums
+        shell: bash
+        run: |
+          SUMS="fimod-${GITHUB_REF_NAME}-sha256sums.txt"
+          find artifacts/ \( -name "*.tar.gz" -o -name "*.zip" \) | sort | while read f; do
+            sha256sum "$f" | awk "{print \$1, \"$(basename $f)\"}"
+          done > "$SUMS"
+          echo "sums_file=${SUMS}" >> "$GITHUB_ENV"
+
+      - name: Read changelog
+        id: changelog
+        run: |
+          BODY=$(cat artifacts/changelog/CHANGELOG_RELEASE.md 2>/dev/null || echo "Release ${{ github.ref_name }}")
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$BODY"     >> "$GITHUB_OUTPUT"
+          echo "EOF"       >> "$GITHUB_OUTPUT"
+
+      - name: Determine pre-release
+        id: prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-"* ]]; then
+            echo "flag=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
+          prerelease: ${{ steps.prerelease.outputs.flag }}
+          draft: false
+          files: |
+            artifacts/binary-*/*.tar.gz
+            artifacts/binary-*/*.zip
+            ${{ env.sums_file }}
+            ${{ env.molds_asset }}
+            VERSION
+
+  docker:
+    name: Publish Docker images
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, target: x86_64-unknown-linux-musl, platform: linux/amd64 }
+          - { arch: arm64, target: aarch64-unknown-linux-musl, platform: linux/arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-default-${{ matrix.target }}
+          path: docker-bin/
+
+      - name: Extract binary
+        run: |
+          mkdir -p bin
+          tar xzf docker-bin/*.tar.gz -C bin/
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Tool image (scratch, for COPY --from=) ──────────────────
+      - name: Build and push tool image (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: tool
+          platforms: ${{ matrix.platform }}
+          build-args: FIMOD_BIN=bin/fimod
+          push: true
+          tags: ghcr.io/${{ github.repository }}:build-tool-${{ matrix.arch }}
+
+      # ── Runtime image (Ubuntu, for standalone use) ──────────────
+      - name: Build and push runtime image (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: ${{ matrix.platform }}
+          build-args: FIMOD_BIN=bin/fimod
+          push: true
+          tags: ghcr.io/${{ github.repository }}:build-runtime-${{ matrix.arch }}
+
+  docker-manifest:
+    name: Create multi-arch manifests
+    needs: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta (tool)
+        id: meta-tool
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Docker meta (runtime)
+        id: meta-runtime
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-runtime
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Create tool manifest
+        run: |
+          REPO="ghcr.io/${{ github.repository }}"
+          while IFS= read -r TAG; do
+            [ -z "$TAG" ] && continue
+            docker buildx imagetools create -t "$TAG" \
+              "${REPO}:build-tool-amd64" \
+              "${REPO}:build-tool-arm64"
+          done <<< "${{ steps.meta-tool.outputs.tags }}"
+
+      - name: Create runtime manifest
+        run: |
+          REPO="ghcr.io/${{ github.repository }}"
+          while IFS= read -r TAG; do
+            [ -z "$TAG" ] && continue
+            docker buildx imagetools create -t "$TAG" \
+              "${REPO}:build-runtime-amd64" \
+              "${REPO}:build-runtime-arm64"
+          done <<< "${{ steps.meta-runtime.outputs.tags }}"

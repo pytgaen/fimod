@@ -1,0 +1,8 @@
+# Même résultat que basic, mais la liste de champs obligatoires
+# vient de l'environnement plutôt que de --arg.
+input_file = "basic.input.json"
+expected_file = "basic.expected.json"
+env_patterns = ["FIMOD_REQUIRED_FIELDS"]
+
+[env_vars]
+FIMOD_REQUIRED_FIELDS = "host,port,db.name"

@@ -1,0 +1,6 @@
+{
+    "status": 302,
+    "headers": {
+        "location": "https://github.com/org/repo/releases/tag/v1.2.3"
+    }
+}

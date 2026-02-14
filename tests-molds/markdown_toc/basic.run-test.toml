@@ -1,0 +1,4 @@
+# Le fichier d'entrée est un tableau JSON de strings (pas du markdown brut).
+# On force --input-format json pour ne pas laisser la directive
+# "input-format=lines" du mold l'emporter sur l'auto-détection.
+input_format = "json"

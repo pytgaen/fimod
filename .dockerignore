@@ -1,0 +1,9 @@
+target/
+.git/
+.github/
+.claude/
+docs/
+*.md
+!CLAUDE.md
+Taskfile.yml
+tmp/

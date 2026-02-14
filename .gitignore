@@ -1,0 +1,43 @@
+# ─── Rust ────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+
+# ─── Project Artifacts ──────────────────────────────────
+/dist/
+# Wrapper script used during dev/testing if any
+/wrapper
+
+# ─── Documentation (Zensical/MkDocs) ────────────────────
+/site/
+
+# ─── Python (Mold scripts & tools) ─────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# ──── Environment Variables ─────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.template
+# ─── Outils AI / Serena ─────────────────────────────────
+.serena/
+.cache/
+.claude/
+
+# ─── IDE & Editors ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Testing ───────────────────────────────────────────
+# Temporary test files if generated in root
+/tmp/
+*.log
+.skylos/cache/osv_cache.json

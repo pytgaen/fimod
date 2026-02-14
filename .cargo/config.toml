@@ -1,0 +1,9 @@
+# Cross-compilation linker configuration.
+# Note: when using `cross` (Docker-based), these are managed inside the container
+# and this file is only needed for direct cargo builds on a host with musl toolchains.
+
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"

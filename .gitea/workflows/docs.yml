@@ -1,0 +1,67 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Setup uv
+      #   uses: astral-sh/setup-uv@v5
+      #   with:
+      #     enable-cache: true
+      #     cache-dependency-glob: "uv.lock"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+          pip install uv
+
+      - name: Build documentation
+        run: uvx zensical build
+
+      - name: Deploy via rsync
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Setting up SSH connection..."
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_DOCS_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          echo "Adding host keys for ${{ vars.DEPLOY_DOCS_HOST }}..."
+          set +e
+          ssh-keyscan -H ${{ vars.DEPLOY_DOCS_HOST }} > ~/.ssh/known_hosts.tmp 2>&1
+          set -e
+
+          if grep -v '^#' ~/.ssh/known_hosts.tmp | grep -q .; then
+            cat ~/.ssh/known_hosts.tmp >> ~/.ssh/known_hosts
+            echo "✓ SSH configuration ready"
+          else
+            echo "ERROR: Failed to get SSH host keys for ${{ vars.DEPLOY_DOCS_HOST }}"
+            exit 1
+          fi
+
+          echo "Preparing remote directory..."
+          ssh ${{ vars.DEPLOY_DOCS_USER }}@${{ vars.DEPLOY_DOCS_HOST }} "mkdir -p /var/www/html/gitea/fimod"
+
+          echo "Deploying documentation to ${{ vars.DEPLOY_DOCS_USER }}@${{ vars.DEPLOY_DOCS_HOST }}..."
+          rsync -avz --delete site/ ${{ vars.DEPLOY_DOCS_USER }}@${{ vars.DEPLOY_DOCS_HOST }}:/var/www/html/gitea/fimod/
+          echo "✓ Deployment complete"

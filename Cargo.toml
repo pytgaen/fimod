@@ -1,0 +1,69 @@
+[package]
+name = "fimod"
+version = "0.1.0"
+edition = "2021"
+description = "Transform structured data using Python mold scripts via Monty"
+license = "LGPL-3.0-only"
+repository = "https://github.com/pytgaen/fimod"
+homepage = "https://pytgaen.github.io/fimod"
+documentation = "https://pytgaen.github.io/fimod"
+categories = ["command-line-utilities", "development-tools"]
+keywords = ["cli", "data-transformation", "python", "json", "yaml"]
+[features]
+default = ["reqwest"]
+full = ["reqwest"]
+slim = []
+
+[dependencies]
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.8" }
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+anyhow = "1"
+serde_norway = "0.9"
+toml = { version = "0.8", features = ["indexmap"] }
+csv = "1.4"
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+fancy-regex = "0.17"
+rustyline = "14"
+md-5 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+digest = "0.10"
+hex = "0.4"
+mimalloc = "0.1"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+panic = "abort"
+
+
+[lints.rust]
+deprecated = "deny"
+unsafe_code = "deny"
+
+[lints.clippy]
+# Hard denies
+redundant_clone = "deny"
+
+# Style improvements
+redundant_closure = "warn"
+match_same_arms = "warn"
+redundant_else = "warn"
+uninlined_format_args = "warn"
+
+# Pedantic noise to silence
+module_name_repetitions = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+
+[dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "3"
+tempfile = "3"

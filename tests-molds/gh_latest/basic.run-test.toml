@@ -1,0 +1,3 @@
+# Ce mold utilise input-format=http et des directives spéciales.
+# Le fichier d'entrée est une réponse HTTP simulée déjà parsée en JSON.
+skip = true

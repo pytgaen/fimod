@@ -1,0 +1,9 @@
+[tools]
+rust = "stable"
+zig = "latest"
+upx = "latest"
+uv = "latest"
+jq = "latest"
+yq = "latest"
+hyperfine = "latest"
+vhs = "latest"

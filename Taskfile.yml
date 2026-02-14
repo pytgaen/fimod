@@ -1,0 +1,228 @@
+# https://taskfile.dev
+version: '3'
+
+env:
+  CARGO_ZIGBUILD_ZIG_PATH:
+    sh: mise which zig 2>/dev/null || which zig 2>/dev/null || echo "zig"
+
+vars:
+  BINARY: fimod
+  VERSION:
+    sh: git describe --tags --abbrev=0 2>/dev/null || echo "dev"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  build:
+    desc: Build the project
+    cmds:
+      - cargo build
+
+  test:
+    desc: Run all tests (cargo test)
+    cmds:
+      - cargo test
+
+  test:unit:
+    desc: Run unit tests only
+    cmds:
+      - cargo test --lib
+
+  test:integration:
+    desc: Run integration tests only
+    cmds:
+      - cargo test --test cli
+
+  test:ci:
+    desc: Run tests with JUnit XML report (requires cargo-nextest)
+    cmds:
+      - cargo nextest run --profile ci
+    generates:
+      - target/nextest/ci/junit-report.xml
+
+  test:watch:
+    desc: Watch and re-run tests on changes (requires cargo-watch)
+    cmds:
+      - cargo watch -x test
+
+  install:nextest:
+    desc: Install cargo-nextest
+    cmds:
+      - cargo install cargo-nextest --locked
+
+  install:deps:
+    desc: Install all build dependencies (rust, zig, upx, uv via mise; cargo-zigbuild)
+    cmds:
+      - mise install
+      - cargo install cargo-zigbuild
+
+  install:zigbuild:
+    desc: Alias for install:deps (backwards compat)
+    cmds:
+      - task: install:deps
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cargo clean
+      - rm -rf dist/
+
+  # ─── Quick local builds ─────────────────────────
+
+  build:release:
+    desc: Build optimized native binary
+    cmds:
+      - cargo build --release
+      - mkdir -p dist
+      - cp target/release/{{.BINARY}} dist/{{.BINARY}}-linux-amd64
+
+  build:my-local:
+    desc: Build optimized native binary
+    cmds:
+      - cargo build --release
+      - cp target/release/{{.BINARY}} ~/.local/bin/fimod
+      - chmod +x ~/.local/bin/fimod
+      - tar cvfJ dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.gz -C target/release {{.BINARY}}
+      - upx --best --lzma ~/.local/bin/fimod
+
+  # ─── Documentation ──────────────────────────────
+
+  doc:build:
+    desc: Build documentation with Zensical (via uvx)
+    cmds:
+      - uvx zensical build
+
+  doc:serve:
+    desc: Serve documentation locally
+    cmds:
+      - uvx zensical serve
+
+  doc:vhs:build:
+    desc: Build the custom VHS Docker image with required dependencies
+    dir: ressources/vhs
+    cmds:
+      - docker build -t fimod-vhs .
+
+  doc:vhs:
+    desc: "Generate VHS GIF for a single tape (usage: task doc:vhs TAPE=demo.tape)"
+    requires:
+      vars:
+        - TAPE
+    deps:
+      - doc:vhs:build
+    dir: ressources/vhs
+    cmds:
+      - docker run --rm -v ${PWD}:/vhs -v "$(which fimod)":/usr/local/bin/fimod:ro fimod-vhs "{{.TAPE}}"
+
+  doc:vhs:all:
+    desc: Generate VHS GIFs for all tapes in ressources/vhs
+    dir: ressources/vhs
+    cmds:
+      - for: sources
+        task: doc:vhs
+        vars:
+          TAPE: '{{base .ITEM}}'
+      - mkdir -p ../../docs/assets
+      - mv -f video/*.gif ../../docs/assets/
+    sources:
+      - "*.tape"
+
+  # ─── Release dist (zigbuild) ────────────────────
+  #
+  # Reproduces the CI release pipeline locally.
+  # Requires: cargo-zigbuild (cargo install cargo-zigbuild), zig + upx via mise (mise install)
+  #
+  # Targets covered:
+  #   ✅ x86_64-unknown-linux-musl   (standard + full)
+  #   ✅ aarch64-unknown-linux-musl  (standard + full)
+  #   ✅ x86_64-pc-windows-gnu       (standard + full)
+  #   ❌ aarch64-apple-darwin        (requires macOS SDK)
+
+  dist:linux:x86_64:
+    desc: Build x86_64-unknown-linux-musl — standard + full (zigbuild + upx)
+    vars:
+      TARGET: x86_64-unknown-linux-musl
+    cmds:
+      - mkdir -p dist /tmp/fimod-pkg
+      # standard
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
+      - tar czf "dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      # full
+      - cargo zigbuild --release --target {{.TARGET}} --features full
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
+      - tar czf "dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      - rm -rf /tmp/fimod-pkg
+
+  dist:linux:aarch64:
+    desc: Build aarch64-unknown-linux-musl — standard + full (zigbuild + upx)
+    vars:
+      TARGET: aarch64-unknown-linux-musl
+    cmds:
+      - mkdir -p dist /tmp/fimod-pkg
+      # standard
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
+      - tar czf "dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      # full
+      - cargo zigbuild --release --target {{.TARGET}} --features full
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
+      - tar czf "dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      - rm -rf /tmp/fimod-pkg
+
+  dist:windows:
+    desc: Build x86_64-pc-windows-gnu — standard + full (zigbuild)
+    vars:
+      TARGET: x86_64-pc-windows-gnu
+    env:
+      CFLAGS_x86_64_pc_windows_gnu: "-Wno-error=date-time"
+    cmds:
+      - mkdir -p dist /tmp/fimod-pkg
+      # standard
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}}.exe /tmp/fimod-pkg/{{.BINARY}}.exe
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}.exe
+      - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}.exe','{{.BINARY}}.exe'); z.close()"
+      # full
+      - cargo zigbuild --release --target {{.TARGET}} --features full
+      - cp target/{{.TARGET}}/release/{{.BINARY}}.exe /tmp/fimod-pkg/{{.BINARY}}.exe
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}.exe
+      - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}.exe','{{.BINARY}}.exe'); z.close()"
+      - rm -rf /tmp/fimod-pkg
+
+  dist:checksums:
+    desc: Generate SHA256 checksums for all dist assets
+    cmds:
+      - find dist/ \( -name "*.tar.gz" -o -name "*.zip" \) | sort | xargs sha256sum > "dist/{{.BINARY}}-{{.VERSION}}-sha256sums.txt"
+      - echo "→ dist/{{.BINARY}}-{{.VERSION}}-sha256sums.txt"
+
+  dist:all:
+    desc: Build all locally buildable release assets (Linux musl + Windows GNU) — macOS requires Apple SDK
+    cmds:
+      - task: dist:linux:x86_64
+      - task: dist:linux:aarch64
+      - task: dist:windows
+      - task: dist:checksums
+
+  # # ─── CI local (act) ─────────────────────────────
+
+  # act:ci:
+  #   desc: Run full CI workflow locally (requires act + Docker)
+  #   cmds:
+  #     - act push --secret-file .secrets -W .github/workflows/ci.yml
+
+  # act:release:
+  #   desc: Simulate release build locally for linux/musl full variant
+  #   cmds:
+  #     - act push --secret-file .secrets
+  #         -W .github/workflows/release.yml
+  #         --artifact-server-path /tmp/act-artifacts
+  #         --matrix variant:full
+  #         --matrix target:x86_64-unknown-linux-musl

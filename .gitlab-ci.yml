@@ -1,0 +1,83 @@
+# included templates
+include:
+  # MkDocs template
+  - component: $CI_SERVER_FQDN/to-be-continuous/mkdocs/gitlab-ci-mkdocs@2.11.0
+    inputs:
+      image: "docker.io/astral/uv:python3.14-trixie-slim"
+      build-system: "zensical"
+      lychee-enabled: true
+  # MkDocs template (GitLab Pages variant)
+  - component: $CI_SERVER_FQDN/to-be-continuous/mkdocs/gitlab-ci-mkdocs-pages@2.11.0
+
+default:
+  tags:
+    - mymg18-ze24-wl
+
+# your pipeline stages
+stages:
+  - build
+  - test
+  - package-build
+  - package-test
+  - infra
+  - deploy
+  - acceptance
+  - publish
+  - infra-prod
+  - production
+
+variables:
+  # ##
+  TZ: Europe/Paris
+
+  SEMVER_SNAPSHOT_REF: "/^(develop)$/"
+
+  # Change default release tag name (pattern) to add python "rc" release
+  RELEASE_REF: '/^v?[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$/'
+
+
+# .tbc-semantic-release:
+#   rules:
+#     - if: '$SEMREL_RELEASE_DISABLED == "true"'
+#       when: never
+#     - if: $CI_COMMIT_TAG
+#       when: never
+#     # on production branch(es): auto if SEMREL_AUTO_RELEASE_ENABLED
+#     - if: '$SEMREL_AUTO_RELEASE_ENABLED == "true" && $CI_COMMIT_REF_NAME =~ $PROD_REF'
+#     # on production branch(es): manual by default
+#     - if: "$CI_COMMIT_REF_NAME =~ $PROD_REF"
+#       when: manual
+#       allow_failure: true
+
+
+# semantic-release:
+#   rules:
+#     # on chore(semantic-release): auto
+#     - if: '$SEMREL_AUTO_RELEASE_ENABLED == "true" && $CI_COMMIT_MESSAGE =~ "/chore\(semantic-release\)/"'
+#       when: never
+#     - !reference [.tbc-semantic-release, rules]
+#     # on develop branch(es): manual by default
+#     - if: "$CI_COMMIT_REF_NAME =~ $INTEG_REF"
+#       when: manual
+#       allow_failure: true
+
+
+# .tbc-py-publish:
+#   rules:
+#     # on tag with release pattern: auto
+#     - if: "$CI_COMMIT_TAG =~ $RELEASE_REF"
+#     # exclude if $PYTHON_RELEASE_ENABLED not set
+#     - if: '$PYTHON_RELEASE_ENABLED != "true"'
+#       when: never
+
+
+# py-publish:
+#   rules:
+#     # on chore(semantic-release): auto
+#     - if: '$SEMREL_AUTO_RELEASE_ENABLED == "true" && $CI_COMMIT_MESSAGE =~ "/chore\(semantic-release\)/"'
+#     - !reference [.tbc-py-publish, rules]
+#     # # on tag with release pattern: auto
+#     # - if: "$CI_COMMIT_TAG =~ $RELEASE_REF"
+#     # # exclude if $PYTHON_RELEASE_ENABLED not set
+#     # - if: '$PYTHON_RELEASE_ENABLED != "true"'
+#     #   when: never

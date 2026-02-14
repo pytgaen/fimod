@@ -1,0 +1,5 @@
+[profile.default]
+
+[profile.ci]
+[profile.ci.junit]
+path = "junit-report.xml"

@@ -1,0 +1,42 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for fimod
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement! Please describe your use case clearly.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: |
+        What problem are you trying to solve? What workflow would this enable?
+        Concrete examples (with sample commands or data) are very helpful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        How do you think this feature could be implemented?
+        New CLI flag, built-in helper function, new subcommand, etc.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you currently use, or alternative approaches you thought of.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this has not been requested before.
+          required: true

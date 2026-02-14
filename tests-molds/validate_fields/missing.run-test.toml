@@ -1,0 +1,5 @@
+input_file = "basic.input.json"
+exit_code = 1
+
+[args]
+required = "host,port,missing_key"

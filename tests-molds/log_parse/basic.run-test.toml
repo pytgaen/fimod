@@ -1,0 +1,3 @@
+[args]
+regex = '^(\S+)\s+(\S+)\s+(\[.*?\])\s+(".*?")\s+(\d+)\s+(\d+)$'
+fields = "ip,user,timestamp,request,status,bytes"

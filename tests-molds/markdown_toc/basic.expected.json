@@ -1,0 +1,22 @@
+[
+  {
+    "anchor": "title",
+    "level": 1,
+    "title": "Title"
+  },
+  {
+    "anchor": "section-1",
+    "level": 2,
+    "title": "Section 1"
+  },
+  {
+    "anchor": "subsection",
+    "level": 3,
+    "title": "Subsection"
+  },
+  {
+    "anchor": "section-2",
+    "level": 2,
+    "title": "Section 2"
+  }
+]

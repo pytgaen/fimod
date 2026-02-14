@@ -1,0 +1,2 @@
+[args]
+set = "spec.replicas=3"

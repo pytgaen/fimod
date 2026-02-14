@@ -1,0 +1,1 @@
+[{"description":"Unused function: foo","check_name":"unused-function","fingerprint":"6486902091ca5db315aef5c4be62d5de","severity":"info","location":{"path":"test.py","lines":{"begin":10}}},{"description":"Unused import: os","check_name":"unused-import","fingerprint":"31c228923eff24e08e90e899007c6179","severity":"info","location":{"path":"test.py","lines":{"begin":1}}}]

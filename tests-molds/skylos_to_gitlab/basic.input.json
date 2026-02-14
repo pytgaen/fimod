@@ -1,0 +1,4 @@
+{
+  "unused_functions": [{"name": "foo", "file": "test.py", "line": 10}],
+  "unused_imports": [{"name": "os", "file": "test.py", "line": 1}]
+}

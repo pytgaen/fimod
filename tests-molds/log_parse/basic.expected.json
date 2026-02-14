@@ -1,0 +1,1 @@
+[{"ip":"127.0.0.1","user":"admin","timestamp":"[10/Oct/2020:13:55:36]","request":"\"GET / HTTP/1.1\"","status":"200","bytes":"2326"},{"ip":"192.168.1.1","user":"user","timestamp":"[10/Oct/2020:14:00:00]","request":"\"POST /api HTTP/1.1\"","status":"404","bytes":"120"}]

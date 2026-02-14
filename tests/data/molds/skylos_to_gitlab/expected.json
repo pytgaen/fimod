@@ -1,0 +1,14 @@
+[
+  {
+    "description": "Unused function: foo",
+    "check_name": "unused-function",
+    "fingerprint": "9d5129bc45dd90f15f8721f81b5e18bc",
+    "severity": "info",
+    "location": {
+      "path": "src/lib.rs",
+      "lines": {
+        "begin": 10
+      }
+    }
+  }
+]

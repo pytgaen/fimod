@@ -1,0 +1,12 @@
+[project]
+name = "gh2gl"
+version = "0.1.0"
+description = "Sync a fimod release from GitHub to GitLab"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = []

@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "my_package"
+version = "0.1.0"
+description = "A test package"
+authors = ["Test User <test@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"

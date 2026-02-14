@@ -1,0 +1,2 @@
+[args]
+paths = "user.name,user.address.city,meta.id"

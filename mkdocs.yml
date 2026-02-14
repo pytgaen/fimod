@@ -1,0 +1,76 @@
+site_name: Fimod
+site_url: https://pytgaen.github.io/fimod/
+site_description: Transform structured data using Python mold scripts via Monty.
+author: Gaetan
+repo_name: fimod
+repo_url: https://github.com/pytgaen/fimod
+
+theme:
+  name: material
+  logo: assets/logo-favicon.jpg
+  favicon: assets/logo-favicon.jpg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.highlight
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Guides:
+    - Quick Start: guides/quick-start.md
+    - Quick Tour: guides/quick-tour.md
+    - Concepts: guides/concepts.md
+    - Mold Scripting: guides/mold-scripting.md
+    - Authoring Molds: guides/authoring-molds.md
+    - AI Integration: guides/ai-integration.md
+    - CLI Reference: guides/cli-reference.md
+    - Feature Comparison: guides/comparison.md
+  - Reference:
+    - Formats: reference/formats.md
+    - Built-ins: reference/built-ins.md
+    - Mold Defaults: reference/mold-defaults.md
+    - Exit Codes: reference/exit-codes.md
+    - Monty Engine: reference/monty-engine.md
+  - Examples:
+    - JSON: examples/json.md
+    - YAML: examples/yaml.md
+    - CSV: examples/csv.md
+    - HTTP: examples/http.md
+  - Mold Gallery: mold-gallery.md
+  - Cookbook: cookbook.md
+  - Acknowledgements: acknowledgements.md
