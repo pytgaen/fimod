@@ -24,9 +24,14 @@
     FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
     ```
 
-=== ":material-microsoft-windows: Windows — PowerShell script"
+=== ":material-microsoft-windows: Windows"
 
-    The pipe-to-execute pattern triggers antivirus false positives. Download first, then run:
+    <details>
+    <summary><strong>Option 1 — Script PowerShell (two-step)</strong></summary>
+
+    > ⚠️ If your antivirus blocks this script, use **Option 2 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
+
+    Download first, then run:
 
     ```powershell
     Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.ps1 -OutFile "$env:TEMP\fimod-install.ps1"
@@ -35,10 +40,12 @@
 
     Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION`
 
-    !!! tip "PATH configuration"
-        The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make `fimod` available in new terminals.
+    The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make `fimod` available in new terminals.
 
-=== ":material-microsoft-windows: Windows — via ubi (antivirus-friendly)"
+    </details>
+
+    <details>
+    <summary><strong>Option 2 — via ubi (no script, antivirus-friendly)</strong></summary>
 
     [ubi](https://github.com/houseabsolute/ubi) is a universal binary installer available on winget (pre-installed on Windows 10/11):
 
@@ -46,8 +53,11 @@
     # 1. Install ubi (one-time, uses winget which is built into Windows)
     winget install houseabsolute.ubi
 
-    # 2. Install fimod
-    ubi --project pytgaen/fimod --in "$env:USERPROFILE\.local\bin"
+    # 2. Install fimod (classic — includes HTTP support)
+    ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\bin"
+
+    # Or slim variant (no HTTP support, smaller binary)
+    # ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
     # 3. Add to PATH (if not already present)
     $BinDir = "$env:USERPROFILE\.local\bin"
@@ -60,6 +70,8 @@
     # 4. Set up the official mold catalog
     fimod registry setup
     ```
+
+    </details>
 
 === ":material-package-down: cargo install"
 

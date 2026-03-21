@@ -194,18 +194,22 @@ fi
 
 echo ""
 echo "───────────────────────────────────────────────"
-echo "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
-printf "  > "
-read -r REPLY
-case "$REPLY" in
-  [nN]*)
-    echo ""
-    echo "  Skipped. Run 'fimod registry setup' at any time."
-    ;;
-  *)
-    echo ""
-    echo "  Setting up registry..."
-    "${INSTALL_DIR}/${BIN_NAME}" registry setup
-    ;;
-esac
+if [ -t 0 ] || [ -e /dev/tty ]; then
+  echo "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
+  printf "  > "
+  read -r REPLY </dev/tty
+  case "$REPLY" in
+    [nN]*)
+      echo ""
+      echo "  Skipped. Run 'fimod registry setup' at any time."
+      ;;
+    *)
+      echo ""
+      echo "  Setting up registry..."
+      "${INSTALL_DIR}/${BIN_NAME}" registry setup
+      ;;
+  esac
+else
+  echo "  Run 'fimod registry setup' to configure the official mold registry."
+fi
 echo "───────────────────────────────────────────────"

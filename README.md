@@ -49,7 +49,9 @@ The script downloads the right binary, installs it, then runs `fimod registry se
 <details>
 <summary><strong>Option 1 — Script PowerShell (two-step)</strong></summary>
 
-The pipe-to-execute pattern triggers antivirus false positives. Download first, then run:
+> ⚠️ If your antivirus blocks this script, use **Option 2 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
+
+Download first, then run:
 
 ```powershell
 Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.ps1 -OutFile "$env:TEMP\fimod-install.ps1"
@@ -69,8 +71,11 @@ Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.p
 # 1. Install ubi (one-time, uses winget which is built into Windows)
 winget install houseabsolute.ubi
 
-# 2. Install fimod
-ubi --project pytgaen/fimod --in "$env:USERPROFILE\.local\bin"
+# 2. Install fimod (classic — includes HTTP support)
+ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\bin"
+
+# Or install the slim variant (no HTTP support, smaller binary)
+# ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
 # 3. Add to PATH (if not already present)
 $BinDir = "$env:USERPROFILE\.local\bin"
