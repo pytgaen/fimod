@@ -1359,8 +1359,21 @@
 <li><strong><a href="https://github.com/pydantic/monty">Monty</a></strong> is an early-stage Rust implementation of Python by Pydantic. Its API is unstable and may introduce breaking changes.</li>
 <li><strong>fimod</strong> depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.</li>
 <li>Versioning follows <a href="https://semver.org/">Semantic Versioning</a> — breaking changes bump the major version.</li>
-<li>Built-in helpers (<code>re_*</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>) are implemented in <strong>Rust</strong> to compensate for Monty's lack of a standard library. Regex in particular uses <a href="https://github.com/fancy-regex/fancy-regex">fancy-regex</a> syntax (Rust/PCRE2), <strong>not</strong> Python's <code>re</code> module — see <a href="reference/built-ins/#regex-functions-re">Built-ins → Regex</a>.</li>
+<li>Built-in helpers (<code>re_*</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>) are implemented in <strong>Rust</strong> to complement Monty's limited stdlib. In particular, regex functions use <a href="https://github.com/fancy-regex/fancy-regex">fancy-regex</a> syntax (Rust/PCRE2 flavour), <strong>not</strong> Python's <code>re</code> module — see <a href="reference/built-ins/#regex-functions-re">Built-ins → Regex</a>.</li>
 </ul>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Regex: Fimod built-ins vs Monty's <code>re</code> module</p>
+<p>Fimod was originally built on Monty v0.0.6, which had no regex support.
+We introduced <code>re_search</code>, <code>re_sub</code>, <code>re_findall</code>, etc. as Fimod built-in functions to fill that gap — a good example of the challenges of moving fast alongside a young runtime.</p>
+<p>Since Monty v0.0.8, <code>import re</code> works — Monty implements a subset of Python's <code>re</code> module.
+Both approaches now work side by side:</p>
+<ul>
+<li><strong>Fimod's <code>re_*</code> built-ins</strong> — direct access to <a href="https://github.com/fancy-regex/fancy-regex">fancy-regex</a>, including advanced features like variable-length lookbehind/lookahead</li>
+<li><strong><code>import re</code></strong> — familiar Python API, but only <a href="https://github.com/pydantic/monty/pull/157">partially implemented in Monty</a> (also backed by fancy-regex under the hood)</li>
+</ul>
+<p>The <code>re_*</code> built-ins are here to stay for the foreseeable future (at least until late 2027). As Monty's <code>re</code> module matures, we'll reconsider.</p>
+<p>Since <code>import re</code> is already well-known to Python developers, the documentation focuses on the <code>re_*</code> built-ins which are specific to Fimod.</p>
 </div>
 
 
