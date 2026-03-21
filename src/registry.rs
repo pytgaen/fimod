@@ -12,7 +12,9 @@ use crate::mold::MoldSource;
 // ── config path ───────────────────────────────────────────────────────────────
 
 fn config_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("HOME environment variable not set")?;
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .context("HOME environment variable not set")?;
     Ok(Path::new(&home)
         .join(".config")
         .join("fimod")

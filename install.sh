@@ -193,4 +193,19 @@ else
 fi
 
 echo ""
-"${INSTALL_DIR}/${BIN_NAME}" registry setup
+echo "───────────────────────────────────────────────"
+echo "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
+printf "  > "
+read -r REPLY
+case "$REPLY" in
+  [nN]*)
+    echo ""
+    echo "  Skipped. Run 'fimod registry setup' at any time."
+    ;;
+  *)
+    echo ""
+    echo "  Setting up registry..."
+    "${INSTALL_DIR}/${BIN_NAME}" registry setup
+    ;;
+esac
+echo "───────────────────────────────────────────────"

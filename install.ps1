@@ -181,4 +181,14 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 }
 
 Write-Host ""
-& $TargetBin registry setup
+Write-Host "───────────────────────────────────────────────"
+Write-Host "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
+$Reply = Read-Host "  >"
+Write-Host ""
+if ($Reply -match '^[nN]') {
+    Write-Host "  Skipped. Run 'fimod registry setup' at any time."
+} else {
+    Write-Host "  Setting up registry..."
+    & $TargetBin registry setup
+}
+Write-Host "───────────────────────────────────────────────"

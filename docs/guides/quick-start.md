@@ -2,13 +2,14 @@
 
 ## 📦 Install
 
-=== ":material-download: curl | sh (recommended)"
+=== ":material-linux: Linux / macOS"
 
     ```bash
     curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
     ```
 
     Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
+    The script installs the binary then prompts you to run `fimod registry setup` to configure the official mold catalog.
 
     **Options** (environment variables):
 
@@ -21,6 +22,43 @@
     ```bash
     # Install the slim variant to a custom directory
     FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+    ```
+
+=== ":material-microsoft-windows: Windows — PowerShell script"
+
+    The pipe-to-execute pattern triggers antivirus false positives. Download first, then run:
+
+    ```powershell
+    Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.ps1 -OutFile "$env:TEMP\fimod-install.ps1"
+    & "$env:TEMP\fimod-install.ps1"
+    ```
+
+    Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION`
+
+    !!! tip "PATH configuration"
+        The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make `fimod` available in new terminals.
+
+=== ":material-microsoft-windows: Windows — via ubi (antivirus-friendly)"
+
+    [ubi](https://github.com/houseabsolute/ubi) is a universal binary installer available on winget (pre-installed on Windows 10/11):
+
+    ```powershell
+    # 1. Install ubi (one-time, uses winget which is built into Windows)
+    winget install houseabsolute.ubi
+
+    # 2. Install fimod
+    ubi --project pytgaen/fimod --in "$env:USERPROFILE\.local\bin"
+
+    # 3. Add to PATH (if not already present)
+    $BinDir = "$env:USERPROFILE\.local\bin"
+    $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($UserPath -notlike "*$BinDir*") {
+        [Environment]::SetEnvironmentVariable('PATH', "$BinDir;$UserPath", 'User')
+        $env:PATH = "$BinDir;$env:PATH"
+    }
+
+    # 4. Set up the official mold catalog
+    fimod registry setup
     ```
 
 === ":material-package-down: cargo install"

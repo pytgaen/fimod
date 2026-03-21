@@ -158,7 +158,9 @@ fn load_url_with_cache(url: &str, token: Option<&str>) -> Result<String> {
 
     // ── resolve cache dir ──────────────────────────────────────────────────
     let cache_dir = std::env::var("FIMOD_CACHE_DIR").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
         format!("{home}/.cache/fimod/molds")
     });
 

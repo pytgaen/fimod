@@ -163,4 +163,18 @@ Lookup tables and complete specifications.
     - **[Monty](https://github.com/pydantic/monty)** is an early-stage Rust implementation of Python by Pydantic. Its API is unstable and may introduce breaking changes.
     - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
     - Versioning follows [Semantic Versioning](https://semver.org/) — breaking changes bump the major version.
-    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to compensate for Monty's lack of a standard library. Regex in particular uses [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re).
+    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to complement Monty's limited stdlib. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re).
+
+!!! note "Regex: Fimod built-ins vs Monty's `re` module"
+    Fimod was originally built on Monty v0.0.6, which had no regex support.
+    We introduced `re_search`, `re_sub`, `re_findall`, etc. as Fimod built-in functions to fill that gap — a good example of the challenges of moving fast alongside a young runtime.
+
+    Since Monty v0.0.8, `import re` works — Monty implements a subset of Python's `re` module.
+    Both approaches now work side by side:
+
+    - **Fimod's `re_*` built-ins** — direct access to [fancy-regex](https://github.com/fancy-regex/fancy-regex), including advanced features like variable-length lookbehind/lookahead
+    - **`import re`** — familiar Python API, but only [partially implemented in Monty](https://github.com/pydantic/monty/pull/157) (also backed by fancy-regex under the hood)
+
+    The `re_*` built-ins are here to stay for the foreseeable future (at least until late 2027). As Monty's `re` module matures, we'll reconsider.
+
+    Since `import re` is already well-known to Python developers, the documentation focuses on the `re_*` built-ins which are specific to Fimod.

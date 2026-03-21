@@ -72,11 +72,17 @@ winget install houseabsolute.ubi
 # 2. Install fimod
 ubi --project pytgaen/fimod --in "$env:USERPROFILE\.local\bin"
 
-# 3. Set up the official mold catalog
+# 3. Add to PATH (if not already present)
+$BinDir = "$env:USERPROFILE\.local\bin"
+$UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+if ($UserPath -notlike "*$BinDir*") {
+    [Environment]::SetEnvironmentVariable('PATH', "$BinDir;$UserPath", 'User')
+    $env:PATH = "$BinDir;$env:PATH"
+}
+
+# 4. Set up the official mold catalog
 fimod registry setup
 ```
-
-Add `%USERPROFILE%\.local\bin` to your PATH if not already present.
 
 </details>
 
