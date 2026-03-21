@@ -1,0 +1,2511 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Transform structured data using Python mold scripts via Monty.">
+      
+      
+      
+        <link rel="canonical" href="https://pytgaen.github.io/fimod/guides/cli-reference/">
+      
+      
+        <link rel="prev" href="../ai-integration/">
+      
+      
+        <link rel="next" href="../comparison/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo-favicon.jpg">
+      <meta name="generator" content="zensical-0.0.28">
+    
+    
+      
+        <title>🖥️ CLI Reference - Fimod</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.6f2fbb28.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,a=__md_scope)=>JSON.parse(t.getItem(a.pathname+"."+e)),__md_set=(e,t,a=localStorage,_=__md_scope)=>{try{a.setItem(_.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Fimod" class="md-header__button md-logo" aria-label="Fimod" data-md-component="logo">
+      
+  <img src="../../assets/logo-image.jpg" alt="Fimod">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Fimod
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              🖥️ CLI Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/pytgaen/fimod" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fimod
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Fimod" class="md-nav__button md-logo" aria-label="Fimod" data-md-component="logo">
+      
+  <img src="../../assets/logo-image.jpg" alt="Fimod">
+
+    </a>
+    Fimod
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/pytgaen/fimod" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    fimod
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick-tour/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Tour
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mold-scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mold Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authoring-molds/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring Molds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 Core options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📄 Format control
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📄 Format control">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#auto-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 Auto-detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#your-input-can-be-an-https-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔥 Your input can be an HTTPS request!
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔥 Your input can be an HTTPS request!">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#http-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#-input-format-http-raw-http-response" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --input-format http — raw HTTP response
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#slurp-mode-slurp-s" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📥 Slurp mode (--slurp / -s)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📥 Slurp mode (--slurp &#x2f; -s)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-input-ndjson-concatenated-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single input — NDJSON / concatenated JSON
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-inputs-multi-file-slurp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple inputs — multi-file slurp
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-input-mode-no-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚫 No-input mode (--no-input)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-mode-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ Check mode (--check)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mold-registries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗂️ Mold registries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🗂️ Mold registries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#registry-setup-first-run-onboarding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        registry setup — first-run onboarding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fimod_registry-ephemeral-registries-for-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FIMOD_REGISTRY — ephemeral registries for CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-url-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub URL formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#browsing-available-molds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browsing available molds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csv-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📊 CSV options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inline-expressions-vs-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚡ Inline expressions vs scripts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#special-output-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎛️ Special output formats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#passing-variables-arg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📎 Passing variables (--arg)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔀 Format conversion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debug-mode-debug-d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐛 Debug mode (--debug / -d)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#message-verbosity-quiet-msg-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📢 Message verbosity (--quiet / --msg-level)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-place-editing-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✏️ In-place editing (--in-place)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stdin-stdout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔌 Stdin / stdout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monty-repl-fimod-monty-repl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐍 Monty REPL (fimod monty repl)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shell-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐚 Shell completion
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/built-ins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Built-ins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/mold-defaults/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mold Defaults
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/exit-codes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exit Codes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/monty-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monty Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/json/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    YAML
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/csv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CSV
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/http/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mold-gallery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mold Gallery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cookbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cookbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../acknowledgements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Acknowledgements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 Core options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📄 Format control
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📄 Format control">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#auto-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔍 Auto-detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#your-input-can-be-an-https-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔥 Your input can be an HTTPS request!
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔥 Your input can be an HTTPS request!">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#http-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#-input-format-http-raw-http-response" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --input-format http — raw HTTP response
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#slurp-mode-slurp-s" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📥 Slurp mode (--slurp / -s)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📥 Slurp mode (--slurp &#x2f; -s)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-input-ndjson-concatenated-json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single input — NDJSON / concatenated JSON
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-inputs-multi-file-slurp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple inputs — multi-file slurp
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-input-mode-no-input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚫 No-input mode (--no-input)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-mode-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ Check mode (--check)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mold-registries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗂️ Mold registries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🗂️ Mold registries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#registry-setup-first-run-onboarding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        registry setup — first-run onboarding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fimod_registry-ephemeral-registries-for-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FIMOD_REGISTRY — ephemeral registries for CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-url-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub URL formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#browsing-available-molds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Browsing available molds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csv-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📊 CSV options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inline-expressions-vs-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚡ Inline expressions vs scripts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#special-output-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎛️ Special output formats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#passing-variables-arg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📎 Passing variables (--arg)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔀 Format conversion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#debug-mode-debug-d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐛 Debug mode (--debug / -d)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#message-verbosity-quiet-msg-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📢 Message verbosity (--quiet / --msg-level)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-place-editing-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✏️ In-place editing (--in-place)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stdin-stdout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔌 Stdin / stdout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monty-repl-fimod-monty-repl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐍 Monty REPL (fimod monty repl)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shell-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🐚 Shell completion
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="cli-reference">🖥️ CLI Reference</h1>
+<h2 id="usage">Usage</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>&lt;INPUT&gt;<span class="w"> </span>-m<span class="w"> </span>&lt;MOLD&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>&lt;INPUT&gt;<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;&lt;EXPRESSION&gt;&#39;</span><span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>--no-input<span class="w"> </span>-m<span class="w"> </span>&lt;MOLD&gt;<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Either <code>-m</code> or <code>-e</code> is required (but not both).</p>
+</div>
+<hr />
+<h2 id="core-options">🎯 Core options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Short</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--input</code></td>
+<td><code>-i</code></td>
+<td>Input file path or URL (<code>https://...</code>)</td>
+<td><code>stdin</code></td>
+</tr>
+<tr>
+<td><code>--mold</code></td>
+<td><code>-m</code></td>
+<td>Path, URL, or registered name of the transform script</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--expression</code></td>
+<td><code>-e</code></td>
+<td>Inline Python expression (mutually exclusive with <code>-m</code>)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--output</code></td>
+<td><code>-o</code></td>
+<td>Output file path</td>
+<td><code>stdout</code></td>
+</tr>
+<tr>
+<td><code>--in-place</code></td>
+<td></td>
+<td>Modify input file in-place (requires <code>-i</code>, incompatible with <code>-o</code> and URLs)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--slurp</code></td>
+<td><code>-s</code></td>
+<td>Read multiple JSON values into a single array</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--no-input</code></td>
+<td></td>
+<td>Skip input — <code>data = None</code> in Python</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--check</code></td>
+<td></td>
+<td>No stdout; exit 0 if result is truthy, 1 if falsy</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--debug</code></td>
+<td><code>-d</code></td>
+<td>Print pipeline diagnostics to stderr</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="format-control">📄 Format control</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--input-format</code></td>
+<td>Explicitly set input format. Auto-detected from extension if omitted.</td>
+</tr>
+<tr>
+<td><code>--output-format</code></td>
+<td>Explicitly set output format. Defaults to input format if omitted.</td>
+</tr>
+</tbody>
+</table>
+<p>Supported values: <code>json</code> · <code>json-compact</code> · <code>ndjson</code> · <code>yaml</code> · <code>toml</code> · <code>csv</code> · <code>txt</code> · <code>lines</code> · <code>raw</code> (output-only) · <code>http</code> (input-only)</p>
+<h3 id="auto-detection">🔍 Auto-detection</h3>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Format</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.json</code></td>
+<td>JSON</td>
+</tr>
+<tr>
+<td><code>.ndjson</code>, <code>.jsonl</code></td>
+<td>NDJSON</td>
+</tr>
+<tr>
+<td><code>.yaml</code>, <code>.yml</code></td>
+<td>YAML</td>
+</tr>
+<tr>
+<td><code>.toml</code></td>
+<td>TOML</td>
+</tr>
+<tr>
+<td><code>.csv</code>, <code>.tsv</code></td>
+<td>CSV</td>
+</tr>
+<tr>
+<td><code>.txt</code>, <code>.text</code></td>
+<td>TXT</td>
+</tr>
+<tr>
+<td><em>(none / stdin)</em></td>
+<td>JSON (default)</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Lines is never auto-detected</p>
+<p>Always use <code>--input-format lines</code> explicitly.</p>
+</div>
+<hr />
+<h2 id="your-input-can-be-an-https-request">🔥 Your input can be an HTTPS request!</h2>
+<p>Awesome: <strong>the input can be an HTTPS request.</strong> The <code>-i</code> flag accepts URLs exactly like file paths — fimod fetches, parses, and transforms in a single command. No <code>curl</code>, no <code>wget</code>, no pipes.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Fetch JSON from an API</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://api.github.com/repos/pytgaen/fimod<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Multiple URLs in batch mode</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://jsonplaceholder.typicode.com/users/1<span class="w"> </span>https://jsonplaceholder.typicode.com/users/2<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>responses/
+</code></pre></div>
+<p><strong>Format auto-detection</strong>: the response's <code>Content-Type</code> header is used as fallback when <code>--input-format</code> is not set (<code>application/json</code> → JSON, <code>text/csv</code> → CSV, etc.). You can always override explicitly.</p>
+<div class="admonition warning">
+<p class="admonition-title"><code>--in-place</code> is not allowed with URLs</p>
+</div>
+<h3 id="http-options">HTTP options</h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--header "Name: Value"</code></td>
+<td>Custom HTTP header (repeatable)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>--timeout &lt;seconds&gt;</code></td>
+<td>Request timeout</td>
+<td><code>30</code></td>
+</tr>
+<tr>
+<td><code>--no-follow</code></td>
+<td>Don't follow HTTP redirects</td>
+<td>follows redirects</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Authenticated API</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://api.github.com/user<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span>--http-header<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;login&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># Disable redirects to inspect the Location header</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://github.com/pytgaen/fimod/releases/latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span>--input-format<span class="w"> </span>http<span class="w"> </span>--no-follow<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;headers&quot;][&quot;location&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt
+</code></pre></div>
+<h3 id="-input-format-http-raw-http-response"><code>--input-format http</code> — raw HTTP response</h3>
+<p>When you need the full HTTP response (status code, headers, body), use <code>--input-format http</code>. Instead of parsing the body, fimod gives you a dict:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s2">&quot;headers&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;content-type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span> <span class="s2">&quot;location&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">},</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="s2">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span>  <span class="c1"># raw response body as a string</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Get the redirect target of a URL</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://github.com/pytgaen/fimod/releases/latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span>--input-format<span class="w"> </span>http<span class="w"> </span>--no-follow<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;headers&quot;][&quot;location&quot;].split(&quot;/&quot;)[-1]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># → v0.3.0</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Combine with set_input_format() to re-parse the body</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://api.github.com/repos/pytgaen/fimod/releases/latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span>--input-format<span class="w"> </span>http<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span>-e<span class="w"> </span><span class="s1">&#39;set_input_format(&quot;json&quot;); data[&quot;body&quot;]&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;tag_name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title"><code>http</code> is input-only</p>
+<p>Using <code>--output-format http</code> will produce an error. HTTP is only meaningful as an input format.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Requires the <code>full</code> build variant</p>
+<p>HTTP input needs reqwest, which is only included in <code>FIMOD_VARIANT=full</code> or <code>cargo build --features full</code>.</p>
+</div>
+<hr />
+<h2 id="slurp-mode-slurp-s">📥 Slurp mode (<code>--slurp</code> / <code>-s</code>)</h2>
+<p><code>-s</code> has two distinct uses depending on whether you pass a single input or multiple <code>-i</code> entries.</p>
+<h3 id="single-input-ndjson-concatenated-json">Single input — NDJSON / concatenated JSON</h3>
+<p>Reads <strong>multiple concatenated JSON values</strong> from a single source and collects them into an array.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 🔗 Two separate JSON objects → array of two</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">printf</span><span class="w"> </span><span class="s1">&#39;{&quot;a&quot;:1}\n{&quot;b&quot;:2}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>--slurp<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;len(data)&#39;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># → 2</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># 📂 Combine multiple JSON files via cat (JSON only)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>cat<span class="w"> </span>file1.json<span class="w"> </span>file2.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>--slurp<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[item for item in data if item.get(&quot;active&quot;)]&#39;</span>
+</code></pre></div>
+<p>For non-JSON formats, <code>--slurp</code> wraps the single parsed value in a one-element array.</p>
+<h3 id="multiple-inputs-multi-file-slurp">Multiple inputs — multi-file slurp</h3>
+<p>When combined with <strong>two or more <code>-i</code> flags</strong>, <code>-s</code> switches to <strong>multi-file slurp</strong> mode: all files are parsed (each in their own format) and combined into a single <code>data</code> structure. The mold runs <strong>once</strong> against the combined result.</p>
+<p>Two sub-modes controlled by the <code>-i</code> syntax:</p>
+<table>
+<thead>
+<tr>
+<th>Syntax</th>
+<th>Mode</th>
+<th><code>data</code> shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-i f1 -i f2</code></td>
+<td><strong>list</strong></td>
+<td><code>[parsed_f1, parsed_f2]</code></td>
+</tr>
+<tr>
+<td><code>-i f1: -i f2:</code></td>
+<td><strong>named (auto stem)</strong></td>
+<td><code>{"f1": parsed_f1, "f2": parsed_f2}</code></td>
+</tr>
+<tr>
+<td><code>-i f1:alias -i f2:other</code></td>
+<td><strong>named (explicit)</strong></td>
+<td><code>{"alias": parsed_f1, "other": parsed_f2}</code></td>
+</tr>
+</tbody>
+</table>
+<p>Rules:
+- All entries must use <code>:</code> or none must (mixing → error)
+- Auto stem uses the filename without extension; duplicate stems → error (use explicit aliases)
+- Incompatible with <code>--in-place</code> and <code>-o &lt;directory&gt;</code></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># ➕ List mode — access by index, cross-format (JSON + YAML)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>base.json<span class="w"> </span>-i<span class="w"> </span>override.yaml<span class="w"> </span>-s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[1][&quot;env&quot;]&#39;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># 🏷️ Named mode — auto stem as key</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>defaults.json:<span class="w"> </span>-i<span class="w"> </span>prod.toml:<span class="w"> </span>-s<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;defaults&quot;][&quot;timeout&quot;]&#39;</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># 🏷️ Named mode — explicit aliases (resolves stem collisions)</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config/base.json:base<span class="w"> </span>-i<span class="w"> </span>other/base.json:fallback<span class="w"> </span>-s<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;fallback&quot;][&quot;host&quot;]&#39;</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="c1"># 🔍 Diff two files (with df_ helpers, once implemented)</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>before.json:old<span class="w"> </span>-i<span class="w"> </span>after.json:new<span class="w"> </span>-s<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">  </span>-e<span class="w"> </span><span class="s1">&#39;df_diff(data[&quot;old&quot;], data[&quot;new&quot;])&#39;</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="c1"># 💾 Write result to a file</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>a.yaml<span class="w"> </span>-i<span class="w"> </span>b.yaml<span class="w"> </span>-s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[0]&#39;</span><span class="w"> </span>-o<span class="w"> </span>merged.yaml
+</code></pre></div>
+<hr />
+<h2 id="no-input-mode-no-input">🚫 No-input mode (<code>--no-input</code>)</h2>
+<p>Skip input entirely — <code>data</code> is <code>None</code> in Python. Use to generate data from scratch.</p>
+<div class="admonition info">
+<p class="admonition-title">Incompatible with</p>
+<p><code>-i</code>, <code>--input-format</code>, <code>--in-place</code></p>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>--no-input<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;status&quot;: &quot;ok&quot;, &quot;ts&quot;: args[&quot;ts&quot;]}&#39;</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">ts</span><span class="o">=</span><span class="s2">&quot;2024-01-01&quot;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>--no-input<span class="w"> </span>-m<span class="w"> </span>generate.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">count</span><span class="o">=</span><span class="m">5</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># generate.py</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">])</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">i</span> <span class="o">*</span> <span class="n">i</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+</code></pre></div>
+<hr />
+<h2 id="check-mode-check">✅ Check mode (<code>--check</code>)</h2>
+<p>Suppresses stdout and uses the <strong>truthiness</strong> of the result as the exit code.</p>
+<ul>
+<li><strong>Exit 0</strong> — result is truthy</li>
+<li><strong>Exit 1</strong> — result is falsy</li>
+</ul>
+<p>See <a href="../../reference/exit-codes/">Exit Codes</a> for the full truthiness table.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># ✅ Validate a record</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>record.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data.get(&quot;email&quot;) and data.get(&quot;name&quot;)&#39;</span><span class="w"> </span>--check
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># 🔀 Use in a shell conditional</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">if</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-m<span class="w"> </span>validate.py<span class="w"> </span>--check<span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;✅ Config is valid&quot;</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="k">else</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;❌ Config has errors&quot;</span><span class="w"> </span>&gt;<span class="p">&amp;</span><span class="m">2</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="k">fi</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>When a mold calls <code>set_exit(code)</code>, that code takes priority over <code>--check</code> truthiness.</p>
+</div>
+<hr />
+<h2 id="mold-registries">🗂️ Mold registries</h2>
+<p>Registries are named collections of molds (local directories or remote repos).
+Use <code>@name</code> or <code>@registry/name</code> with <code>-m</code> to reference a mold by name.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w">                                     </span><span class="c1"># 🚀 First-run setup (official catalog)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/<span class="w">                          </span><span class="c1"># ➕ Add local registry</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>official<span class="w"> </span>https://github.com/org/molds<span class="w"> </span><span class="c1"># ➕ Add GitHub registry</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>fimod<span class="w"> </span>registry<span class="w"> </span>list<span class="w">                                      </span><span class="c1"># 📋 List registries</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>show<span class="w"> </span>my<span class="w">                                   </span><span class="c1"># 🔍 Show details</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>fimod<span class="w"> </span>registry<span class="w"> </span>remove<span class="w"> </span>my<span class="w">                                 </span><span class="c1"># 🗑️ Remove</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-default<span class="w"> </span>official<span class="w">                      </span><span class="c1"># ⭐ Change default</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>my<span class="w">                          </span><span class="c1"># 📦 Generate catalog.toml</span>
+</code></pre></div>
+<p>Config stored in <code>~/.config/fimod/sources.toml</code>.</p>
+<h3 id="registry-setup-first-run-onboarding"><code>registry setup</code> — first-run onboarding</h3>
+<p><code>fimod registry setup</code> adds the official fimod mold catalog if not already present. The install scripts call it automatically, but it is safe to run manually at any time (idempotent).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w">           </span><span class="c1"># interactive — asks before adding</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># non-interactive / CI — skips the prompt</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w"> </span>--force<span class="w">   </span><span class="c1"># promote official registry to default even if another default exists</span>
+</code></pre></div>
+<p>Behaviour summary:</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Without <code>--force</code></th>
+<th>With <code>--force</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Already configured</td>
+<td>"already configured", no-op</td>
+<td>same</td>
+</tr>
+<tr>
+<td>No default registry yet</td>
+<td>adds as default (fresh install)</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Default already exists</td>
+<td>adds without changing default</td>
+<td>adds and promotes to default</td>
+</tr>
+<tr>
+<td>Non-interactive (no TTY)</td>
+<td>skips silently</td>
+<td>skips silently</td>
+</tr>
+</tbody>
+</table>
+<h3 id="fimod_registry-ephemeral-registries-for-ci"><code>FIMOD_REGISTRY</code> — ephemeral registries for CI</h3>
+<p>In CI/CD or ephemeral environments, use the <code>FIMOD_REGISTRY</code> environment variable instead of <code>fimod registry add</code>. Comma-separated entries, optionally named:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Anonymous — resolves @mold</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span>./molds<span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Named — resolves @ci/mold and @mold</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,staging=https://github.com/org/molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@ci/clean
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Mixed anonymous + named</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,/opt/shared-molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
+</code></pre></div>
+<p><code>FIMOD_REGISTRY</code> takes priority over <code>sources.toml</code> (env overrides config, standard Unix convention). Named entries support <code>@name/mold</code> resolution.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Register a local collection once…</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># …then reference molds by name</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@cleanup<span class="w">          </span><span class="c1"># default registry</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@my/cleanup<span class="w">       </span><span class="c1"># named registry</span>
+</code></pre></div>
+<p><strong>Authentication</strong> — tokens are resolved automatically, or overridden per-registry:</p>
+<table>
+<thead>
+<tr>
+<th>Source type</th>
+<th>Default token</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>github.com</code></td>
+<td><code>$GITHUB_TOKEN</code></td>
+</tr>
+<tr>
+<td>GitLab</td>
+<td><code>$GITLAB_TOKEN</code></td>
+</tr>
+<tr>
+<td>Other HTTP (Gitea, Forgejo, …)</td>
+<td><code>$FIMOD_DL_AUTH_TOKEN</code></td>
+</tr>
+<tr>
+<td>Custom</td>
+<td><code>--token-env MY_VAR</code> at <code>registry add</code> time</td>
+</tr>
+</tbody>
+</table>
+<h3 id="github-url-formats">GitHub URL formats</h3>
+<p>fimod accepts different URL forms depending on the Git ref type you want to pin to:</p>
+<table>
+<thead>
+<tr>
+<th>Ref type</th>
+<th>URL to pass to <code>registry add</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Branch (<code>main</code>, <code>dev</code>, …)</td>
+<td><code>https://github.com/org/repo/tree/main/molds</code></td>
+</tr>
+<tr>
+<td>Semver tag (<code>v1.0.0</code>, <code>2.3.4</code>, …)</td>
+<td><code>https://github.com/org/repo/tree/v1.0.0/molds</code></td>
+</tr>
+<tr>
+<td>Other tag (<code>stable</code>, <code>latest</code>, …)</td>
+<td><code>https://raw.githubusercontent.com/org/repo/refs/tags/stable/molds</code></td>
+</tr>
+<tr>
+<td>Commit SHA</td>
+<td><code>https://github.com/org/repo/tree/abc1234.../molds</code></td>
+</tr>
+</tbody>
+</table>
+<p>For branches and semver tags, pass the standard <code>github.com/tree/…</code> URL — fimod converts it to a raw URL automatically, using <code>refs/heads/</code> for branches and <code>refs/tags/</code> for semver-looking refs.</p>
+<p>For <strong>non-semver tags</strong> (e.g. <code>stable</code>, <code>latest</code>), fimod cannot distinguish them from branch names based on the ref string alone. Pass the <code>raw.githubusercontent.com</code> URL with the full ref path instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Branch — standard github.com URL</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/main/molds
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Semver tag — standard github.com URL</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/v1.2.0/molds
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Non-semver tag — raw URL required</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://raw.githubusercontent.com/org/repo/refs/tags/stable/molds
+</code></pre></div>
+<h3 id="browsing-available-molds">Browsing available molds</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">              </span><span class="c1"># list molds in the default registry</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w"> </span>official<span class="w">     </span><span class="c1"># list molds in a specific registry</span>
+</code></pre></div>
+<p>For <strong>local</strong> registries, mold names and descriptions are discovered by scanning <code>.py</code> files.
+For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.toml</code> must be present at the root of the registry.</p>
+<p>Maintainers generate it with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>my<span class="w">   </span><span class="c1"># scans ~/molds/ and writes catalog.toml</span>
+</code></pre></div>
+<p>The <code>catalog.toml</code> is a simple TOML file committed alongside the molds:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">[molds.normalize]</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Normalise field names to snake_case&quot;</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="k">[molds.filter_active]</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Keep only active records&quot;</span>
+</code></pre></div>
+<p>Mold descriptions come from the module-level docstring at the top of each script:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="sd">&quot;&quot;&quot;Normalise field names to snake_case.&quot;&quot;&quot;</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="o">...</span>
+</code></pre></div>
+<hr />
+<h2 id="csv-options">📊 CSV options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--csv-delimiter &lt;char&gt;</code></td>
+<td>Separator character for input (default: <code>,</code>). Use <code>\t</code> for tabs.</td>
+</tr>
+<tr>
+<td><code>--csv-output-delimiter &lt;char&gt;</code></td>
+<td>Separator for output (defaults to <code>--csv-delimiter</code>).</td>
+</tr>
+<tr>
+<td><code>--csv-no-input-header</code></td>
+<td>First line is data, not header. Columns: <code>col0</code>, <code>col1</code>, ...</td>
+</tr>
+<tr>
+<td><code>--csv-no-output-header</code></td>
+<td>Don't write header row in output.</td>
+</tr>
+<tr>
+<td><code>--csv-header "a,b,c"</code></td>
+<td>Explicit column names (implies no header in file).</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># 🔀 CSV → TSV</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>csv<span class="w"> </span>--csv-output-delimiter<span class="w"> </span><span class="s1">&#39;\t&#39;</span>
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Column order is preserved</p>
+<p>No alphabetical sorting through transforms.</p>
+</div>
+<p>When the input CSV has a header row, a <code>headers</code> global is automatically available in your script — see <a href="../mold-scripting/#csv-headers-global">Mold Scripting — CSV headers</a>.</p>
+<hr />
+<h2 id="inline-expressions-vs-scripts">⚡ Inline expressions vs scripts</h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">📝 Inline (<code>-e</code>)</label><label for="__tabbed_1_2">📄 Script file (<code>-m</code>)</label><label for="__tabbed_1_3">🌐 Remote (<code>-m URL</code>)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Best for one-liners:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: data[&quot;first&quot;].upper()}&#39;</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;re_findall(r&quot;\d+&quot;, data[&quot;text&quot;])&#39;</span>
+</code></pre></div>
+<p>Multi-statement? Write <code>def transform</code> inside <code>-e</code>.</p>
+</div>
+<div class="tabbed-block">
+<p>For reusable transforms:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># cleanup.py</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>clean.json
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p>Load from a URL:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>https://example.com/transforms/normalize.py
+</code></pre></div>
+</div>
+</div>
+</div>
+<hr />
+<h2 id="special-output-formats">🎛️ Special output formats</h2>
+<p>Sometimes you need to control the output format for chaining with other tools, without changing the file extension:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># 📦 Compact JSON: one-line JSON for piping</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json-compact
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="c1"># {&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30}</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="c1"># 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
+</code></pre></div>
+<hr />
+<h2 id="passing-variables-arg">📎 Passing variables (<code>--arg</code>)</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="s1">  [u for u in data if u[&quot;age&quot;] &gt; int(args[&quot;threshold&quot;])]</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="s1">&#39;</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a><span class="c1"># Or via mold:</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
+</code></pre></div>
+<p>Access via <code>args["key"]</code> in the <code>transform(data, args, env, headers)</code> function.</p>
+<hr />
+<h2 id="format-conversion">🔀 Format conversion</h2>
+<p>Pass-through expression for pure format conversion:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>config.toml
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+</code></pre></div>
+<hr />
+<h2 id="debug-mode-debug-d">🐛 Debug mode (<code>--debug</code> / <code>-d</code>)</h2>
+<p>Prints pipeline diagnostics to <strong>stderr</strong> (stdout stays clean for piping):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--debug
+</code></pre></div>
+<p>Output includes: input/output format, mold source, full script, input data, output data.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>In debug mode, Python <code>print()</code> statements are also redirected to stderr.</p>
+</div>
+<hr />
+<h2 id="message-verbosity-quiet-msg-level">📢 Message verbosity (<code>--quiet</code> / <code>--msg-level</code>)</h2>
+<p>Control which <code>msg_*</code> functions in mold scripts produce output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--quiet<span class="w">              </span><span class="c1"># errors only</span>
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>verbose<span class="w">  </span><span class="c1"># + msg_verbose()</span>
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>trace<span class="w">    </span><span class="c1"># + msg_trace()</span>
+</code></pre></div>
+<p><code>--quiet</code> and <code>--msg-level</code> are mutually exclusive. See <a href="../../reference/built-ins/#-message-functions-msg_">built-ins reference</a> for the full visibility table.</p>
+<hr />
+<h2 id="in-place-editing-in-place">✏️ In-place editing (<code>--in-place</code>)</h2>
+<p>Modify the input file directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;host&quot;: data[&quot;host&quot;], &quot;port&quot;: data[&quot;port&quot;]}&#39;</span><span class="w"> </span>--in-place
+</code></pre></div>
+<p>Requires <code>-i</code>. Incompatible with <code>-o</code>.</p>
+<hr />
+<h2 id="stdin-stdout">🔌 Stdin / stdout</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># 📥 Read from stdin</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>cat<span class="w"> </span>data.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;count&quot;: len(data)}&#39;</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="c1"># 🔗 Pipe chain</span>
+<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>https://jsonplaceholder.typicode.com/todos<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[d for d in data if d[&quot;completed&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+</code></pre></div>
+<hr />
+<h2 id="monty-repl-fimod-monty-repl">🐍 Monty REPL (<code>fimod monty repl</code>)</h2>
+<p>Start an interactive Python REPL powered by the embedded Monty engine — no system Python needed.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="c1"># Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="c1"># &gt;&gt;&gt; 2 + 2</span>
+<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="c1"># 4</span>
+<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="c1"># &gt;&gt;&gt; [x ** 2 for x in range(5)]</span>
+<a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="c1"># [0, 1, 4, 9, 16]</span>
+<a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="c1"># &gt;&gt;&gt; exit</span>
+</code></pre></div>
+<p>Features:</p>
+<ul>
+<li><strong><code>&gt;&gt;&gt;</code>/<code>...</code> prompts</strong> with automatic multi-line continuation (blocks, implicit line joins)</li>
+<li><strong>Command history</strong> (arrow keys, via rustyline)</li>
+<li>Exit with <code>exit</code> or ++ctrl+d++</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Same engine as <code>fimod shape</code></p>
+<p>The REPL runs the exact same Monty runtime used by <code>fimod shape</code>, so you can experiment with Python expressions and data structures before putting them into a mold.</p>
+</div>
+<hr />
+<h2 id="shell-completion">🐚 Shell completion</h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:3"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Bash</label><label for="__tabbed_2_2">Zsh</label><label for="__tabbed_2_3">Fish</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>fimod<span class="w"> </span>--completions<span class="w"> </span>bash<span class="w"> </span>&gt;<span class="w"> </span>~/.local/share/bash-completion/completions/fimod
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>fimod<span class="w"> </span>--completions<span class="w"> </span>zsh<span class="w"> </span>&gt;<span class="w"> </span>~/.zfunc/_fimod
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>fimod<span class="w"> </span>--completions<span class="w"> </span>fish<span class="w"> </span>&gt;<span class="w"> </span>~/.config/fish/completions/fimod.fish
+</code></pre></div>
+</div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"../../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c2b142ea.min.js"></script>
+      
+    
+  </body>
+</html>
