@@ -1233,7 +1233,7 @@ The script installs the binary then prompts you to run <code>fimod registry setu
 </div>
 <div class="tabbed-block">
 <p><details>
-<summary><strong>Option 2 — via ubi (no script, antivirus-friendly)</strong></summary></p>
+<summary><strong>Option 1 — via ubi (no script, antivirus-friendly)</strong></summary></p>
 <p><a href="https://github.com/houseabsolute/ubi">ubi</a> is a universal binary installer available on winget (pre-installed on Windows 10/11):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c"># 1. Install ubi (one-time, uses winget which is built into Windows)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">winget</span> <span class="n">install</span> <span class="n">houseabsolute</span><span class="p">.</span><span class="n">ubi</span>
@@ -1259,7 +1259,7 @@ The script installs the binary then prompts you to run <code>fimod registry setu
 <p><details>
 <summary><strong>Option 2 — PowerShell script (execution policy / antivirus may block)</strong></summary></p>
 <blockquote>
-<p>⚠️ If your antivirus blocks this script, use <strong>Option 2 (ubi)</strong> instead — it downloads a signed binary directly from GitHub Releases with no script execution.</p>
+<p>⚠️ If your antivirus blocks this script, use <strong>Option 1 (ubi)</strong> instead — it downloads a signed binary directly from GitHub Releases with no script execution.</p>
 </blockquote>
 <p>Download first, then run:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">Invoke-RestMethod</span> <span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">pytgaen</span><span class="p">/</span><span class="n">fimod</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="n">-OutFile</span> <span class="s2">&quot;$env:TEMP\fimod-install.ps1&quot;</span>
