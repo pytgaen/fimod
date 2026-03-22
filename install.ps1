@@ -189,6 +189,6 @@ if ($Reply -match '^[nN]') {
     Write-Host "  Skipped. Run 'fimod registry setup' at any time."
 } else {
     Write-Host "  Setting up registry..."
-    & $TargetBin registry setup
+    & $TargetBin registry setup --yes
 }
 Write-Host "───────────────────────────────────────────────"

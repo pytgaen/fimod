@@ -93,7 +93,7 @@ Without a `.run-test.toml`, the case runs with no args and expects exit code 0.
 
 ## Language
 
-DESIGN_NOTES.md, ROADMAP.md and commit messages are in French. Code, docs, and CLAUDE.md are in English.
+DESIGN_NOTES.md, ROADMAP.md and commit messages are in English. Code, docs, and CLAUDE.md are in English.
 
 ## RTK — CLI proxy for verbose output
 

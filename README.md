@@ -47,9 +47,40 @@ The script downloads the right binary, installs it, then runs `fimod registry se
 ### Windows
 
 <details>
-<summary><strong>Option 1 — Script PowerShell (two-step)</strong></summary>
+<summary><strong>Option 1 — via ubi (no script, antivirus-friendly)</strong></summary>
 
-> ⚠️ If your antivirus blocks this script, use **Option 2 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
+[ubi](https://github.com/houseabsolute/ubi) is a universal binary installer available on winget (pre-installed on Windows 10/11):
+
+```powershell
+# 📦 1. Install ubi (one-time, uses winget which is built into Windows)
+winget install houseabsolute.ubi
+
+# 🔄 Then restart PowerShell so ubi is found in PATH
+
+# ⬇️ 2. Install fimod (classic — includes HTTP support)
+ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\bin"
+
+# Or install the slim variant (no HTTP support, smaller binary)
+# ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
+
+# 🛤️ 3. Add to PATH (if not already present)
+$BinDir = "$env:USERPROFILE\.local\bin"
+$UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+if ($UserPath -notlike "*$BinDir*") {
+    [Environment]::SetEnvironmentVariable('PATH', "$BinDir;$UserPath", 'User')
+    $env:PATH = "$BinDir;$env:PATH"
+}
+
+# 🗂️ 4. Set up the official mold catalog
+fimod registry setup
+```
+
+</details>
+
+<details>
+<summary><strong>Option 2 — PowerShell script (execution policy / antivirus may block)</strong></summary>
+
+> ⚠️ If your antivirus blocks this script, use **Option 1 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
 
 Download first, then run:
 
@@ -59,35 +90,6 @@ Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.p
 ```
 
 > 💡 Same env var options as Linux: `$env:FIMOD_VARIANT`, `$env:FIMOD_INSTALL`, `$env:FIMOD_VERSION`
-
-</details>
-
-<details>
-<summary><strong>Option 2 — via ubi (no script, antivirus-friendly)</strong></summary>
-
-[ubi](https://github.com/houseabsolute/ubi) is a universal binary installer available on winget (pre-installed on Windows 10/11):
-
-```powershell
-# 1. Install ubi (one-time, uses winget which is built into Windows)
-winget install houseabsolute.ubi
-
-# 2. Install fimod (classic — includes HTTP support)
-ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\bin"
-
-# Or install the slim variant (no HTTP support, smaller binary)
-# ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
-
-# 3. Add to PATH (if not already present)
-$BinDir = "$env:USERPROFILE\.local\bin"
-$UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if ($UserPath -notlike "*$BinDir*") {
-    [Environment]::SetEnvironmentVariable('PATH', "$BinDir;$UserPath", 'User')
-    $env:PATH = "$BinDir;$env:PATH"
-}
-
-# 4. Set up the official mold catalog
-fimod registry setup
-```
 
 </details>
 

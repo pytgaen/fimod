@@ -1,6 +1,6 @@
 ---
 name: rtk-cli-optimizer
-version: 0.3.0
+version: 0.4.0
 description: Utiliser rtk comme proxy CLI dans Claude Code, sans hook automatique, de manière contrôlée et réversible.
 type: hook
 category: development
@@ -18,118 +18,136 @@ Ton rôle :
 - Expliquer clairement à l'utilisateur quand tu passes par `rtk`
   et comment le bypasser.
 
-Contexte sur `rtk` :
+## Contexte sur `rtk`
 
-- `rtk` est un proxy CLI qui compresse la sortie de commandes très verbeuses
-  avant de les envoyer au modèle.
-- Il est particulièrement utile pour : `git`, `gh`, `cargo`, `npm`, `pnpm`,
-  `pytest`, `vitest`, `playwright`, `go test`, `docker`, `kubectl`, `ls -R`,
-  `find`, `grep -R`, et d'autres commandes générant beaucoup de texte.
-- La commande `rtk gain` permet de voir combien de tokens sont économisés
-  par commande et au total.
+`rtk` est un proxy CLI qui compresse la sortie de commandes très verbeuses
+avant de les envoyer au modèle. Il est transparent : si une commande n'a pas
+de filtre dédié, `rtk` la passe telle quelle — il est donc toujours sûr de
+l'utiliser.
 
-Assumptions :
+La commande `rtk gain` permet de voir combien de tokens sont économisés par
+commande et au total.
 
-- La commande `rtk --version` fonctionne (rtk est dans le PATH).
-- La commande `rtk gain` fonctionne (sinon tu dois considérer que les stats
-  ne sont pas disponibles).
+**Assumptions :**
+- `rtk --version` fonctionne (rtk est dans le PATH).
+- `rtk gain` fonctionne (sinon considère que les stats ne sont pas disponibles).
 
-Règles de réécriture (sans hook) :
+## Règle d'or
 
-1. **Commandes candidates à `rtk`**
+**Toujours préfixer avec `rtk`**, y compris dans les chaînes `&&` :
 
-   Pour les commandes suivantes, tu dois *envisager* d'utiliser `rtk` comme proxy
-   en les réécrivant explicitement sous la forme `rtk <commande>` :
+```bash
+# ❌ Wrong
+git add . && git commit -m "msg" && git push
 
-   - Git : `git status`, `git diff`, `git log`, `git show`, `git blame`,
-     `gh pr diff`, `gh pr view` (si la sortie est volumineuse).
-   - Tests : `pytest`, `cargo test`, `npm test`, `pnpm test`, `vitest`,
-     `playwright test`, `go test`.
-   - Build / CI verbeux : `cargo build`, `npm run build`, `pnpm build`,
-     jobs qui produisent beaucoup de logs.
-   - Listings / recherche : `ls -R`, `find`, `grep -R`, `rg` sur de gros arbres.
-   - Conteneurs / cluster : `docker ps`, `docker compose ps`, `kubectl get ...`
-     quand le nombre de ressources est important.
+# ✅ Correct
+rtk git add . && rtk git commit -m "msg" && rtk git push
+```
 
-   Quand tu décides d'utiliser `rtk`, tu dois lancer **exactement** :
+## Commandes candidates à `rtk` (avec gains typiques)
 
-   - `rtk <commande d'origine et ses arguments>`
+### Build & Compile — 80–90% d'économie
+```bash
+rtk cargo build         # sortie Cargo build
+rtk cargo check         # sortie Cargo check
+rtk cargo clippy        # avertissements Clippy groupés par fichier (80%)
+```
 
-   Exemple :
+### Tests — 90–99% d'économie
+```bash
+rtk cargo test          # échecs seulement (90%)
+rtk vitest run          # échecs seulement (99.5%)
+rtk playwright test     # échecs seulement (94%)
+```
 
-   - Commande brute : `git diff`
-   - Commande optimisée : `rtk git diff`
+### Git — 59–80% d'économie
+```bash
+rtk git status          # statut compact
+rtk git log             # log compact (tous flags compatibles)
+rtk git diff            # diff compact (80%)
+rtk git show            # show compact (80%)
+rtk git add             # confirmations ultra-compactes (59%)
+rtk git commit          # confirmations ultra-compactes (59%)
+rtk git push / pull / fetch / branch / stash / worktree
+```
 
-2. **Commandes à ne pas réécrire automatiquement**
+Note : le passthrough fonctionne pour **tous** les sous-commandes git, même
+ceux non listés explicitement.
 
-   Tu ne dois **pas** ajouter `rtk` devant les commandes suivantes :
+### GitHub CLI — 26–87% d'économie
+```bash
+rtk gh pr view <num>    # PR compact (87%)
+rtk gh pr checks        # checks compact (79%)
+rtk gh run list         # workflow runs compact (82%)
+rtk gh issue list       # issues compact (80%)
+rtk gh api              # réponses API compact (26%)
+```
 
-   - Éditeurs / outils interactifs : `vim`, `nvim`, `nano`, `less`, `more`,
-     `tmux`, etc.
-   - Commandes qui attendent de l'entrée utilisateur en continu (REPL, shells,
-     prompts interactifs).
-   - Scripts ou binaires spécifiques du projet qui manipulent des fichiers
-     de manière délicate si tu n'es pas sûr que `rtk` soit transparent.
+### JavaScript / TypeScript — 70–90% d'économie
+```bash
+rtk pnpm list / outdated / install
+rtk npm run <script>
+rtk npx <cmd>
+```
 
-   Si tu as un doute sur une commande, **ne la réécris pas** avec `rtk` sans
-   raison claire liée à la verbosité.
+### Fichiers & Recherche — 60–75% d'économie
+```bash
+rtk ls <path>           # arborescence compacte (65%)
+rtk grep <pattern>      # résultats groupés par fichier (75%)
+rtk find <pattern>      # résultats groupés par répertoire (70%)
+```
 
-3. **Bypass explicite de `rtk`**
+### Infrastructure — 85% d'économie
+```bash
+rtk docker ps / images / logs <c>
+rtk kubectl get / logs
+```
 
-   Si tu as utilisé `rtk <commande>` et que la sortie te semble trop
-   condensée pour diagnostiquer un problème (par exemple, tu ne vois pas
-   un message d'erreur précis ou des détails de diff importants) :
+### Réseau — 65–70% d'économie
+```bash
+rtk curl <url>          # réponses HTTP compactes (70%)
+rtk wget <url>          # sortie de téléchargement compacte (65%)
+```
 
-   - Relance la commande **sans** `rtk`.
-   - Dans ta réponse à l'utilisateur, indique clairement :
-     - que tu as d'abord utilisé `rtk` pour réduire la verbosité,
-     - que tu as dû relancer la commande brute pour obtenir plus de détails.
+## Commandes à ne pas réécrire
 
-4. **Communication claire avec l'utilisateur**
+Tu ne dois **pas** ajouter `rtk` devant :
 
-   À chaque fois que tu t'appuies sur `rtk`, précise dans ta réponse :
+- Éditeurs / outils interactifs : `vim`, `nvim`, `nano`, `less`, `tmux`, REPLs.
+- Commandes où la sortie exacte est nécessaire pour diagnostiquer un problème.
+- Scripts spécifiques du projet si tu n'es pas certain que `rtk` soit transparent.
 
-   - quelle commande tu as exécutée exactement (par ex. `rtk git diff`),
-   - ce que `rtk` a permis de condenser (par ex. "résumé des fichiers modifiés,
-     nombre de lignes ajoutées/supprimées").
+En cas de doute, **ne réécris pas** avec `rtk` sans raison claire liée à la verbosité.
 
-   Si l'utilisateur demande à voir la version complète de la sortie :
+## Bypass explicite
 
-   - relance sans `rtk` (commande brute),
-   - mentionne explicitement que tu fournis la sortie non condensée.
+Si la sortie `rtk` est trop condensée pour diagnostiquer un problème :
 
-5. **Utilisation de `rtk gain` pour affiner**
+- Relance **sans** `rtk`.
+- Indique clairement dans ta réponse que tu as dû passer à la commande brute.
 
-   Tu peux périodiquement exécuter :
+## Communication avec l'utilisateur
 
-   - `rtk gain`
+À chaque fois que tu t'appuies sur `rtk`, précise :
 
-   et t'en servir pour :
+- la commande exacte exécutée (ex. `rtk git diff`),
+- ce que `rtk` a condensé.
 
-   - indiquer à l'utilisateur les commandes pour lesquelles `rtk` fait gagner
-     le plus de tokens,
-   - suggérer d'étendre ou de réduire l'utilisation de `rtk` sur certaines
-     classes de commandes.
+Si l'utilisateur demande la sortie complète, relance sans `rtk` et signale-le.
 
-   N'invente pas de chiffres : base-toi uniquement sur ce que renvoie
-   `rtk gain`.
+## `rtk gain` pour affiner
 
-6. **Sécurité et réversibilité**
+Exécute `rtk gain` pour :
 
-   Tu ne modifies jamais la configuration globale de l'environnement
-   (pas de `rtk init --global`, pas de modification de hooks ou de fichiers
-   de configuration système).
+- indiquer les commandes les plus rentables,
+- suggérer d'étendre ou de réduire l'utilisation selon le profil de la session.
 
-   Tu te contentes de :
+Ne jamais inventer de chiffres — base-toi uniquement sur ce que renvoie `rtk gain`.
 
-   - choisir quand préfixer une commande par `rtk`,
-   - expliquer à l'utilisateur comment il peut reproduire ou désactiver
-     cette optimisation.
+## Sécurité et réversibilité
 
-Résumé :
+Tu ne modifies jamais la configuration globale :
+- pas de `rtk init --global`,
+- pas de modification de hooks ou de fichiers de configuration système.
 
-- Utilise `rtk <commande>` pour les commandes très bruyantes où la perte
-  de détails n'empêche pas de travailler.
-- Reviens à la commande brute si tu as besoin de détails fins.
-- Ne touche pas à la configuration système ; tout passe par le choix explicite
-  des commandes que tu exécutes.
+Tout passe par le choix explicite des commandes exécutées.

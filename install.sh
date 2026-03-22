@@ -206,7 +206,7 @@ if [ -t 0 ] || [ -e /dev/tty ]; then
     *)
       echo ""
       echo "  Setting up registry..."
-      "${INSTALL_DIR}/${BIN_NAME}" registry setup
+      "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
       ;;
   esac
 else

@@ -58,7 +58,7 @@ Ready-to-use wrapper molds for CI/CD pipelines:
 | `@patch` | CLI wrapper over `df_patch` | `fimod shape -i data.json --arg patch=changes.json -m @patch` |
 | `@merge` | CLI wrapper over `df_merge` | `fimod shape -i base.yaml -i overlay.yaml -s -m @merge` |
 
-Depends on: `df_*` helpers, multi-file slurp.
+Depends on: `df_*` helpers (slurp already implemented via `-i f1 -i f2 -s`).
 
 ## ✅ Verbosity & diagnostics
 
@@ -75,15 +75,19 @@ Depends on: `df_*` helpers, multi-file slurp.
 
 ## Ecosystem
 
-- **Fichier de config global** `[P3]` — `~/.config/fimod/config.toml` (ou `$FIMOD_CONFIG`) pour centraliser les defaults HTTP : User-Agent personnalisé, headers par défaut (ex. tokens d'auth), timeout, proxy. Utile pour CI/CD où les env vars sont contraintes. Même structure que les flags CLI actuels (`http-header`, `timeout`, `no-follow`). À implémenter quand d'autres defaults (proxy, retries) justifieront un vrai fichier de config.
 - **Devcontainer Feature** `[P2]` — separate repo `fimod-devcontainer-feature`, publishes an OCI Feature on GHCR. Allows `"features": { "ghcr.io/pytgaen/fimod-devcontainer-feature/fimod:1": {} }` in a `devcontainer.json` without a Dockerfile. The install.sh script detects the architecture and downloads the binary from GitHub Releases.
+- **aqua-registry** `[P2]` — submit a PR to [aqua-registry](https://github.com/aquaproj/aqua-registry) to make fimod installable via `aqua g -i pytgaen/fimod`. Benefits: per-project tool pinning via a committed `aqua.yaml`, ideal for CI/CD and teams; aqua is on winget (`winget install aquaproj.aqua`), covers Linux/macOS/Windows. The PR is mechanical: a YAML file describing the release assets. **Bonus: once in the aqua-registry, mise can also use fimod via its aqua backend (`mise use aqua:pytgaen/fimod`), cleaner than the ubi backend.**
 - **Manpage** `[P3]` — via `clap_mangen`
 - **Module system** `[P3]` — imports between molds via `# fimod: import=utils,helpers`. Fimod resolves the referenced files and concatenates them before Monty compilation (no native Python import — Monty doesn't support it). Uses the existing `# fimod:` mechanism (`parse_mold_defaults()`). Resolution: same directory as the mold, then registry. *(De-prioritized: at the beginning of use cases, monolithic molds will be more than enough)*.
 - **Schema validation** `[P3]` — validate input/output against a JSON Schema
 
 ## Future ideas
 
-
+- **PyO3 Python API** `[P3]` — expose fimod as a native Python module via PyO3. Requires extracting the pipeline core into a separate `lib.rs` from `main.rs`. Would allow `import fimod; fimod.shape(data, mold="@pick_fields")` from Python. Significant effort, to consider if Python integration demand materializes.
+- **Global config file** `[P3]` — `~/.config/fimod/config.toml` (or `$FIMOD_CONFIG`) to centralize HTTP defaults: custom User-Agent, default headers (e.g. auth tokens), timeout, proxy. To implement when other defaults (proxy, retries) justify a real config file.
+- **PyPI distribution** `[P3]` — distribute fimod via PyPI following the `ruff`/`uv` model: platform-specific packages + meta-package. Pure CI/packaging effort.
+- **npm distribution** `[P3]` — distribute fimod via npm following the `@biomejs/biome` model: platform-specific packages as `optionalDependencies`. Pure CI/packaging effort.
+- **mise** `[P3]` — document installation via mise's ubi backend (`mise use ubi:pytgaen/fimod`); switch to `aqua:pytgaen/fimod` once the aqua PR is merged. No work on fimod's side, purely documentation.
 
 ---
 
@@ -102,12 +106,12 @@ Complexity legend: 🟢 simple, 🟡 moderate, 🔴 complex.
 | 5 | Multi-document YAML (`---`) | P2 | + | 🟡 | 1d | — |
 | 6 | `--jobs N` (parallel batch) | P2 | ++ | 🟡 | 2d | `rayon` crate |
 | 7 | Devcontainer Feature | P2 | + | 🟢 | 1d | separate repo |
-| 8 | Manpage (`clap_mangen`) | P3 | + | 🟢 | 0.5d | — |
-| 9 | Schema validation (JSON Schema) | P3 | ++ | 🟡 | 2-3d | crate to pick |
-| 10 | Module system (`# fimod: import=`) | P3 | ++ | 🟢 | 1d | `parse_mold_defaults()` |
-| 11 | Multi-file output | P3 | + | 🔴 | 2-3d | — |
-| 12 | Large files streaming | P3 | + | 🔴 | 3-5d | — |
-| 13 | PyO3 Python API | P3 | ++ | 🔴 | 5d+ | `lib.rs` extraction |
+| 8 | aqua-registry | P2 | + | 🟢 | 0.5d | PR externe |
+| 9 | Manpage (`clap_mangen`) | P3 | + | 🟢 | 0.5d | — |
+| 10 | Schema validation (JSON Schema) | P3 | ++ | 🟡 | 2-3d | crate to pick |
+| 11 | Module system (`# fimod: import=`) | P3 | ++ | 🟢 | 1d | `parse_mold_defaults()` |
+| 12 | Multi-file output | P3 | + | 🔴 | 2-3d | — |
+| 13 | Large files streaming | P3 | + | 🔴 | 3-5d | — |
 
 ### Suggested next sprint
 
