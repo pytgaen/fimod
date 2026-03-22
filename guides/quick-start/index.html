@@ -1233,40 +1233,40 @@ The script installs the binary then prompts you to run <code>fimod registry setu
 </div>
 <div class="tabbed-block">
 <p><details>
-<summary><strong>Option 1 — Script PowerShell (two-step)</strong></summary></p>
+<summary><strong>Option 2 — via ubi (no script, antivirus-friendly)</strong></summary></p>
+<p><a href="https://github.com/houseabsolute/ubi">ubi</a> is a universal binary installer available on winget (pre-installed on Windows 10/11):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c"># 1. Install ubi (one-time, uses winget which is built into Windows)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">winget</span> <span class="n">install</span> <span class="n">houseabsolute</span><span class="p">.</span><span class="n">ubi</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c"># 2. Install fimod (classic — includes HTTP support)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">ubi</span> <span class="p">-</span><span class="n">-project</span> <span class="n">pytgaen</span><span class="p">/</span><span class="n">fimod</span> <span class="p">-</span><span class="n">-matching</span> <span class="s2">&quot;fimod-v&quot;</span> <span class="p">-</span><span class="n">-in</span> <span class="s2">&quot;$env:USERPROFILE\.local\bin&quot;</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c"># Or slim variant (no HTTP support, smaller binary)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c"># ubi --project pytgaen/fimod --matching &quot;fimod-slim-v&quot; --in &quot;$env:USERPROFILE\.local\bin&quot;</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c"># 3. Add to PATH (if not already present)</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nv">$BinDir</span> <span class="p">=</span> <span class="s2">&quot;$env:USERPROFILE\.local\bin&quot;</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nv">$UserPath</span> <span class="p">=</span> <span class="no">[Environment]</span><span class="p">::</span><span class="n">GetEnvironmentVariable</span><span class="p">(</span><span class="s1">&#39;PATH&#39;</span><span class="p">,</span> <span class="s1">&#39;User&#39;</span><span class="p">)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="k">if</span> <span class="p">(</span><span class="nv">$UserPath</span> <span class="o">-notlike</span> <span class="s2">&quot;*$BinDir*&quot;</span><span class="p">)</span> <span class="p">{</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s1">&#39;PATH&#39;</span><span class="p">,</span> <span class="s2">&quot;$BinDir;$UserPath&quot;</span><span class="p">,</span> <span class="s1">&#39;User&#39;</span><span class="p">)</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="nv">$env:PATH</span> <span class="p">=</span> <span class="s2">&quot;$BinDir;$env:PATH&quot;</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="p">}</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="c"># 4. Set up the official mold catalog</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="n">fimod</span> <span class="n">registry</span> <span class="n">setup</span>
+</code></pre></div>
+</details>
+<p><details>
+<summary><strong>Option 2 — PowerShell script (execution policy / antivirus may block)</strong></summary></p>
 <blockquote>
 <p>⚠️ If your antivirus blocks this script, use <strong>Option 2 (ubi)</strong> instead — it downloads a signed binary directly from GitHub Releases with no script execution.</p>
 </blockquote>
 <p>Download first, then run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">Invoke-RestMethod</span> <span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">pytgaen</span><span class="p">/</span><span class="n">fimod</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="n">-OutFile</span> <span class="s2">&quot;$env:TEMP\fimod-install.ps1&quot;</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="p">&amp;</span> <span class="s2">&quot;$env:TEMP\fimod-install.ps1&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">Invoke-RestMethod</span> <span class="n">https</span><span class="p">://</span><span class="n">raw</span><span class="p">.</span><span class="n">githubusercontent</span><span class="p">.</span><span class="n">com</span><span class="p">/</span><span class="n">pytgaen</span><span class="p">/</span><span class="n">fimod</span><span class="p">/</span><span class="n">main</span><span class="p">/</span><span class="n">install</span><span class="p">.</span><span class="n">ps1</span> <span class="n">-OutFile</span> <span class="s2">&quot;$env:TEMP\fimod-install.ps1&quot;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p">&amp;</span> <span class="s2">&quot;$env:TEMP\fimod-install.ps1&quot;</span>
 </code></pre></div>
 <p>Same env var options: <code>$env:FIMOD_VARIANT</code> · <code>$env:FIMOD_INSTALL</code> · <code>$env:FIMOD_VERSION</code></p>
 <p>The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make <code>fimod</code> available in new terminals.</p>
-</details>
-<p><details>
-<summary><strong>Option 2 — via ubi (no script, antivirus-friendly)</strong></summary></p>
-<p><a href="https://github.com/houseabsolute/ubi">ubi</a> is a universal binary installer available on winget (pre-installed on Windows 10/11):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c"># 1. Install ubi (one-time, uses winget which is built into Windows)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">winget</span> <span class="n">install</span> <span class="n">houseabsolute</span><span class="p">.</span><span class="n">ubi</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c"># 2. Install fimod (classic — includes HTTP support)</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">ubi</span> <span class="p">-</span><span class="n">-project</span> <span class="n">pytgaen</span><span class="p">/</span><span class="n">fimod</span> <span class="p">-</span><span class="n">-matching</span> <span class="s2">&quot;fimod-v&quot;</span> <span class="p">-</span><span class="n">-in</span> <span class="s2">&quot;$env:USERPROFILE\.local\bin&quot;</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c"># Or slim variant (no HTTP support, smaller binary)</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c"># ubi --project pytgaen/fimod --matching &quot;fimod-slim-v&quot; --in &quot;$env:USERPROFILE\.local\bin&quot;</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c"># 3. Add to PATH (if not already present)</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nv">$BinDir</span> <span class="p">=</span> <span class="s2">&quot;$env:USERPROFILE\.local\bin&quot;</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="nv">$UserPath</span> <span class="p">=</span> <span class="no">[Environment]</span><span class="p">::</span><span class="n">GetEnvironmentVariable</span><span class="p">(</span><span class="s1">&#39;PATH&#39;</span><span class="p">,</span> <span class="s1">&#39;User&#39;</span><span class="p">)</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="k">if</span> <span class="p">(</span><span class="nv">$UserPath</span> <span class="o">-notlike</span> <span class="s2">&quot;*$BinDir*&quot;</span><span class="p">)</span> <span class="p">{</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="no">[Environment]</span><span class="p">::</span><span class="n">SetEnvironmentVariable</span><span class="p">(</span><span class="s1">&#39;PATH&#39;</span><span class="p">,</span> <span class="s2">&quot;$BinDir;$UserPath&quot;</span><span class="p">,</span> <span class="s1">&#39;User&#39;</span><span class="p">)</span>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="nv">$env:PATH</span> <span class="p">=</span> <span class="s2">&quot;$BinDir;$env:PATH&quot;</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="p">}</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="c"># 4. Set up the official mold catalog</span>
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="n">fimod</span> <span class="n">registry</span> <span class="n">setup</span>
-</code></pre></div>
 </details>
 </div>
 <div class="tabbed-block">
