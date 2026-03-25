@@ -1270,29 +1270,36 @@ The script installs the binary then prompts you to run <code>fimod registry setu
 <p>Same env var options: <code>$env:FIMOD_VARIANT</code> · <code>$env:FIMOD_INSTALL</code> · <code>$env:FIMOD_VERSION</code></p>
 <p>The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make <code>fimod</code> available in new terminals.</p>
 </details>
+<p><details>
+<summary><strong>⚠️ VCRUNTIME140.dll not found?</strong></summary></p>
+<p>fimod requires the <strong>Microsoft Visual C++ Redistributable</strong>, pre-installed on most Windows systems but missing in minimal environments (Windows Sandbox, fresh server installs).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">winget</span> <span class="n">install</span> <span class="n">Microsoft</span><span class="p">.</span><span class="n">VCRedist</span><span class="p">.</span><span class="n">2015</span><span class="p">+.</span><span class="n">x64</span>
+</code></pre></div>
+<p>Or download directly: <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe">vc_redist.x64.exe</a></p>
+</details>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>cargo<span class="w"> </span>install<span class="w"> </span>--git<span class="w"> </span>https://github.com/pytgaen/fimod
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>cargo<span class="w"> </span>install<span class="w"> </span>--git<span class="w"> </span>https://github.com/pytgaen/fimod
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pytgaen/fimod<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>fimod
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># binary at target/release/fimod</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/pytgaen/fimod<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>fimod
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>cargo<span class="w"> </span>build<span class="w"> </span>--release
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># binary at target/release/fimod</span>
 </code></pre></div>
 </div>
 </div>
 </div>
 <div class="admonition tip">
 <p class="admonition-title">Check your install</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>fimod<span class="w"> </span>--version
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>fimod<span class="w"> </span>--version
 </code></pre></div>
 </div>
 <hr />
 <h2 id="first-try-hello-world">🎯 First Try (Hello World)</h2>
 <p>Let's test fimod with a simple inline expression. Create a sample JSON file or pipe it in:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;[{&quot;name&quot;: &quot;Alice&quot;}, {&quot;name&quot;: &quot;Bob&quot;}]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;len(data)&#39;</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># Output: 2</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;[{&quot;name&quot;: &quot;Alice&quot;}, {&quot;name&quot;: &quot;Bob&quot;}]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;len(data)&#39;</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># Output: 2</span>
 </code></pre></div>
 <hr />
 <h2 id="next-steps">�️ Next steps</h2>
