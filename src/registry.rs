@@ -177,6 +177,7 @@ pub fn remove(name: &str) -> Result<()> {
 /// List all registered sources.
 pub fn list(output_format: &str) -> Result<()> {
     let cfg = load_config()?;
+    let env_entries = parse_env_registries();
 
     if output_format == "json" {
         #[derive(Serialize)]
@@ -185,8 +186,10 @@ pub fn list(output_format: &str) -> Result<()> {
             kind: &'a SourceType,
             location: &'a str,
             default: bool,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            from_env: bool,
         }
-        let entries: Vec<RegistryInfo> = cfg
+        let mut entries: Vec<RegistryInfo> = cfg
             .sources
             .iter()
             .map(|(name, source)| RegistryInfo {
@@ -198,20 +201,45 @@ pub fn list(output_format: &str) -> Result<()> {
                     .or(source.url.as_deref())
                     .unwrap_or("?"),
                 default: cfg.default.as_deref() == Some(name),
+                from_env: false,
             })
             .collect();
+        let mut anon_index = 0;
+        for entry in &env_entries {
+            let display_name = env_display_name(entry, &mut anon_index);
+            // Leak the string so we can store &str in the struct.
+            // This is fine — list() runs once then exits.
+            let name_ref: &str = Box::leak(display_name.into_boxed_str());
+            entries.push(RegistryInfo {
+                name: name_ref,
+                kind: &entry.source.kind,
+                location: entry
+                    .source
+                    .path
+                    .as_deref()
+                    .or(entry.source.url.as_deref())
+                    .unwrap_or("?"),
+                default: false,
+                from_env: true,
+            });
+        }
         println!("{}", serde_json::to_string_pretty(&entries)?);
         return Ok(());
     }
 
-    if cfg.sources.is_empty() {
+    if cfg.sources.is_empty() && env_entries.is_empty() {
         println!("No registries configured.");
         println!("Use 'fimod registry add <name> <path-or-url>' to add one.");
         return Ok(());
     }
+    let has_env_anon = env_has_anonymous(&env_entries);
     for (name, source) in &cfg.sources {
         let default_marker = if cfg.default.as_deref() == Some(name) {
-            " (default)"
+            if has_env_anon {
+                " (fallback default)"
+            } else {
+                " (default)"
+            }
         } else {
             ""
         };
@@ -223,6 +251,25 @@ pub fn list(output_format: &str) -> Result<()> {
         println!(
             "{:20} [{:6}] {}{}",
             name, source.kind, location, default_marker
+        );
+    }
+    let mut anon_index = 0;
+    for entry in &env_entries {
+        let display_name = env_display_name(entry, &mut anon_index);
+        let marker = if display_name == "env-default" {
+            "(default FIMOD_REGISTRY)"
+        } else {
+            "(FIMOD_REGISTRY)"
+        };
+        let location = entry
+            .source
+            .path
+            .as_deref()
+            .or(entry.source.url.as_deref())
+            .unwrap_or("?");
+        println!(
+            "{:20} [{:6}] {} {}",
+            display_name, entry.source.kind, location, marker
         );
     }
     Ok(())
@@ -342,6 +389,36 @@ fn parse_env_registries() -> Vec<EnvRegistry> {
             }
         })
         .collect()
+}
+
+/// Generate a display name for an anonymous FIMOD_REGISTRY entry.
+///
+/// The first anonymous entry is `env-default` (it has priority for bare `@mold`),
+/// subsequent ones are `env-1`, `env-2`, etc.
+fn env_anonymous_name(anon_index: usize) -> String {
+    if anon_index == 0 {
+        "env-default".to_string()
+    } else {
+        format!("env-{anon_index}")
+    }
+}
+
+/// Generate a display name for a FIMOD_REGISTRY entry.
+fn env_display_name(entry: &EnvRegistry, anon_index: &mut usize) -> String {
+    match &entry.name {
+        Some(n) => n.clone(),
+        None => {
+            let name = env_anonymous_name(*anon_index);
+            *anon_index += 1;
+            name
+        }
+    }
+}
+
+/// Returns true if FIMOD_REGISTRY contains at least one anonymous entry
+/// (which takes priority over the sources.toml default for bare `@mold`).
+fn env_has_anonymous(entries: &[EnvRegistry]) -> bool {
+    entries.iter().any(|e| e.name.is_none())
 }
 
 // ── mold resolution ───────────────────────────────────────────────────────────
@@ -800,44 +877,65 @@ type MoldEntry = (String, bool, String, Option<String>);
 /// Returns `(registry_name, is_default, mold_name, description)` tuples.
 fn collect_all_molds(cfg: &SourcesConfig, registry_name: Option<&str>) -> Result<Vec<MoldEntry>> {
     let sources = select_sources(cfg, registry_name)?;
+    let env_entries = parse_env_registries();
 
     let default_name = cfg.default.as_deref();
     let mut result = Vec::new();
 
     for (reg_name, source) in sources {
         let is_default = default_name == Some(reg_name);
-        match &source.kind {
-            SourceType::Local => {
-                let base = source.path.as_deref().ok_or_else(|| {
-                    anyhow::anyhow!("Local registry '{reg_name}' has no path configured")
-                })?;
-                for (mold_name, desc, _rel) in scan_local_molds(Path::new(base)) {
-                    result.push((reg_name.to_string(), is_default, mold_name, desc));
-                }
-            }
-            SourceType::Github | SourceType::Gitlab | SourceType::Http => {
-                let catalog_url = catalog_url_for(source)?;
-                let headers = auth_headers(source);
-                let Ok(resp) = crate::http::fetch_url(&catalog_url, &headers, 30, false, false)
-                else {
-                    continue;
-                };
-                let Ok(catalog) = toml::from_str::<Catalog>(&resp.body) else {
-                    continue;
-                };
-                for (mold_name, entry) in catalog.molds {
-                    result.push((
-                        reg_name.to_string(),
-                        is_default,
-                        mold_name,
-                        entry.description,
-                    ));
-                }
-            }
+        collect_molds_from_source(reg_name, source, is_default, &mut result);
+    }
+
+    // Include FIMOD_REGISTRY entries (only when listing all, not a specific registry)
+    if registry_name.is_none() {
+        let mut anon_index = 0;
+        for entry in &env_entries {
+            let display_name = env_display_name(entry, &mut anon_index);
+            collect_molds_from_source(&display_name, &entry.source, false, &mut result);
         }
     }
 
     Ok(result)
+}
+
+/// Collect molds from a single source into the result vector.
+fn collect_molds_from_source(
+    reg_name: &str,
+    source: &Source,
+    is_default: bool,
+    result: &mut Vec<MoldEntry>,
+) {
+    match &source.kind {
+        SourceType::Local => {
+            let Some(base) = source.path.as_deref() else {
+                return;
+            };
+            for (mold_name, desc, _rel) in scan_local_molds(Path::new(base)) {
+                result.push((reg_name.to_string(), is_default, mold_name, desc));
+            }
+        }
+        SourceType::Github | SourceType::Gitlab | SourceType::Http => {
+            let Ok(catalog_url) = catalog_url_for(source) else {
+                return;
+            };
+            let headers = auth_headers(source);
+            let Ok(resp) = crate::http::fetch_url(&catalog_url, &headers, 30, false, false) else {
+                return;
+            };
+            let Ok(catalog) = toml::from_str::<Catalog>(&resp.body) else {
+                return;
+            };
+            for (mold_name, entry) in catalog.molds {
+                result.push((
+                    reg_name.to_string(),
+                    is_default,
+                    mold_name,
+                    entry.description,
+                ));
+            }
+        }
+    }
 }
 
 /// Output format for `fimod mold list`.
@@ -881,7 +979,8 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
         }
         MoldListFormat::Text => {
             // text format — existing human-readable output
-            if cfg.sources.is_empty() {
+            let env_entries = parse_env_registries();
+            if cfg.sources.is_empty() && env_entries.is_empty() {
                 println!("No registries configured. Use 'fimod registry add' to add one.");
                 return Ok(());
             }
@@ -902,6 +1001,21 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                     first = false;
                     let is_default = cfg.default.as_deref() == Some(name.as_str());
                     print_registry_molds(name, source, is_default)?;
+                }
+                let mut anon_index = 0;
+                for entry in &env_entries {
+                    if !first {
+                        println!();
+                    }
+                    first = false;
+                    let base_name = env_display_name(entry, &mut anon_index);
+                    let marker = if base_name == "env-default" {
+                        "(default FIMOD_REGISTRY)"
+                    } else {
+                        "(FIMOD_REGISTRY)"
+                    };
+                    let display_name = format!("{base_name} {marker}");
+                    print_registry_molds(&display_name, &entry.source, false)?;
                 }
             }
         }

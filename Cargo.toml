@@ -1,14 +1,14 @@
 [package]
 name = "fimod"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
-description = "Transform structured data using Python mold scripts via Monty"
+description = "fimod - the data shaper CLI. Transform structured data with embedded Python, no install required."
 license = "LGPL-3.0-only"
 repository = "https://github.com/pytgaen/fimod"
 homepage = "https://pytgaen.github.io/fimod"
 documentation = "https://pytgaen.github.io/fimod"
 categories = ["command-line-utilities", "development-tools"]
-keywords = ["cli", "data-transformation", "python", "json", "yaml"]
+keywords = ["cli", "data-shaper", "data-transformation", "json", "yaml"]
 [features]
 default = ["reqwest"]
 full = ["reqwest"]

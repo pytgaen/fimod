@@ -1,6 +1,6 @@
-site_name: Fimod
+site_name: fimod - the data shaper CLI
 site_url: https://pytgaen.github.io/fimod/
-site_description: Transform structured data using Python mold scripts via Monty.
+site_description: "fimod - the data shaper CLI. Transform JSON, YAML, TOML, CSV with embedded Python expressions. No system Python required."
 author: Gaetan
 repo_name: fimod
 repo_url: https://github.com/pytgaen/fimod

@@ -2,6 +2,8 @@
   <img src="docs/assets/logo-image.jpg" alt="fimod" width="380"/>
 </p>
 
+<h2 align="center"><em>the data shaper CLI</em></h2>
+
 <h3 align="center">🏗️ Mold your data, shape your CI, play with your pipelines</h3>
 <h3 align="center">🪶 Python-powered molding without Python installed</h3>
 
@@ -93,6 +95,19 @@ Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.p
 
 </details>
 
+<details>
+<summary><strong>⚠️ VCRUNTIME140.dll not found?</strong></summary>
+
+fimod requires the **Microsoft Visual C++ Redistributable**, pre-installed on most Windows systems but missing in minimal environments (Windows Sandbox, fresh server installs).
+
+```powershell
+winget install Microsoft.VCRedist.2015+.x64
+```
+
+Or download directly from Microsoft: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+</details>
+
 ### From source
 
 ```bash
@@ -137,6 +152,75 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 ```
 
 👉 [**See the full feature comparison against jq, yq, and Python**](docs/guides/comparison.md)
+
+### 👀 A taste of what fimod can do
+
+🐍 **Pure Python transforms — Rust-powered I/O, serialization & builtins:**
+
+```bash
+# YAML to JSON, filter active users, sort by name
+fimod s -i users.yaml -e '[u for u in data if u["active"]]' -e 'it_sort_by(data, "name")' -o result.json
+```
+
+```bash
+# Filter active users, then group by role — Unix pipes just work
+fimod s -i users.json -e '[u for u in data if u["active"]]' | fimod s -e 'it_group_by(data, "role")'
+```
+
+```bash
+# Enrich records with Python string methods — try this in jq...
+fimod s -i users.json -e '[{**u, "slug": u["name"].lower().replace(" ", "-"), "domain": u["email"].split("@")[1]} for u in data]'
+```
+
+📦 **Registry molds — reusable recipes, one `@name` away:**
+
+```bash
+# 📥 Download a file, wget-style
+fimod s -i https://example.com/archive.tar.gz -m @download
+```
+
+```bash
+# 🔄 Migrate pyproject.toml from Poetry to uv
+fimod s -i pyproject.toml -m @poetry_migrate --arg target=uv -o pyproject.toml
+```
+
+```bash
+# 🔗 Get latest GitHub release and download it in one pipe
+fimod s -i https://github.com/sinelaw/fresh/releases/latest \
+  -m @gh_latest \
+  --arg repo="sinelaw/fresh" \
+  --arg asset='fresh-editor_{version}-1_amd64.deb' \
+  | fimod s -I - --output-format raw -O
+```
+
+<details>
+<summary><strong>🍿 Even more taste... (in-place, regex, log parsing, env templating)</strong></summary>
+
+```bash
+# 🔒 Anonymize emails in-place — replace with SHA-256 hashes
+fimod s -i customers.csv -e '[{**r, "email": hs_sha256(r["email"])} for r in data]' --in-place
+```
+
+```bash
+# 🕵️ Mask IPs with regex — 192.168.1.42 → 192.168.x.x
+fimod s -i logs.json -e '[{**r, "ip": re_sub(r"\d+\.\d+$", "x.x", r["ip"])} for r in data]'
+```
+
+```bash
+# 📊 Raw log lines → structured JSON records
+fimod s -i server.log -m @log_parse \
+  --arg regex='(\S+) \[(.+?)\] "(.+?)" (\d+)' \
+  --arg fields=ip,timestamp,request,status
+```
+
+```bash
+# 🔀 Inject environment variables into ${VAR} placeholders
+fimod s -i config.json --env 'DB_*' -e '{k: env_subst(v, env) for k, v in data.items()}'
+```
+
+</details>
+
+Run `fimod mold list` to browse all built-in molds.
 
 ## 🔋 Batteries included
 

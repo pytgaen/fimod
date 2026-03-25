@@ -75,6 +75,19 @@
 
     </details>
 
+    <details>
+    <summary><strong>⚠️ VCRUNTIME140.dll not found?</strong></summary>
+
+    fimod requires the **Microsoft Visual C++ Redistributable**, pre-installed on most Windows systems but missing in minimal environments (Windows Sandbox, fresh server installs).
+
+    ```powershell
+    winget install Microsoft.VCRedist.2015+.x64
+    ```
+
+    Or download directly: [vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+    </details>
+
 === ":material-package-down: cargo install"
 
     ```bash

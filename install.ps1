@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# fimod installer — https://github.com/pytgaen/fimod
+# fimod installer - https://github.com/pytgaen/fimod
 #
 # Usage (two-step to avoid antivirus false positives on pipe-to-execute pattern):
 #   Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.ps1 -OutFile "$env:TEMP\fimod-install.ps1"
@@ -31,7 +31,7 @@ if ([string]::IsNullOrWhiteSpace($Variant)) {
     $Variant = "standard"
 }
 
-# ── Detect platform ──────────────────────────────────────────────────
+# -- Detect platform --------------------------------------------------
 
 $OsName = "windows"
 $Architecture = $env:PROCESSOR_ARCHITECTURE
@@ -43,7 +43,7 @@ if ($Architecture -eq "AMD64" -or $Architecture -eq "IA64") {
     $Arch = "unsupported"
 }
 
-# ── Map to Rust target triple ────────────────────────────────────────
+# -- Map to Rust target triple -----------------------------------------
 
 if ($Arch -eq "x86_64") {
     $Target = "x86_64-pc-windows-msvc"
@@ -53,7 +53,7 @@ if ($Arch -eq "x86_64") {
     exit 1
 }
 
-# ── Resolve version ─────────────────────────────────────────────────
+# -- Resolve version ---------------------------------------------------
 
 $Version = $env:FIMOD_VERSION
 $DownloadTag = $null
@@ -86,7 +86,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
         }
         if ([string]::IsNullOrWhiteSpace($Version)) {
             Write-Host "(trying GitHub API...)" -ForegroundColor DarkGray
-            # Try 3: API — may be rate-limited for anonymous requests (60 req/h)
+            # Try 3: API - may be rate-limited for anonymous requests (60 req/h)
             try {
                 $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases" -UseBasicParsing
                 $DownloadTag = $Releases[0].tag_name
@@ -103,7 +103,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 
 Write-Host "Installing fimod $Version ($Variant) for $OsName/$Arch..."
 
-# ── Build asset name ─────────────────────────────────────────────────
+# -- Build asset name --------------------------------------------------
 
 if ($Variant -eq "full") {
     $Prefix = "fimod-full"
@@ -118,7 +118,7 @@ if ($Source -eq "gitlab") {
     $Url = "$BaseUrl/download/$DownloadTag/$Asset"
 }
 
-# ── Choose install directory ─────────────────────────────────────────
+# -- Choose install directory -------------------------------------------
 
 $InstallDir = $env:FIMOD_INSTALL
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
@@ -128,7 +128,7 @@ if (-not (Test-Path -Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
-# ── Download and install ─────────────────────────────────────────────
+# -- Download and install -----------------------------------------------
 
 $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
@@ -151,23 +151,23 @@ try {
 
     Move-Item -Path $ExtractedBin -Destination $TargetBin -Force
 } catch {
-    Write-Error "Error: download failed — check that version $Version exists`nAvailable releases: $BaseUrl"
+    Write-Error "Error: download failed - check that version $Version exists`nAvailable releases: $BaseUrl"
     exit 1
 } finally {
     Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# ── Verify ───────────────────────────────────────────────────────────
+# -- Verify ------------------------------------------------------------
 
 Write-Host ""
-Write-Host "✅ fimod installed to $TargetBin"
+Write-Host "fimod installed to $TargetBin"
 
 $PathDirs = ($env:PATH -split ';') | ForEach-Object { $_.TrimEnd('\') }
 $InstallDirNorm = $InstallDir.TrimEnd('\')
 
 if ($PathDirs -notcontains $InstallDirNorm) {
     Write-Host ""
-    Write-Host "⚠️  $InstallDir is not in your PATH. Add it permanently:"
+    Write-Host "WARNING: $InstallDir is not in your PATH. Add it permanently:"
     Write-Host "   [Environment]::SetEnvironmentVariable('PATH', '$InstallDir;' + `$env:PATH, 'User')"
     Write-Host "   And for this session:"
     Write-Host "   `$env:PATH = `"$InstallDir;`$env:PATH`""
@@ -181,7 +181,7 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 }
 
 Write-Host ""
-Write-Host "───────────────────────────────────────────────"
+Write-Host "-----------------------------------------------"
 Write-Host "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
 $Reply = Read-Host "  >"
 Write-Host ""
@@ -191,4 +191,4 @@ if ($Reply -match '^[nN]') {
     Write-Host "  Setting up registry..."
     & $TargetBin registry setup --yes
 }
-Write-Host "───────────────────────────────────────────────"
+Write-Host "-----------------------------------------------"

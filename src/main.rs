@@ -46,13 +46,14 @@ enum MsgLevel {
     Trace,
 }
 
-/// Transform structured data using Python scripts via Monty.
+/// fimod - the data shaper CLI.
 ///
-/// No system Python required.
+/// Transform structured data with embedded Python. No system Python required.
 #[derive(Parser, Debug)]
 #[command(name = "fimod", about, long_about)]
 // keep "0.0.8" in sync with MONTY_VERSION const and the tag in Cargo.toml
-#[command(version = concat!(env!("CARGO_PKG_VERSION"), " (Monty engine: v0.0.8)"))]
+#[cfg_attr(feature = "reqwest", command(version = concat!(env!("CARGO_PKG_VERSION"), " standard (Monty engine: v0.0.8)")))]
+#[cfg_attr(not(feature = "reqwest"), command(version = concat!(env!("CARGO_PKG_VERSION"), " slim (Monty engine: v0.0.8)")))]
 #[command(after_help = "\
 EXAMPLES:
   fimod shape -i data.json -e 'data[\"name\"].upper()'
