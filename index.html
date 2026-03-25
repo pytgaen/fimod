@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Transform structured data using Python mold scripts via Monty.">
+        <meta name="description" content="fimod - the data shaper CLI. Transform JSON, YAML, TOML, CSV with embedded Python expressions. No system Python required.">
       
       
       
@@ -21,11 +21,11 @@
       
       
       <link rel="icon" href="./assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.28">
+      <meta name="generator" content="zensical-0.0.29">
     
     
       
-        <title>🐍🦀 fimod - Fimod</title>
+        <title>🐍🦀 fimod — the data shaper CLI - fimod - the data shaper CLI</title>
       
     
     
@@ -81,7 +81,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#fimod" class="md-skip">
+        <a href="#fimod-the-data-shaper-cli" class="md-skip">
           Skip to content
         </a>
       
@@ -97,9 +97,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="" title="Fimod" class="md-header__button md-logo" aria-label="Fimod" data-md-component="logo">
+    <a href="" title="fimod - the data shaper CLI" class="md-header__button md-logo" aria-label="fimod - the data shaper CLI" data-md-component="logo">
       
-  <img src="./assets/logo-favicon.jpg" alt="Fimod">
+  <img src="./assets/logo-favicon.jpg" alt="fimod - the data shaper CLI">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
@@ -110,13 +110,13 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            Fimod
+            fimod - the data shaper CLI
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              🐍🦀 fimod
+              🐍🦀 fimod — the data shaper CLI
             
           </span>
         </div>
@@ -205,12 +205,12 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="" title="Fimod" class="md-nav__button md-logo" aria-label="Fimod" data-md-component="logo">
+    <a href="" title="fimod - the data shaper CLI" class="md-nav__button md-logo" aria-label="fimod - the data shaper CLI" data-md-component="logo">
       
-  <img src="./assets/logo-favicon.jpg" alt="Fimod">
+  <img src="./assets/logo-favicon.jpg" alt="fimod - the data shaper CLI">
 
     </a>
-    Fimod
+    fimod - the data shaper CLI
   </label>
   
     <div class="md-nav__source">
@@ -299,6 +299,17 @@
     <span class="md-ellipsis">
       
         ✨ Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-taste-of-what-fimod-can-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        👀 A taste of what fimod can do
       
     </span>
   </a>
@@ -1170,6 +1181,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-taste-of-what-fimod-can-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        👀 A taste of what fimod can do
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#guides" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1235,7 +1257,7 @@
   <img src="assets/logo-image.jpg" alt="fimod" width="380"/>
 </p>
 
-<h1 id="fimod">🐍🦀 fimod</h1>
+<h1 id="fimod-the-data-shaper-cli">🐍🦀 fimod — <em>the data shaper CLI</em></h1>
 <blockquote>
 <p><strong>🏗️ Mold your data, shape your CI, play with your pipelines</strong>
 <strong>🪶 Python-powered molding without Python installed.</strong></p>
@@ -1285,6 +1307,56 @@
 </li>
 </ul>
 </div>
+<hr />
+<h2 id="a-taste-of-what-fimod-can-do">👀 A taste of what fimod can do</h2>
+<p>🐍 <strong>Pure Python transforms — Rust-powered I/O, serialization &amp; builtins:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># YAML to JSON, filter active users, sort by name</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;it_sort_by(data, &quot;name&quot;)&#39;</span><span class="w"> </span>-o<span class="w"> </span>result.json
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Filter active users, then group by role — Unix pipes just work</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;it_group_by(data, &quot;role&quot;)&#39;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Enrich records with Python string methods — try this in jq...</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[{**u, &quot;slug&quot;: u[&quot;name&quot;].lower().replace(&quot; &quot;, &quot;-&quot;), &quot;domain&quot;: u[&quot;email&quot;].split(&quot;@&quot;)[1]} for u in data]&#39;</span>
+</code></pre></div>
+<p>📦 <strong>Registry molds — reusable recipes, one <code>@name</code> away:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># 📥 Download a file, wget-style</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://example.com/archive.tar.gz<span class="w"> </span>-m<span class="w"> </span>@download
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 🔄 Migrate pyproject.toml from Poetry to uv</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>pyproject.toml<span class="w"> </span>-m<span class="w"> </span>@poetry_migrate<span class="w"> </span>--arg<span class="w"> </span><span class="nv">target</span><span class="o">=</span>uv<span class="w"> </span>-o<span class="w"> </span>pyproject.toml
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># 🔗 Get latest GitHub release and download it in one pipe</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>https://github.com/sinelaw/fresh/releases/latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-m<span class="w"> </span>@gh_latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--arg<span class="w"> </span><span class="nv">repo</span><span class="o">=</span><span class="s2">&quot;sinelaw/fresh&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--arg<span class="w"> </span><span class="nv">asset</span><span class="o">=</span><span class="s1">&#39;fresh-editor_{version}-1_amd64.deb&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-I<span class="w"> </span>-<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-O
+</code></pre></div>
+<details>
+<summary><strong>🍿 Even more taste... (in-place, regex, log parsing, env templating)</strong></summary>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># 🔒 Anonymize emails in-place — replace with SHA-256 hashes</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>customers.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[{**r, &quot;email&quot;: hs_sha256(r[&quot;email&quot;])} for r in data]&#39;</span><span class="w"> </span>--in-place
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># 🕵️ Mask IPs with regex — 192.168.1.42 → 192.168.x.x</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>logs.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[{**r, &quot;ip&quot;: re_sub(r&quot;\d+\.\d+$&quot;, &quot;x.x&quot;, r[&quot;ip&quot;])} for r in data]&#39;</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># 📊 Raw log lines → structured JSON records</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>server.log<span class="w"> </span>-m<span class="w"> </span>@log_parse<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--arg<span class="w"> </span><span class="nv">regex</span><span class="o">=</span><span class="s1">&#39;(\S+) \[(.+?)\] &quot;(.+?)&quot; (\d+)&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>ip,timestamp,request,status
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># 🔀 Inject environment variables into ${VAR} placeholders</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>--env<span class="w"> </span><span class="s1">&#39;DB_*&#39;</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{k: env_subst(v, env) for k, v in data.items()}&#39;</span>
+</code></pre></div>
+
+</details>
+
+<p>Run <code>fimod mold list</code> to browse all built-in molds.</p>
 <hr />
 <h2 id="guides">🗺️ Guides</h2>
 <p>Start here if you're new to fimod.</p>
