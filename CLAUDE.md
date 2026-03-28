@@ -91,6 +91,33 @@ field = "email"
 
 Without a `.run-test.toml`, the case runs with no args and expects exit code 0.
 
+## Design Philosophy
+
+When proposing names, labels, CLI flags, or output formats, always reason from the end-user perspective first. Before proposing a design, show a concrete example of what the user will actually see — a terminal snippet, a CLI invocation with realistic output, or a screenshot-equivalent text mock-up. Ask yourself: "If I'm a user running this command for the first time, does this make sense? Does it look clean?" If the answer is no, iterate before proposing.
+
+Prefer simple, single-concept designs (one flag, one variant function) over complex multi-parameter approaches. When in doubt, show two concrete alternatives side by side and let the user pick.
+
+## Codebase Exploration
+
+To understand the codebase structure without reading full files, use the LSP tool with rust-analyzer:
+- `LSP documentSymbol` on a file to list all functions, structs, enums
+- `LSP workspaceSymbol` to search for a symbol across the project
+- `LSP hover` for type info and docs
+- `LSP findReferences` / `LSP incomingCalls` / `LSP outgoingCalls` for usage and call graphs
+
+The `/explore` skill wraps this into a single command.
+
+## Code Style
+
+- Prefer dedicated function variants over boolean/mode parameters when behaviors diverge significantly (existing pattern: `re_sub` vs `re_sub_fancy`).
+
+## Workflow
+
+After implementing or modifying a feature, always:
+1. Run `cargo clippy` and `cargo test` before considering the task complete.
+2. Check if documentation needs updating (README.md, docs/built-ins.md, docs/cli-reference.md, docs/mold-scripting.md) and propose the changes.
+3. When updating ROADMAP.md, move completed items to the appropriate documentation files (built-ins.md, cli-reference.md, etc.) rather than just marking them as done in the roadmap.
+
 ## Language
 
 DESIGN_NOTES.md, ROADMAP.md and commit messages are in English. Code, docs, and CLAUDE.md are in English.
