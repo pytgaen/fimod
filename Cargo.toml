@@ -1,3 +1,6 @@
+[workspace]
+members = ["claymation"]
+
 [package]
 name = "fimod"
 version = "0.1.2"
