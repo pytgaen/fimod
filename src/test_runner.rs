@@ -253,8 +253,8 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<()> {
         return Ok(());
     }
 
-    let source = MoldSource::from_mold_str(mold_path)?;
-    let script = source.load()?;
+    let source = MoldSource::from_mold_str(mold_path, false)?;
+    let script = source.load(false)?;
 
     let mut passed = 0usize;
     let mut failed = 0usize;

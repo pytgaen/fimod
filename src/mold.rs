@@ -8,12 +8,15 @@ use anyhow::{bail, Context, Result};
 pub enum MoldSource {
     /// Local file path.
     File(String),
-    /// HTTP/HTTPS URL, with an optional Bearer token for authentication.
+    /// HTTP/HTTPS URL, with an optional Bearer token for authentication,
+    /// and an optional catalog content hash for cache validation.
     ///
     /// The token is populated from:
     /// - A named registry's `token_env` override, or default `GITHUB_TOKEN`/`GITLAB_TOKEN`
     /// - Domain detection when the URL is passed directly via `-m https://...`
-    Url(String, Option<String>),
+    ///
+    /// The catalog hash is present only for registry-based molds; direct URLs have `None`.
+    Url(String, Option<String>, Option<String>),
     /// Inline expression passed via `-e`.
     Inline(String),
 }
@@ -22,7 +25,7 @@ impl std::fmt::Display for MoldSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MoldSource::File(path) => write!(f, "file({path})"),
-            MoldSource::Url(url, _) => write!(f, "url({url})"),
+            MoldSource::Url(url, _, _) => write!(f, "url({url})"),
             MoldSource::Inline(_) => write!(f, "inline(-e)"),
         }
     }
@@ -64,16 +67,16 @@ impl MoldSource {
     /// - `/abs/path`      → local file/directory
     /// - `./rel/path`     → local file/directory
     /// - `path`           → local file/directory
-    pub fn from_mold_str(s: &str) -> Result<Self> {
+    pub fn from_mold_str(s: &str, no_cache: bool) -> Result<Self> {
         // Registry reference (@name or @source/name)
         if let Some(spec) = s.strip_prefix('@') {
-            return crate::registry::resolve(spec);
+            return crate::registry::resolve(spec, no_cache);
         }
 
         // Direct URL — auto-detect auth token from domain
         if s.starts_with("http://") || s.starts_with("https://") {
             let token = crate::registry::token_for_url(s);
-            return Ok(Self::Url(s.to_string(), token));
+            return Ok(Self::Url(s.to_string(), token, None));
         }
 
         // Local path or directory
@@ -100,25 +103,25 @@ impl MoldSource {
             (None, None) => {
                 bail!("Either -m/--mold or -e/--expression is required")
             }
-            (Some(m), None) => Self::from_mold_str(m),
+            (Some(m), None) => Self::from_mold_str(m, false),
             (None, Some(e)) => Ok(Self::Inline(e.to_string())),
         }
     }
 
     /// Load the mold script source code.
-    pub fn load(&self) -> Result<String> {
+    pub fn load(&self, no_cache: bool) -> Result<String> {
         match self {
             MoldSource::File(path) => {
                 fs::read_to_string(path).with_context(|| format!("Mold not found: {path}"))
             }
-            MoldSource::Url(url, token) => {
+            MoldSource::Url(url, token, catalog_hash) => {
                 #[cfg(feature = "reqwest")]
                 {
-                    load_url_with_cache(url, token.as_deref())
+                    load_url_with_cache(url, token.as_deref(), catalog_hash.as_deref(), no_cache)
                 }
                 #[cfg(not(feature = "reqwest"))]
                 {
-                    let _ = token;
+                    let _ = (token, catalog_hash, no_cache);
                     bail!(
                         "HTTP mold loading is not available (compiled with the 'slim' feature): {}",
                         url
@@ -140,46 +143,71 @@ impl MoldSource {
     }
 }
 
-/// Fetch a mold from a URL, using a local disk cache controlled by
-/// `FIMOD_CACHE_DIR` and `FIMOD_CACHE_TTL`.
+/// Fetch a mold from a URL, using a local disk cache.
 ///
-/// - `FIMOD_CACHE_DIR` — cache directory (default: `~/.cache/fimod/molds/`)
-/// - `FIMOD_CACHE_TTL` — TTL in minutes (default: `360` = 6 h; `0` = infinite; `< 0` = disabled)
+/// Two cache strategies:
+/// - **With `catalog_hash`** (registry-based molds): hash-based validation.
+///   The catalog provides a content hash; cache hit if local `.cache-hash` matches.
+/// - **Without `catalog_hash`** (direct-URL molds): TTL-based validation.
+///   Controlled by `FIMOD_CACHE_TTL` (minutes; default 360 = 6h; 0 = infinite; <0 = disabled).
 ///
-/// Cache key: hex(SHA-256(url)) + `.py`.
+/// `FIMOD_CACHE_DIR` overrides the cache base directory (default: `~/.cache/fimod/`).
 ///
 /// If `token` is provided it is sent as `Authorization: Bearer <token>`.
 /// Otherwise, `GITHUB_TOKEN` / `GITLAB_TOKEN` are automatically tried based on
 /// the URL domain.
 #[cfg(feature = "reqwest")]
-fn load_url_with_cache(url: &str, token: Option<&str>) -> Result<String> {
+fn load_url_with_cache(
+    url: &str,
+    token: Option<&str>,
+    catalog_hash: Option<&str>,
+    no_cache: bool,
+) -> Result<String> {
     use sha2::{Digest, Sha256};
+
+    let cache_base = crate::registry::cache_base_dir();
+    let url_hash = hex::encode(Sha256::digest(url.as_bytes()));
+
+    // ── hash-based cache (registry molds) ─────────────────────────────────
+    if let Some(expected_hash) = catalog_hash {
+        let mold_cache_dir = cache_base.join("molds").join(&url_hash[..16]);
+        let cache_hash_path = mold_cache_dir.join(".cache-hash");
+        let cache_script_path = mold_cache_dir.join("mold.py");
+
+        // Try cache hit: hash matches and script file exists.
+        if !no_cache {
+            if let Ok(cached_hash) = fs::read_to_string(&cache_hash_path) {
+                if cached_hash.trim() == expected_hash && cache_script_path.is_file() {
+                    return fs::read_to_string(&cache_script_path).with_context(|| {
+                        format!("Failed to read cached mold: {}", cache_script_path.display())
+                    });
+                }
+            }
+        }
+
+        // Cache miss — fetch and store.
+        let content = fetch_mold_content(url, token)?;
+        let _ = fs::create_dir_all(&mold_cache_dir);
+        let _ = fs::write(&cache_script_path, &content);
+        let _ = fs::write(&cache_hash_path, expected_hash);
+        return Ok(content);
+    }
+
+    // ── TTL-based cache (direct-URL molds) ────────────────────────────────
     use std::time::SystemTime;
 
-    // ── resolve cache dir ──────────────────────────────────────────────────
-    let cache_dir = std::env::var("FIMOD_CACHE_DIR").unwrap_or_else(|_| {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .unwrap_or_else(|_| ".".to_string());
-        format!("{home}/.cache/fimod/molds")
-    });
-
-    // ── resolve TTL ────────────────────────────────────────────────────────
-    // unit: minutes. 0 = infinite, < 0 = disabled
+    let legacy_cache_dir = cache_base.join("molds");
     let ttl_minutes: i64 = std::env::var("FIMOD_CACHE_TTL")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(360);
-    let ttl = ttl_minutes * 60; // convert to seconds for age comparison
+    let ttl = ttl_minutes * 60;
 
-    // ── compute cache path ─────────────────────────────────────────────────
-    let hash = hex::encode(Sha256::digest(url.as_bytes()));
-    let cache_path = std::path::Path::new(&cache_dir).join(format!("{hash}.py"));
+    let cache_path = legacy_cache_dir.join(format!("{url_hash}.py"));
 
-    // ── try cache hit ──────────────────────────────────────────────────────
-    if ttl >= 0 && cache_path.is_file() {
+    if !no_cache && ttl >= 0 && cache_path.is_file() {
         let fresh = if ttl == 0 {
-            true // infinite TTL
+            true
         } else {
             let stale = (|| -> Option<bool> {
                 let mtime = cache_path.metadata().ok()?.modified().ok()?;
@@ -196,11 +224,25 @@ fn load_url_with_cache(url: &str, token: Option<&str>) -> Result<String> {
         }
     }
 
-    // ── build authenticated request ────────────────────────────────────────
+    let content = fetch_mold_content(url, token)?;
+
+    if ttl >= 0 {
+        if let Err(e) =
+            fs::create_dir_all(&legacy_cache_dir).and_then(|_| fs::write(&cache_path, &content))
+        {
+            eprintln!("[fimod] warning: could not write mold cache: {e}");
+        }
+    }
+
+    Ok(content)
+}
+
+/// Fetch a mold script from a URL with optional Bearer token.
+#[cfg(feature = "reqwest")]
+fn fetch_mold_content(url: &str, token: Option<&str>) -> Result<String> {
     let client = reqwest::blocking::Client::new();
     let mut request = client.get(url);
 
-    // Explicit token takes priority; otherwise try domain-based detection.
     let resolved_token = token
         .map(|t| t.to_string())
         .or_else(|| crate::registry::token_for_url(url));
@@ -209,7 +251,6 @@ fn load_url_with_cache(url: &str, token: Option<&str>) -> Result<String> {
         request = request.header("Authorization", format!("Bearer {t}"));
     }
 
-    // ── fetch ──────────────────────────────────────────────────────────────
     let resp = request
         .send()
         .with_context(|| format!("Failed to fetch mold from URL: {url}"))?;
@@ -218,20 +259,8 @@ fn load_url_with_cache(url: &str, token: Option<&str>) -> Result<String> {
         bail!("Failed to fetch mold from {}: HTTP {}", url, resp.status());
     }
 
-    let content = resp
-        .text()
-        .with_context(|| format!("Failed to read response body from: {url}"))?;
-
-    // ── write to cache (best-effort) ───────────────────────────────────────
-    if ttl >= 0 {
-        if let Err(e) =
-            fs::create_dir_all(&cache_dir).and_then(|_| fs::write(&cache_path, &content))
-        {
-            eprintln!("[fimod] warning: could not write mold cache: {e}");
-        }
-    }
-
-    Ok(content)
+    resp.text()
+        .with_context(|| format!("Failed to read response body from: {url}"))
 }
 
 /// Defaults extracted from `# fimod:` directives in a mold script header.
@@ -417,13 +446,13 @@ mod tests {
     #[test]
     fn test_resolve_url_http() {
         let src = MoldSource::resolve(Some("http://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _) if u == "http://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url(u, _, _) if u == "http://example.com/m.py"));
     }
 
     #[test]
     fn test_resolve_url_https() {
         let src = MoldSource::resolve(Some("https://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _) if u == "https://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url(u, _, _) if u == "https://example.com/m.py"));
     }
 
     #[test]
@@ -447,7 +476,7 @@ mod tests {
     #[test]
     fn test_inline_auto_wrap() {
         let src = MoldSource::Inline("data['x'] + 1".to_string());
-        let script = src.load().unwrap();
+        let script = src.load(false).unwrap();
         assert!(script.contains("def transform(data, args, env, headers):"));
         assert!(script.contains("return data['x'] + 1"));
     }
@@ -456,7 +485,7 @@ mod tests {
     fn test_inline_no_wrap_if_def_transform() {
         let code = "def transform(data):\n    return data";
         let src = MoldSource::Inline(code.to_string());
-        let script = src.load().unwrap();
+        let script = src.load(false).unwrap();
         assert_eq!(script, code);
     }
 

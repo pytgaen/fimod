@@ -40,23 +40,24 @@ pub fn is_truthy(v: &serde_json::Value) -> bool {
 pub fn build_scripts(
     molds: &[String],
     expressions: &[String],
+    no_cache: bool,
 ) -> Result<Vec<(String, String, mold::MoldDefaults)>> {
     if !expressions.is_empty() {
         let mut steps = Vec::new();
         for e in expressions {
             let source = MoldSource::Inline(e.clone());
             let display = source.to_string();
-            let script = source.load()?;
+            let script = source.load(no_cache)?;
             steps.push((display, script, mold::MoldDefaults::default()));
         }
         Ok(steps)
     } else if !molds.is_empty() {
         let mut steps = Vec::new();
         for m in molds {
-            let source = MoldSource::from_mold_str(m)?;
+            let source = MoldSource::from_mold_str(m, no_cache)?;
             let is_inline = matches!(source, MoldSource::Inline(_));
             let display = source.to_string();
-            let script = source.load()?;
+            let script = source.load(no_cache)?;
             let defaults = if !is_inline {
                 mold::parse_mold_defaults(&script)
             } else {
@@ -759,6 +760,8 @@ pub struct PipelineConfig {
     pub debug: bool,
     /// Message verbosity level (0=quiet, 1=default, 2=verbose, 3=trace).
     pub msg_level: u8,
+    /// Bypass the local cache for remote catalogs and molds.
+    pub no_cache: bool,
 }
 
 impl Default for PipelineConfig {
@@ -780,6 +783,7 @@ impl Default for PipelineConfig {
             no_input: false,
             debug: false,
             msg_level: 1,
+            no_cache: false,
         }
     }
 }
@@ -801,7 +805,7 @@ impl Default for PipelineConfig {
 /// println!("{}", result.value);
 /// ```
 pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result<PipelineResult> {
-    let scripts = build_scripts(&config.molds, &config.expressions)?;
+    let scripts = build_scripts(&config.molds, &config.expressions, config.no_cache)?;
     let env_value = build_env(&config.env_patterns);
 
     let first_defaults = &scripts[0].2;
