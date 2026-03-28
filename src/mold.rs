@@ -3,6 +3,16 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
+/// A compiled mold step ready for execution.
+pub struct MoldStep {
+    pub display: String,
+    pub script: String,
+    pub defaults: MoldDefaults,
+    /// Base directory for resolving relative paths (e.g., template files).
+    /// `None` for inline expressions.
+    pub base_dir: Option<String>,
+}
+
 /// Where the mold script comes from.
 #[derive(Debug)]
 pub enum MoldSource {
@@ -139,6 +149,41 @@ impl MoldSource {
                     ))
                 }
             }
+        }
+    }
+
+    /// Return the base directory for resolving relative paths from this mold.
+    pub fn base_dir(&self) -> Option<String> {
+        match self {
+            MoldSource::File(path) => Path::new(path)
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .map(|p| p.to_string_lossy().into_owned()),
+            MoldSource::Url(url, _, catalog_hash) => {
+                #[cfg(feature = "reqwest")]
+                {
+                    use sha2::{Digest, Sha256};
+                    let cache_base = crate::registry::cache_base_dir();
+                    let url_hash = hex::encode(Sha256::digest(url.as_bytes()));
+                    if catalog_hash.is_some() {
+                        Some(
+                            cache_base
+                                .join("molds")
+                                .join(&url_hash[..16])
+                                .to_string_lossy()
+                                .into_owned(),
+                        )
+                    } else {
+                        Some(cache_base.join("molds").to_string_lossy().into_owned())
+                    }
+                }
+                #[cfg(not(feature = "reqwest"))]
+                {
+                    let _ = (url, catalog_hash);
+                    None
+                }
+            }
+            MoldSource::Inline(_) => None,
         }
     }
 }

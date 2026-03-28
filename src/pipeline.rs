@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::engine::MoldResult;
 use crate::format::{CsvOptions, DataFormat};
-use crate::mold::MoldSource;
+use crate::mold::{MoldSource, MoldStep};
 use crate::{convert, engine, format, http, mold};
 
 /// Determine if a JSON value is "truthy" for --check mode.
@@ -34,21 +34,27 @@ pub fn is_truthy(v: &serde_json::Value) -> bool {
     }
 }
 
-/// Build the list of (display, compiled_script, defaults) from CLI molds or expressions.
+/// Build the list of mold steps from CLI molds or expressions.
 ///
 /// Returns at least one step, or an error if neither -m nor -e was provided.
 pub fn build_scripts(
     molds: &[String],
     expressions: &[String],
     no_cache: bool,
-) -> Result<Vec<(String, String, mold::MoldDefaults)>> {
+) -> Result<Vec<MoldStep>> {
     if !expressions.is_empty() {
         let mut steps = Vec::new();
         for e in expressions {
             let source = MoldSource::Inline(e.clone());
             let display = source.to_string();
+            let base_dir = source.base_dir();
             let script = source.load(no_cache)?;
-            steps.push((display, script, mold::MoldDefaults::default()));
+            steps.push(MoldStep {
+                display,
+                script,
+                defaults: mold::MoldDefaults::default(),
+                base_dir,
+            });
         }
         Ok(steps)
     } else if !molds.is_empty() {
@@ -57,13 +63,19 @@ pub fn build_scripts(
             let source = MoldSource::from_mold_str(m, no_cache)?;
             let is_inline = matches!(source, MoldSource::Inline(_));
             let display = source.to_string();
+            let base_dir = source.base_dir();
             let script = source.load(no_cache)?;
             let defaults = if !is_inline {
                 mold::parse_mold_defaults(&script)
             } else {
                 mold::MoldDefaults::default()
             };
-            steps.push((display, script, defaults));
+            steps.push(MoldStep {
+                display,
+                script,
+                defaults,
+                base_dir,
+            });
         }
         Ok(steps)
     } else {
@@ -86,7 +98,7 @@ pub fn build_scripts(
 /// `initial_data` is taken as an owned `MontyObject` so the caller can pass
 /// the result of `csv_to_monty` without an extra `json_to_monty` round-trip.
 pub fn execute_chain(
-    steps: &[(String, String, mold::MoldDefaults)],
+    steps: &[MoldStep],
     initial_data: MontyObject,
     extra_args: &[(String, String)],
     env_value: &Value,
@@ -98,19 +110,20 @@ pub fn execute_chain(
     let mut last_exit = None;
     let is_last_step = |i: usize| i == steps.len() - 1;
 
-    for (i, (display, script, _defaults)) in steps.iter().enumerate() {
+    for (i, step) in steps.iter().enumerate() {
         if debug {
-            eprintln!("[debug] mold: {display}");
+            eprintln!("[debug] mold: {}", step.display);
         }
-        let (result, exit_code, fmt_override, out_file) = engine::execute_mold(
-            script,
-            data,
+        let opts = engine::MoldOptions {
             extra_args,
             env_value,
             headers_value,
             debug,
             msg_level,
-        )?;
+            mold_base_dir: step.base_dir.as_deref(),
+        };
+        let (result, exit_code, fmt_override, out_file) =
+            engine::execute_mold(&step.script, data, &opts)?;
 
         if let Some(c) = exit_code {
             last_exit = Some(c);
@@ -194,7 +207,7 @@ fn run_pipeline_core(
     slurp: bool,
     effective_input_format: Option<&str>,
     csv_opts: &CsvOptions,
-    scripts: &[(String, String, mold::MoldDefaults)],
+    scripts: &[MoldStep],
     extra_args: &[(String, String)],
     env_value: &Value,
     debug: bool,
@@ -402,7 +415,7 @@ pub fn process_single_input(
     slurp: bool,
     effective_input_format: Option<&str>,
     csv_opts: &CsvOptions,
-    scripts: &[(String, String, mold::MoldDefaults)],
+    scripts: &[MoldStep],
     extra_args: &[(String, String)],
     env_value: &Value,
     debug: bool,
@@ -808,7 +821,7 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
     let scripts = build_scripts(&config.molds, &config.expressions, config.no_cache)?;
     let env_value = build_env(&config.env_patterns);
 
-    let first_defaults = &scripts[0].2;
+    let first_defaults = &scripts[0].defaults;
     let effective_input_format = config
         .input_format
         .as_deref()

@@ -177,15 +177,15 @@ fn run_case(script: &str, case: &TestCase) -> Result<Option<String>> {
         std::env::set_var(k, v);
     }
 
-    let execute_result = engine::execute_mold(
-        script,
-        convert::json_to_monty(&input_data),
-        &extra_args,
-        &env_value,
-        &serde_json::Value::Null,
-        false,
-        1,
-    );
+    let opts = engine::MoldOptions {
+        extra_args: &extra_args,
+        env_value: &env_value,
+        headers_value: &serde_json::Value::Null,
+        debug: false,
+        msg_level: 1,
+        mold_base_dir: None,
+    };
+    let execute_result = engine::execute_mold(script, convert::json_to_monty(&input_data), &opts);
 
     // Always clean up env vars, even if execute_mold returned an error
     for k in case.meta.env_vars.keys() {

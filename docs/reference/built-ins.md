@@ -142,6 +142,52 @@ All functions accept a single string and return a lowercase hex string.
 
 ---
 
+## 📝 Template functions (`tpl_*`)
+
+Data→text generation using [Jinja2](https://jinja.palletsprojects.com/) templates (via [MiniJinja](https://github.com/mitsuhiko/minijinja)). Extends Fimod's data→data pipeline to data→text for generating configs, reports, Dockerfiles, k8s manifests, etc.
+
+| Function | Signature | Returns |
+|----------|-----------|---------|
+| `tpl_render_str` | `tpl_render_str(template, ctx, auto_escape=False)` | Rendered string |
+| `tpl_render_from_mold` | `tpl_render_from_mold(path, ctx, auto_escape=False)` | Rendered string |
+
+**`tpl_render_str(template, ctx, auto_escape=False)`** — Render a Jinja2 template string with a context dict. All built-in Jinja2 filters (`upper`, `join`, `tojson`, …), loops, conditions, and macros are available.
+
+```python
+def transform(data, args, env, headers):
+    return tpl_render_str("""
+FROM python:{{ python_version }}-slim
+{% for pkg in packages %}
+RUN uv pip install {{ pkg }}
+{% endfor %}
+""", data)
+```
+
+```bash
+echo '{"python_version":"3.12","packages":["flask","requests"]}' \
+  | fimod s -e 'tpl_render_str("Hello {{ name }}!", data)' --output-format txt
+```
+
+**`tpl_render_from_mold(path, ctx, auto_escape=False)`** — Load a `.j2` file relative to the mold's directory and render it. Works with directory molds and registry molds. Enables clean separation of logic (Python) and presentation (Jinja2).
+
+```python
+# my_mold/my_mold.py
+def transform(data, args, env, headers):
+    tpl = args.get("template", "Dockerfile.j2")
+    return tpl_render_from_mold(f"templates/{tpl}", data)
+```
+
+```bash
+fimod s -i data.json -m ./my_mold/ --output-format txt
+```
+
+!!! note
+    `tpl_render_from_mold` requires a file-based or registry mold — it cannot be used with inline expressions (`-e`). Path traversal outside the mold directory is blocked for security.
+
+Set `auto_escape=True` when generating HTML to automatically escape `<`, `>`, `&`, etc.
+
+---
+
 ## 📢 Message functions (`msg_*`)
 
 Output diagnostic messages to **stderr** without affecting the data pipeline. All functions take a single string and return `None`.

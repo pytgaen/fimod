@@ -273,16 +273,16 @@ enum RegistryAction {
         /// Name of the local registry
         name: String,
     },
-    /// Set up the official fimod molds registry
+    /// Set up the fimod example molds registry
     ///
-    /// Adds the official registry if not already present.
+    /// Adds the example molds registry if not already present.
     /// In a fresh install (no default registry yet) it becomes the default automatically.
     /// If a default already exists it is left unchanged unless --force is given.
     Setup {
         /// Answer yes to all prompts (non-interactive / CI use)
         #[arg(short, long)]
         yes: bool,
-        /// Promote the official registry to default even if another default is already set
+        /// Promote the example registry to default even if another default is already set
         #[arg(short, long)]
         force: bool,
     },
@@ -616,8 +616,8 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
     let scripts = build_scripts(&shape.mold, &shape.expression, shape.no_cache)?;
 
     // First mold's defaults drive input options; last mold's defaults drive output options
-    let first_defaults = &scripts[0].2;
-    let last_defaults = &scripts[scripts.len() - 1].2;
+    let first_defaults = &scripts[0].defaults;
+    let last_defaults = &scripts[scripts.len() - 1].defaults;
 
     // Build CSV options from CLI args
     let output_delim = match &shape.csv_output_delimiter {

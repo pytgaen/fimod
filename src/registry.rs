@@ -742,6 +742,20 @@ struct CatalogEntry {
 
 /// Returns the effective description for a mold: explicit `description=` directive first,
 /// falling back to the first line of the docstring (trimming trailing period).
+/// Fetch a remote mold script and extract its docstring.
+/// Returns `None` silently on any error (network, parse, etc.).
+#[cfg(feature = "reqwest")]
+fn fetch_script_docs(url: &str) -> Option<String> {
+    let resp = crate::http::fetch_url(url, &[], 30, false, false).ok()?;
+    let defaults = crate::mold::parse_mold_defaults(&resp.body);
+    defaults.docs
+}
+
+#[cfg(not(feature = "reqwest"))]
+fn fetch_script_docs(_url: &str) -> Option<String> {
+    None
+}
+
 fn effective_description(d: &crate::mold::MoldDefaults) -> Option<String> {
     d.docs
         .as_deref()?
@@ -1377,16 +1391,18 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
             registry_url,
             entry,
         } => {
-            if entry.docs.is_none() {
-                if let Some(desc) = &entry.description {
-                    println!("  Description:    {desc}");
-                }
-            }
-            if let Some(docs) = &entry.docs {
+            // Fetch the script to extract the full docstring (not stored in catalog)
+            let remote_docs = entry.path.as_deref().and_then(|rel| {
+                let url = format!("{}/{rel}", registry_url.trim_end_matches('/'));
+                fetch_script_docs(&url)
+            });
+            if let Some(docs) = &remote_docs {
                 for line in docs.lines() {
                     println!("  {line}");
                 }
                 println!();
+            } else if let Some(desc) = &entry.description {
+                println!("  Description:    {desc}");
             }
             if let Some(fmt) = &entry.input_format {
                 println!("  Input format:   {fmt}");
@@ -1470,7 +1486,7 @@ pub fn show_mold(mold_ref: &str, registry_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Set up the official fimod molds registry interactively.
+/// Set up the fimod example molds registry interactively.
 ///
 /// Behaviour:
 /// - Already present (by URL) → prints a message and exits cleanly.
@@ -1478,8 +1494,8 @@ pub fn show_mold(mold_ref: &str, registry_name: Option<&str>) -> Result<()> {
 /// - Default already set, `--force` absent → adds without overriding default (asks first unless `--yes`).
 /// - Default already set, `--force` present → adds and promotes to default (asks first unless `--yes`).
 pub fn setup(yes: bool, force: bool) -> Result<()> {
-    const OFFICIAL_NAME: &str = "official";
-    const OFFICIAL_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
+    const EXAMPLES_NAME: &str = "examples";
+    const EXAMPLES_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
 
     let cfg = load_config()?;
 
@@ -1487,9 +1503,9 @@ pub fn setup(yes: bool, force: bool) -> Result<()> {
     if cfg
         .sources
         .values()
-        .any(|s| s.url.as_deref() == Some(OFFICIAL_URL))
+        .any(|s| s.url.as_deref() == Some(EXAMPLES_URL))
     {
-        println!("Official molds registry is already configured.");
+        println!("Example molds registry is already configured.");
         return Ok(());
     }
 
@@ -1504,10 +1520,10 @@ pub fn setup(yes: bool, force: bool) -> Result<()> {
         }
         if has_default && !force {
             print!(
-                "Install the official fimod molds registry (without changing your current default)? [y/N] "
+                "Install the fimod example molds registry (without changing your current default)? [y/N] "
             );
         } else {
-            print!("Install the official fimod molds registry as default? [y/N] ");
+            print!("Install the fimod example molds registry as default? [y/N] ");
         }
         use std::io::Write;
         std::io::stdout().flush()?;
@@ -1527,20 +1543,20 @@ pub fn setup(yes: bool, force: bool) -> Result<()> {
     let set_as_default = !has_default || force;
 
     if has_default && !force {
-        println!("Note: a default registry is already set; adding official registry without changing it.");
+        println!("Note: a default registry is already set; adding example registry without changing it.");
         println!("      Use --force to promote it to default.");
     }
 
-    // Resolve name (handle unlikely collision where 'official' name is already taken)
-    let name = if cfg.sources.contains_key(OFFICIAL_NAME) {
-        let alt = "fimod-official";
-        println!("Note: registry name 'official' is already taken, using '{alt}' instead.");
+    // Resolve name (handle unlikely collision where 'examples' name is already taken)
+    let name = if cfg.sources.contains_key(EXAMPLES_NAME) {
+        let alt = "fimod-examples";
+        println!("Note: registry name 'examples' is already taken, using '{alt}' instead.");
         alt
     } else {
-        OFFICIAL_NAME
+        EXAMPLES_NAME
     };
 
-    add(name, OFFICIAL_URL, None, set_as_default)
+    add(name, EXAMPLES_URL, None, set_as_default)
 }
 
 /// Compute a deterministic content hash for a mold.
@@ -1567,7 +1583,7 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
         let content = fs::read(&script_path)
             .with_context(|| format!("Cannot read mold for hashing: {}", script_path.display()))?;
         let digest = hex::encode(Sha256::digest(&content));
-        return Ok(digest[..16].to_string());
+        return Ok(digest[..32].to_string());
     }
 
     // Directory: collect all files recursively, sort, hash.
@@ -1606,7 +1622,7 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
     }
 
     let digest = hex::encode(Sha256::digest(combined.as_bytes()));
-    Ok(digest[..16].to_string())
+    Ok(digest[..32].to_string())
 }
 
 /// Build or rebuild `catalog.toml` for a local registry.
@@ -1670,7 +1686,7 @@ pub fn build_catalog(registry_name: &str) -> Result<()> {
             name.clone(),
             CatalogEntry {
                 description: effective_description(&defaults),
-                docs: defaults.docs,
+                docs: None,
                 path: Some(rel_path.clone()),
                 readme,
                 input_format: defaults.input_format,

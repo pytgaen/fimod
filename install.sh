@@ -9,6 +9,8 @@
 #   FIMOD_INSTALL   install directory (default: /usr/local/bin, falls back to ~/.local/bin)
 #   FIMOD_VERSION   specific version to install (default: latest)
 #   FIMOD_SOURCE    github (default) or gitlab
+#   FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
+#   FIMOD_SETUP_REGISTRY yes=auto-setup, no=skip, unset=interactive prompt
 
 set -eu
 
@@ -148,30 +150,38 @@ fi
 
 # ── Download and install ─────────────────────────────────────────────
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
-
-echo "Downloading ${URL}..."
-curl -fsSL -o "${TMPDIR}/${ASSET}" "$URL" || {
-  echo "Error: download failed — check that version ${VERSION} exists" >&2
-  echo "Available releases: ${BASE_URL}" >&2
-  exit 1
-}
-
-case "$EXT" in
-  tar.gz)
-    tar xzf "${TMPDIR}/${ASSET}" -C "$TMPDIR"
-    ;;
-  zip)
-    unzip -q "${TMPDIR}/${ASSET}" -d "$TMPDIR"
-    ;;
-esac
-
 BIN_NAME="fimod"
 [ "$OS" = "windows" ] && BIN_NAME="fimod.exe"
 
-chmod +x "${TMPDIR}/${BIN_NAME}"
-mv "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+if [ "${FIMOD_SKIP_DOWNLOAD:-}" = "1" ]; then
+  echo "Skipping download (FIMOD_SKIP_DOWNLOAD=1)"
+  if [ ! -x "${INSTALL_DIR}/${BIN_NAME}" ]; then
+    echo "Error: ${INSTALL_DIR}/${BIN_NAME} not found — cannot skip download" >&2
+    exit 1
+  fi
+else
+  TMPDIR=$(mktemp -d)
+  trap 'rm -rf "$TMPDIR"' EXIT
+
+  echo "Downloading ${URL}..."
+  curl -fsSL -o "${TMPDIR}/${ASSET}" "$URL" || {
+    echo "Error: download failed — check that version ${VERSION} exists" >&2
+    echo "Available releases: ${BASE_URL}" >&2
+    exit 1
+  }
+
+  case "$EXT" in
+    tar.gz)
+      tar xzf "${TMPDIR}/${ASSET}" -C "$TMPDIR"
+      ;;
+    zip)
+      unzip -q "${TMPDIR}/${ASSET}" -d "$TMPDIR"
+      ;;
+  esac
+
+  chmod +x "${TMPDIR}/${BIN_NAME}"
+  mv "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+fi
 
 # ── Verify ───────────────────────────────────────────────────────────
 
@@ -193,23 +203,56 @@ else
 fi
 
 echo ""
-echo "───────────────────────────────────────────────"
-if [ -t 0 ] || [ -e /dev/tty ]; then
-  echo "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
-  printf "  > "
-  read -r REPLY </dev/tty
-  case "$REPLY" in
-    [nN]*)
-      echo ""
-      echo "  Skipped. Run 'fimod registry setup' at any time."
-      ;;
-    *)
-      echo ""
-      echo "  Setting up registry..."
-      "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
-      ;;
-  esac
-else
-  echo "  Run 'fimod registry setup' to configure the official mold registry."
+
+# ── Migrate "official" → "examples" ────────────────────────────────
+# If the old "official" registry points to the bundled molds URL,
+# remove it and re-add as "examples" (no default, no priority).
+OLD_OFFICIAL_URL="https://github.com/pytgaen/fimod/tree/main/molds"
+FIMOD_BIN="${INSTALL_DIR}/${BIN_NAME}"
+
+CURRENT_URL=$("$FIMOD_BIN" registry list --output-format json 2>/dev/null \
+  | "$FIMOD_BIN" shape -e 'dp_get([s for s in data if s["name"] == "official"], "0.location", "")' --output-format txt 2>/dev/null) || true
+if [ "$CURRENT_URL" = "$OLD_OFFICIAL_URL" ]; then
+    echo "  Migrating registry 'official' → 'examples'..."
+    "$FIMOD_BIN" registry remove official 2>/dev/null || true
+    "$FIMOD_BIN" registry add examples "$OLD_OFFICIAL_URL" --default 2>/dev/null || true
+    echo "  ✓ Renamed 'official' to 'examples'"
+    echo ""
 fi
+
+# ── Registry setup ──────────────────────────────────────────────────
+# FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
+# FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
+# unset                      → interactive prompt (default)
+echo "───────────────────────────────────────────────"
+case "${FIMOD_SETUP_REGISTRY:-}" in
+  yes)
+    echo "  Setting up registry (FIMOD_SETUP_REGISTRY=yes)..."
+    "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
+    ;;
+  no)
+    echo "  Skipped registry setup (FIMOD_SETUP_REGISTRY=no)."
+    echo "  Run 'fimod registry setup' at any time."
+    ;;
+  *)
+    if [ -t 0 ] || [ -e /dev/tty ]; then
+      echo "  Run 'fimod registry setup' to configure the example mold registry? [Y/n]"
+      printf "  > "
+      read -r REPLY </dev/tty
+      case "$REPLY" in
+        [nN]*)
+          echo ""
+          echo "  Skipped. Run 'fimod registry setup' at any time."
+          ;;
+        *)
+          echo ""
+          echo "  Setting up registry..."
+          "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
+          ;;
+      esac
+    else
+      echo "  Run 'fimod registry setup' to configure the example mold registry."
+    fi
+    ;;
+esac
 echo "───────────────────────────────────────────────"

@@ -78,6 +78,7 @@ fimod s -i https://jsonplaceholder.typicode.com/users/1 https://jsonplaceholder.
 | `--header "Name: Value"` | Custom HTTP header (repeatable) | — |
 | `--timeout <seconds>` | Request timeout | `30` |
 | `--no-follow` | Don't follow HTTP redirects | follows redirects |
+| `--no-cache` | Bypass local cache for remote catalogs and molds | uses cache |
 
 ```bash
 # Authenticated API
@@ -246,9 +247,11 @@ fimod registry show my                                   # 🔍 Show details
 fimod registry remove my                                 # 🗑️ Remove
 fimod registry set-default official                      # ⭐ Change default
 fimod registry build-catalog my                          # 📦 Generate catalog.toml
+fimod registry cache info                                # 📊 Show cache location and usage
+fimod registry cache clear                               # 🧹 Clear all cached catalogs and molds
 ```
 
-Config stored in `~/.config/fimod/sources.toml`.
+Config stored in `~/.config/fimod/sources.toml`. Cache stored in `~/.cache/fimod/`.
 
 ### `registry setup` — first-run onboarding
 
@@ -363,6 +366,23 @@ Mold descriptions come from the module-level docstring at the top of each script
 def transform(data, args, env, headers):
     ...
 ```
+
+### Cache management
+
+Remote catalogs and molds are cached locally in `~/.cache/fimod/` to avoid re-fetching on every invocation.
+
+**Catalog caching** uses HTTP ETags: on subsequent requests, fimod sends `If-None-Match` and skips the download on `304 Not Modified`.
+
+**Mold caching** uses content hashes from the catalog: `build-catalog` computes a hash per mold directory, and the client only re-downloads when the hash changes.
+
+```bash
+fimod registry cache info              # show cache location and disk usage
+fimod registry cache clear             # wipe all cached data
+fimod registry cache clear @name       # wipe a specific mold (planned)
+fimod s -i data.json -m @mold --no-cache  # bypass cache for this invocation
+```
+
+Override the cache directory with `FIMOD_CACHE_DIR`. For direct-URL molds (not registry-based), cache TTL is controlled by `FIMOD_CACHE_TTL` (minutes, default `360`, `0` = infinite, negative = disabled).
 
 ---
 

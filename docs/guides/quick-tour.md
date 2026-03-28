@@ -308,3 +308,110 @@ Each assertion prints a specific error to stderr and exits with a non-zero code 
   run: |
     fimod s -i data.json -m @normalize -o output.json
 ```
+
+## 📝 Data→Text: Jinja2 Templating
+
+Fimod isn't limited to data→data transforms. With `tpl_render_str` and `tpl_render_from_mold`, you can generate **any text file** from structured data — configs, Dockerfiles, reports, k8s manifests, CI workflows.
+
+**Quick one-liner — generate a `.env` file:**
+
+```bash
+echo '{"host":"db.prod","port":5432,"secret":"s3cret"}' \
+  | fimod s -e 'tpl_render_str("{% for k, v in data | items %}{{ k | upper }}={{ v }}\n{% endfor %}", data)' \
+    --output-format txt
+```
+```
+HOST=db.prod
+PORT=5432
+SECRET=s3cret
+```
+
+**Inline template — Dockerfile from a config:**
+
+```bash
+echo '{"python_version":"3.12","packages":["flask","gunicorn"]}' \
+  | fimod s --output-format txt -e '
+tpl_render_str("""
+FROM python:{{ python_version }}-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir {{ packages | join(" ") }}
+COPY . .
+""".strip(), data)'
+```
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir flask gunicorn
+COPY . .
+```
+
+**Production mold with `.j2` template files:**
+
+For real projects, separate logic from presentation. Create a directory mold with templates:
+
+```
+my_mold/
+├── my_mold.py
+└── templates/
+    └── nginx.conf.j2
+```
+
+```python
+# my_mold/my_mold.py
+"""Generate nginx config from a service descriptor."""
+# fimod: output-format=txt
+
+def transform(data, args, env, headers):
+    return tpl_render_from_mold("templates/nginx.conf.j2", data)
+```
+
+```jinja
+{# templates/nginx.conf.j2 #}
+{% for svc in services %}
+upstream {{ svc.name }} {
+    {% for host in svc.hosts %}
+    server {{ host }}:{{ svc.port | default(8080) }};
+    {% endfor %}
+}
+{% endfor %}
+
+server {
+    listen 80;
+    {% for svc in services %}
+    location /{{ svc.name }}/ {
+        proxy_pass http://{{ svc.name }};
+    }
+    {% endfor %}
+}
+```
+
+```bash
+fimod s -i services.yaml -m ./my_mold/ -o nginx.conf
+```
+
+**Registry mold — changelog from git log:**
+
+The `@git_changelog` example mold uses `tpl_render_from_mold` with a `.j2` template to generate a Markdown changelog:
+
+```bash
+echo '[{"hash":"e813bcb","msg":"feat: add templating","date":"2026-03-29"},
+      {"hash":"48637d1","msg":"feat: add registry cache","date":"2026-03-28"}]' \
+  | fimod s -m @git_changelog --output-format txt
+```
+```markdown
+# Changelog
+
+2 commits.
+
+## 2026-03-29
+
+- feat: add templating (e813bcb)
+
+## 2026-03-28
+
+- feat: add registry cache (48637d1)
+```
+
+Full Jinja2 syntax is available: loops, conditions, filters (`upper`, `join`, `tojson`, `default`, …), macros, and template inheritance. See [Built-ins Reference](../reference/built-ins.md#template-functions-tpl) for the full API.

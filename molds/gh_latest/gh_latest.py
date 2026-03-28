@@ -28,9 +28,10 @@ def transform(data, args, env, headers):
         asset = ""
 
     msg_info(f"Latest release tag / version: {tag} / {version}")
-    msg_info(f"repo: {repo}, asset: {asset}")
 
     if repo and asset:
+        msg_info(f"repo: {repo}, asset: {asset}")
+
         asset = asset.replace("{tag}", tag).replace("{version}", version)
         return f"https://github.com/{repo}/releases/download/{tag}/{asset}"
 

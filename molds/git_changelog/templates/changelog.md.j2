@@ -1,0 +1,10 @@
+# {{ title }}
+
+{{ total }} commit{{ "s" if total != 1 else "" }}.
+{% for date in dates %}
+
+## {{ date }}
+
+{% for c in by_date[date] %}- {{ c.msg }} ({{ c.hash }})
+{% endfor %}
+{%- endfor %}
