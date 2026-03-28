@@ -424,13 +424,13 @@ fn env_has_anonymous(entries: &[EnvRegistry]) -> bool {
 // ── mold resolution ───────────────────────────────────────────────────────────
 
 /// Try resolving a mold name against a single source.
-fn resolve_source(source: &Source, mold_name: &str) -> Result<MoldSource> {
+fn resolve_source(source: &Source, mold_name: &str, no_cache: bool) -> Result<MoldSource> {
     let token = effective_token(source);
     match &source.kind {
         SourceType::Local => resolve_local(source, mold_name),
-        SourceType::Github => resolve_github(source, mold_name, token),
-        SourceType::Gitlab => resolve_gitlab(source, mold_name, token),
-        SourceType::Http => resolve_http(source, mold_name, token),
+        SourceType::Github => resolve_github(source, mold_name, token, no_cache),
+        SourceType::Gitlab => resolve_gitlab(source, mold_name, token, no_cache),
+        SourceType::Http => resolve_http(source, mold_name, token, no_cache),
     }
 }
 
@@ -442,7 +442,7 @@ fn resolve_source(source: &Source, mold_name: &str) -> Result<MoldSource> {
 ///
 /// FIMOD_REGISTRY takes priority over sources.toml because env vars are explicit
 /// overrides (typical Unix convention: env > config file).
-pub fn resolve(spec: &str) -> Result<MoldSource> {
+pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
     let cfg = load_config()?;
     let env_entries = parse_env_registries();
 
@@ -454,7 +454,7 @@ pub fn resolve(spec: &str) -> Result<MoldSource> {
         // Try named FIMOD_REGISTRY entries first
         for entry in &env_entries {
             if entry.name.as_deref() == Some(source_name) {
-                return resolve_source(&entry.source, mold_name);
+                return resolve_source(&entry.source, mold_name, no_cache);
             }
         }
 
@@ -464,13 +464,13 @@ pub fn resolve(spec: &str) -> Result<MoldSource> {
                 "Registry '{source_name}' not found. Use 'fimod registry list' to see available registries."
             )
         })?;
-        return resolve_source(source, mold_name);
+        return resolve_source(source, mold_name, no_cache);
     }
 
     // Bare @name — try FIMOD_REGISTRY anonymous entries first (env overrides config)
     let mold_name = spec;
     for entry in &env_entries {
-        if let Ok(result) = resolve_source(&entry.source, mold_name) {
+        if let Ok(result) = resolve_source(&entry.source, mold_name, no_cache) {
             return Ok(result);
         }
     }
@@ -478,7 +478,7 @@ pub fn resolve(spec: &str) -> Result<MoldSource> {
     // Fallback: try sources.toml default registry
     if let Some(default_name) = cfg.default.as_deref() {
         if let Some(source) = cfg.sources.get(default_name) {
-            if let Ok(result) = resolve_source(source, mold_name) {
+            if let Ok(result) = resolve_source(source, mold_name, no_cache) {
                 return Ok(result);
             }
         }
@@ -598,34 +598,27 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     )
 }
 
-/// Fetch the relative path for a mold from the remote catalog.toml.
+/// Fetch the relative path (and optional content hash) for a mold from the remote catalog.
 ///
 /// Returns:
-/// - `Ok(Some(path))` — mold found in catalog
-/// - `Ok(None)`       — catalog does not exist (HTTP 404); caller falls back to convention
-/// - `Err(_)`         — catalog exists but is broken (network error, bad TOML, missing path field)
-fn remote_catalog_path(source: &Source, mold_name: &str) -> Result<Option<String>> {
-    let catalog_url = catalog_url_for(source)?;
-    let mut headers = auth_headers(source);
-    headers.push("Cache-Control: no-cache".to_string());
-    let resp = match crate::http::fetch_url(&catalog_url, &headers, 30, false, false) {
-        Ok(r) => r,
-        Err(e) => {
-            // 404 = no catalog deployed yet; anything else is a real failure
-            let msg = e.to_string();
-            if msg.contains("404") {
-                return Ok(None);
-            }
-            return Err(e.context(format!("Failed to fetch registry catalog: {catalog_url}")));
-        }
+/// - `Ok(Some((path, hash)))` — mold found in catalog
+/// - `Ok(None)`               — catalog does not exist (HTTP 404); caller falls back to convention
+/// - `Err(_)`                 — catalog exists but is broken (network error, bad TOML, missing path)
+fn remote_catalog_entry(
+    source: &Source,
+    mold_name: &str,
+    no_cache: bool,
+) -> Result<Option<(String, Option<String>)>> {
+    let catalog = match fetch_catalog(source, no_cache)? {
+        Some(c) => c,
+        None => return Ok(None),
     };
-    let catalog: Catalog = toml::from_str(&resp.body)
-        .with_context(|| format!("Failed to parse catalog: {catalog_url}"))?;
+    let catalog_url = catalog_url_for(source).unwrap_or_else(|_| "(unknown)".to_string());
     let entry = catalog
         .molds
         .get(mold_name)
         .ok_or_else(|| anyhow::anyhow!("Mold '{mold_name}' not found in catalog: {catalog_url}"))?;
-    entry
+    let path = entry
         .path
         .clone()
         .ok_or_else(|| {
@@ -633,33 +626,48 @@ fn remote_catalog_path(source: &Source, mold_name: &str) -> Result<Option<String
                 "Mold '{mold_name}' has no 'path' field in catalog: {catalog_url}\n\
                  Hint: regenerate the catalog with 'fimod registry build-catalog'"
             )
-        })
-        .map(Some)
+        })?;
+    Ok(Some((path, entry.hash.clone())))
 }
 
-fn resolve_github(source: &Source, mold_name: &str, token: Option<String>) -> Result<MoldSource> {
+fn resolve_github(
+    source: &Source,
+    mold_name: &str,
+    token: Option<String>,
+    no_cache: bool,
+) -> Result<MoldSource> {
     let base_url = source
         .url
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("GitHub registry has no URL configured"))?;
     let raw_base = github_to_raw(base_url)?;
-    resolve_via_catalog(source, mold_name, &raw_base, token)
+    resolve_via_catalog(source, mold_name, &raw_base, token, no_cache)
 }
 
-fn resolve_gitlab(source: &Source, mold_name: &str, token: Option<String>) -> Result<MoldSource> {
+fn resolve_gitlab(
+    source: &Source,
+    mold_name: &str,
+    token: Option<String>,
+    no_cache: bool,
+) -> Result<MoldSource> {
     let base_url = source
         .url
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("GitLab registry has no URL configured"))?;
-    resolve_via_catalog(source, mold_name, base_url, token)
+    resolve_via_catalog(source, mold_name, base_url, token, no_cache)
 }
 
-fn resolve_http(source: &Source, mold_name: &str, token: Option<String>) -> Result<MoldSource> {
+fn resolve_http(
+    source: &Source,
+    mold_name: &str,
+    token: Option<String>,
+    no_cache: bool,
+) -> Result<MoldSource> {
     let base_url = source
         .url
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("HTTP registry has no URL configured"))?;
-    resolve_via_catalog(source, mold_name, base_url, token)
+    resolve_via_catalog(source, mold_name, base_url, token, no_cache)
 }
 
 /// Shared resolution logic: try catalog first, warn and fall back to `{mold_name}.py` otherwise.
@@ -668,25 +676,26 @@ fn resolve_via_catalog(
     mold_name: &str,
     base: &str,
     token: Option<String>,
+    no_cache: bool,
 ) -> Result<MoldSource> {
-    let rel = match remote_catalog_path(source, mold_name) {
-        Ok(Some(path)) => path,
+    let (rel, catalog_hash) = match remote_catalog_entry(source, mold_name, no_cache) {
+        Ok(Some((path, hash))) => (path, hash),
         Ok(None) => {
             let catalog_url = catalog_url_for(source).unwrap_or_else(|_| "(unknown)".to_string());
             eprintln!(
                 "warning: catalog not found (HTTP 404): {catalog_url}\n\
                  warning: falling back to '{mold_name}.py'"
             );
-            format!("{mold_name}.py")
+            (format!("{mold_name}.py"), None)
         }
         Err(e) => {
             eprintln!("warning: catalog lookup failed — {e:#}");
             eprintln!("warning: falling back to '{mold_name}.py'");
-            format!("{mold_name}.py")
+            (format!("{mold_name}.py"), None)
         }
     };
     let url = format!("{}/{rel}", base.trim_end_matches('/'));
-    Ok(MoldSource::Url(url, token))
+    Ok(MoldSource::Url(url, token, catalog_hash))
 }
 
 // ── catalog data model ────────────────────────────────────────────────────────
@@ -723,6 +732,10 @@ struct CatalogEntry {
     /// Documented ENV variables: name → description (empty string if undocumented).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     envs: BTreeMap<String, String>,
+    /// Deterministic content hash of the mold directory (SHA-256, truncated to 16 hex chars).
+    /// Computed by `build-catalog`; used by the client cache to detect mold changes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hash: Option<String>,
 }
 
 // ── local mold scanning ───────────────────────────────────────────────────────
@@ -817,6 +830,182 @@ fn catalog_url_for(source: &Source) -> Result<String> {
     }
 }
 
+// ── catalog cache (ETag) ─────────────────────────────────────────────────────
+
+/// Base directory for all fimod caches: `~/.cache/fimod/` (respects `FIMOD_CACHE_DIR`).
+pub(crate) fn cache_base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("FIMOD_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".cache").join("fimod")
+}
+
+/// Catalog cache directory for a specific source URL.
+fn catalog_cache_dir(catalog_url: &str) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    let hash = hex::encode(Sha256::digest(catalog_url.as_bytes()));
+    cache_base_dir().join("catalog").join(&hash[..16])
+}
+
+/// Fetch (with ETag caching) and parse a remote catalog.
+///
+/// Returns:
+/// - `Ok(Some(catalog))` — catalog found and parsed
+/// - `Ok(None)`          — catalog does not exist (HTTP 404)
+/// - `Err(_)`            — network error, bad TOML, etc.
+fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Catalog>> {
+    let catalog_url = catalog_url_for(source)?;
+    let mut headers = auth_headers(source);
+
+    let cache_dir = catalog_cache_dir(&catalog_url);
+    let cached_catalog_path = cache_dir.join("catalog.toml");
+    let cached_etag_path = cache_dir.join("etag");
+
+    // Add If-None-Match if we have a cached ETag.
+    if !no_cache {
+        if let Ok(etag) = fs::read_to_string(&cached_etag_path) {
+            let etag = etag.trim().to_string();
+            if !etag.is_empty() {
+                headers.push(format!("If-None-Match: {etag}"));
+            }
+        }
+    }
+
+    let resp = match crate::http::fetch_url(&catalog_url, &headers, 30, false, false) {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("404") {
+                return Ok(None);
+            }
+            return Err(e.context(format!("Failed to fetch registry catalog: {catalog_url}")));
+        }
+    };
+
+    // 304 Not Modified — use cached catalog.
+    if resp.status == 304 {
+        if let Ok(body) = fs::read_to_string(&cached_catalog_path) {
+            let catalog: Catalog =
+                toml::from_str(&body).context("Failed to parse cached catalog.toml")?;
+            return Ok(Some(catalog));
+        }
+        // Cache file gone? Fall through to re-fetch without ETag.
+        // This shouldn't normally happen — treat as a cache miss.
+    }
+
+    let body = &resp.body;
+
+    // Save catalog + ETag to cache (best-effort).
+    let _ = fs::create_dir_all(&cache_dir);
+    let _ = fs::write(&cached_catalog_path, body);
+    if let Some(etag) = resp.headers.get("etag") {
+        let _ = fs::write(&cached_etag_path, etag);
+    }
+
+    let catalog: Catalog =
+        toml::from_str(body).with_context(|| format!("Failed to parse catalog: {catalog_url}"))?;
+    Ok(Some(catalog))
+}
+
+// ── cache management ─────────────────────────────────────────────────────────
+
+/// Remove cached catalogs and molds.
+///
+/// - `None` → wipe the entire cache directory
+/// - `Some(name)` → wipe a specific mold's cache (not yet implemented, clears all)
+pub fn cache_clear(name: Option<&str>) -> Result<()> {
+    let base = cache_base_dir();
+    if let Some(_name) = name {
+        // TODO: resolve name to URL hash and remove only that entry.
+        // For now, clear everything.
+        eprintln!("warning: per-mold cache clear not yet implemented, clearing all");
+    }
+    if base.exists() {
+        fs::remove_dir_all(&base)
+            .with_context(|| format!("Failed to remove cache directory: {}", base.display()))?;
+        println!("Cache cleared: {}", base.display());
+    } else {
+        println!("Cache directory does not exist: {}", base.display());
+    }
+    Ok(())
+}
+
+/// Show cache directory location and disk usage.
+pub fn cache_info() -> Result<()> {
+    let base = cache_base_dir();
+    println!("Cache directory: {}", base.display());
+
+    if !base.exists() {
+        println!("  (empty — no cached data)");
+        return Ok(());
+    }
+
+    let mut catalog_count: usize = 0;
+    let mut mold_count: usize = 0;
+
+    let catalog_dir = base.join("catalog");
+    if catalog_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&catalog_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    catalog_count += 1;
+                }
+            }
+        }
+    }
+
+    let molds_dir = base.join("molds");
+    if molds_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&molds_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    mold_count += 1;
+                } else if path.is_file() {
+                    // Legacy flat .py files
+                    mold_count += 1;
+                }
+            }
+        }
+    }
+
+    // Walk all files for total size.
+    fn dir_size(dir: &Path) -> u64 {
+        let mut size = 0u64;
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                size += dir_size(&path);
+            } else if let Ok(meta) = path.metadata() {
+                size += meta.len();
+            }
+        }
+        size
+    }
+
+    let total_size = dir_size(&base);
+
+    let size_str = if total_size < 1024 {
+        format!("{total_size} B")
+    } else if total_size < 1024 * 1024 {
+        format!("{:.1} KB", total_size as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", total_size as f64 / (1024.0 * 1024.0))
+    };
+
+    println!("  Catalogs: {catalog_count}");
+    println!("  Molds:    {mold_count}");
+    println!("  Size:     {size_str}");
+
+    Ok(())
+}
+
 // ── mold commands ─────────────────────────────────────────────────────────────
 
 /// Print molds for a single registry (name + source already resolved).
@@ -840,18 +1029,14 @@ fn print_registry_molds(name: &str, source: &Source, is_default: bool) -> Result
             }
         }
         SourceType::Github | SourceType::Gitlab | SourceType::Http => {
-            let catalog_url = catalog_url_for(source)?;
-            let headers = auth_headers(source);
-            let resp = crate::http::fetch_url(&catalog_url, &headers, 30, false, false)
-                .with_context(|| {
-                    format!(
+            let catalog = fetch_catalog(source, false)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
                         "Failed to fetch catalog for registry '{name}'. \
                          Hint: push a catalog.toml generated with \
                          'fimod registry build-catalog'."
                     )
                 })?;
-            let catalog: Catalog =
-                toml::from_str(&resp.body).context("Failed to parse catalog.toml")?;
             if catalog.molds.is_empty() {
                 println!("  (no molds in catalog)");
             } else {
@@ -916,14 +1101,7 @@ fn collect_molds_from_source(
             }
         }
         SourceType::Github | SourceType::Gitlab | SourceType::Http => {
-            let Ok(catalog_url) = catalog_url_for(source) else {
-                return;
-            };
-            let headers = auth_headers(source);
-            let Ok(resp) = crate::http::fetch_url(&catalog_url, &headers, 30, false, false) else {
-                return;
-            };
-            let Ok(catalog) = toml::from_str::<Catalog>(&resp.body) else {
+            let Ok(Some(catalog)) = fetch_catalog(source, false) else {
                 return;
             };
             for (mold_name, entry) in catalog.molds {
@@ -1115,15 +1293,9 @@ fn collect_mold_matches(
                 });
             }
             SourceType::Github | SourceType::Gitlab | SourceType::Http => {
-                let catalog_url = catalog_url_for(source)?;
-                let headers = auth_headers(source);
-                let Some(resp) =
-                    crate::http::fetch_url(&catalog_url, &headers, 30, false, false).ok()
-                else {
+                let Ok(Some(catalog)) = fetch_catalog(source, false) else {
                     continue;
                 };
-                let catalog: Catalog =
-                    toml::from_str(&resp.body).context("Failed to parse catalog.toml")?;
                 let Some(entry) = catalog.molds.get(mold_name).cloned() else {
                     continue;
                 };
@@ -1371,6 +1543,72 @@ pub fn setup(yes: bool, force: bool) -> Result<()> {
     add(name, OFFICIAL_URL, None, set_as_default)
 }
 
+/// Compute a deterministic content hash for a mold.
+///
+/// - Flat file (`name.py`): SHA-256 of the file content.
+/// - Directory (`name/`): collect all files recursively, sort paths alphabetically,
+///   build `path:{sha256(content)}|…`, SHA-256 the concatenation.
+///
+/// Returns a hex string truncated to 16 characters.
+fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::collections::BTreeSet;
+
+    let script_path = base.join(rel_path);
+
+    // Determine if this is a flat file or a directory mold.
+    let mold_dir = script_path
+        .parent()
+        .filter(|p| *p != base) // flat file: parent == base
+        .unwrap_or(script_path.as_path());
+
+    if mold_dir == script_path.as_path() {
+        // Flat file: hash the file directly.
+        let content = fs::read(&script_path)
+            .with_context(|| format!("Cannot read mold for hashing: {}", script_path.display()))?;
+        let digest = hex::encode(Sha256::digest(&content));
+        return Ok(digest[..16].to_string());
+    }
+
+    // Directory: collect all files recursively, sort, hash.
+    fn collect_files(dir: &Path, prefix: &str, out: &mut BTreeSet<(String, Vec<u8>)>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let rel = if prefix.is_empty() {
+                name.clone()
+            } else {
+                format!("{prefix}/{name}")
+            };
+            if path.is_dir() {
+                collect_files(&path, &rel, out);
+            } else if path.is_file() {
+                if let Ok(content) = fs::read(&path) {
+                    out.insert((rel, content));
+                }
+            }
+        }
+    }
+
+    let mut files = BTreeSet::new();
+    collect_files(mold_dir, "", &mut files);
+
+    let mut combined = String::new();
+    for (path, content) in &files {
+        let file_hash = hex::encode(Sha256::digest(content));
+        if !combined.is_empty() {
+            combined.push('|');
+        }
+        combined.push_str(&format!("{path}:{file_hash}"));
+    }
+
+    let digest = hex::encode(Sha256::digest(combined.as_bytes()));
+    Ok(digest[..16].to_string())
+}
+
 /// Build or rebuild `catalog.toml` for a local registry.
 pub fn build_catalog(registry_name: &str) -> Result<()> {
     let cfg = load_config()?;
@@ -1422,6 +1660,12 @@ pub fn build_catalog(registry_name: &str) -> Result<()> {
             .collect();
 
         let options = format_defaults_options(&defaults);
+        let mold_hash = compute_mold_hash(Path::new(base), rel_path)
+            .map(Some)
+            .unwrap_or_else(|e| {
+                eprintln!("[fimod] warning: could not hash mold '{name}': {e}");
+                None
+            });
         catalog.molds.insert(
             name.clone(),
             CatalogEntry {
@@ -1434,6 +1678,7 @@ pub fn build_catalog(registry_name: &str) -> Result<()> {
                 options,
                 args,
                 envs,
+                hash: mold_hash,
             },
         );
     }

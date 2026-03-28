@@ -171,6 +171,10 @@ struct ShapeArgs {
     /// Don't follow HTTP redirects
     #[arg(long = "no-follow")]
     no_follow: bool,
+
+    /// Bypass the local cache for remote catalogs and molds (always fetch fresh)
+    #[arg(long = "no-cache")]
+    no_cache: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -282,6 +286,22 @@ enum RegistryAction {
         #[arg(short, long)]
         force: bool,
     },
+    /// Manage the local cache for remote catalogs and molds
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CacheAction {
+    /// Remove cached catalogs and molds
+    Clear {
+        /// Clear cache for a specific mold only (@name or @registry/name)
+        name: Option<String>,
+    },
+    /// Show cache directory location and disk usage
+    Info,
 }
 
 fn main() -> Result<()> {
@@ -309,6 +329,10 @@ fn main() -> Result<()> {
             RegistryAction::SetDefault { name } => registry::set_default(&name),
             RegistryAction::BuildCatalog { name } => registry::build_catalog(&name),
             RegistryAction::Setup { yes, force } => registry::setup(yes, force),
+            RegistryAction::Cache { action } => match action {
+                CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
+                CacheAction::Info => registry::cache_info(),
+            },
         },
         Some(Commands::Mold { action }) => match action {
             MoldAction::List {
@@ -589,7 +613,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
     let env_value = build_env(&shape.env_patterns);
 
     // Build scripts chain
-    let scripts = build_scripts(&shape.mold, &shape.expression)?;
+    let scripts = build_scripts(&shape.mold, &shape.expression, shape.no_cache)?;
 
     // First mold's defaults drive input options; last mold's defaults drive output options
     let first_defaults = &scripts[0].2;
