@@ -2,6 +2,28 @@
 
 All notable changes to fimod are documented here.
 
+## [0.2.0] — 2026-03-29
+
+### Features
+
+- **template:** add Jinja2 templating engine (tpl_render_str, tpl_render_from_mold) — data→text generation via MiniJinja, inline strings or .j2 files, path traversal security, badge_md and git_changelog demo molds
+- **cache:** add registry mold cache with ETag and content hash validation
+
+### Bug Fixes
+
+- **core:** extract pipeline logic into lib.rs and pipeline.rs
+
+## [0.1.2] — 2026-03-25
+
+### Fixed
+
+- **Registry: FIMOD_REGISTRY visibility** — `fimod registry list` and `fimod mold list` now display entries defined via the `FIMOD_REGISTRY` environment variable
+
+### Changed
+
+- **Installer: piped input support** — `install.sh` reads the registry setup prompt from `/dev/tty` when piped via `curl | sh`
+- **Installer: reduced prompts** — Simplified confirmation questions in `install.sh` and `install.ps1`
+
 ## [0.1.1] — 2026-03-21
 
 ### Fixed

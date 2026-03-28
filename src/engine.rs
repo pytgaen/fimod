@@ -21,6 +21,7 @@ use crate::hash;
 use crate::iter_helpers;
 use crate::msg;
 use crate::regex;
+use crate::template;
 
 /// Custom PrintWriterCallback that redirects Monty's print() output to stderr.
 /// Used in --debug mode so that Python print statements don't corrupt stdout.
@@ -38,6 +39,27 @@ impl PrintWriterCallback for StderrPrint {
     }
 }
 
+/// Runtime options for mold execution.
+pub struct MoldOptions<'a> {
+    pub extra_args: &'a [(String, String)],
+    pub env_value: &'a Value,
+    pub headers_value: &'a Value,
+    pub debug: bool,
+    pub msg_level: u8,
+    pub mold_base_dir: Option<&'a str>,
+}
+
+/// Internal runtime context — extends MoldOptions with mutable shared state
+/// for exit code, format override, and output file.
+struct MoldContext<'a> {
+    debug: bool,
+    msg_level: u8,
+    mold_base_dir: Option<&'a str>,
+    exit_code: Arc<Mutex<Option<i32>>>,
+    format_override: Arc<Mutex<Option<String>>>,
+    output_file: Arc<Mutex<Option<String>>>,
+}
+
 /// Check whether a name is a known external function exposed to molds.
 fn is_external_function(name: &str) -> bool {
     regex::EXTERNAL_FUNCTIONS.contains(&name)
@@ -49,6 +71,7 @@ fn is_external_function(name: &str) -> bool {
         || msg::EXTERNAL_FUNCTIONS.contains(&name)
         || gatekeeper::EXTERNAL_FUNCTIONS.contains(&name)
         || env_helpers::EXTERNAL_FUNCTIONS.contains(&name)
+        || template::EXTERNAL_FUNCTIONS.contains(&name)
 }
 
 /// Route an external function call to the correct module.
@@ -56,10 +79,7 @@ fn is_external_function(name: &str) -> bool {
 fn dispatch_external(
     name: &str,
     args: Vec<MontyObject>,
-    exit_code: &Arc<Mutex<Option<i32>>>,
-    format_override: &Arc<Mutex<Option<String>>>,
-    output_file: &Arc<Mutex<Option<String>>>,
-    msg_level: u8,
+    ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
     if regex::EXTERNAL_FUNCTIONS.contains(&name) {
         regex::dispatch(name, args)
@@ -70,15 +90,17 @@ fn dispatch_external(
     } else if hash::EXTERNAL_FUNCTIONS.contains(&name) {
         hash::dispatch(name, args)
     } else if exit_control::EXTERNAL_FUNCTIONS.contains(&name) {
-        exit_control::dispatch(name, args, exit_code)
+        exit_control::dispatch(name, args, &ctx.exit_code)
     } else if format_control::EXTERNAL_FUNCTIONS.contains(&name) {
-        format_control::dispatch(name, args, format_override, output_file)
+        format_control::dispatch(name, args, &ctx.format_override, &ctx.output_file)
     } else if msg::EXTERNAL_FUNCTIONS.contains(&name) {
-        msg::dispatch(name, args, msg_level)
+        msg::dispatch(name, args, ctx.msg_level)
     } else if gatekeeper::EXTERNAL_FUNCTIONS.contains(&name) {
-        gatekeeper::dispatch(name, args, exit_code)
+        gatekeeper::dispatch(name, args, &ctx.exit_code)
     } else if env_helpers::EXTERNAL_FUNCTIONS.contains(&name) {
         env_helpers::dispatch(name, args)
+    } else if template::EXTERNAL_FUNCTIONS.contains(&name) {
+        template::dispatch(name, args, ctx.mold_base_dir)
     } else {
         anyhow::bail!("Unknown external function: {name}")
     }
@@ -93,18 +115,10 @@ fn dispatch_external(
 /// when the caller has already built a MontyObject directly (e.g. csv_to_monty path).
 ///
 /// Returns `(result_value, optional_exit_code, optional_format_override, optional_output_file)`.
-pub fn execute_mold(
-    script: &str,
-    data: MontyObject,
-    extra_args: &[(String, String)],
-    env_value: &Value,
-    headers_value: &Value,
-    debug: bool,
-    msg_level: u8,
-) -> MoldResult {
+pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> MoldResult {
     // Build the `args` dict as a MontyObject
     let args_dict = MontyObject::Dict(monty::DictPairs::from(
-        extra_args
+        opts.extra_args
             .iter()
             .map(|(k, v)| {
                 (
@@ -116,8 +130,8 @@ pub fn execute_mold(
     ));
 
     // Build env and headers MontyObjects
-    let env_obj = json_to_monty(env_value);
-    let headers_obj = json_to_monty(headers_value);
+    let env_obj = json_to_monty(opts.env_value);
+    let headers_obj = json_to_monty(opts.headers_value);
 
     // Namespace: data + args + env + headers (passed as function parameters, not globals)
     let input_names = vec![
@@ -130,7 +144,7 @@ pub fn execute_mold(
 
     let full_script = format!("{script}\ntransform(data, args, env, headers)");
 
-    if debug {
+    if opts.debug {
         eprintln!("[debug] script:");
         eprintln!("---");
         eprintln!("{}", full_script.trim_end());
@@ -140,41 +154,30 @@ pub fn execute_mold(
     let runner = MontyRun::new(full_script, "mold.py", input_names)
         .context("Failed to compile mold script")?;
 
-    let exit_code = Arc::new(Mutex::new(None));
-    let format_override = Arc::new(Mutex::new(None));
-    let output_file = Arc::new(Mutex::new(None));
+    let ctx = MoldContext {
+        debug: opts.debug,
+        msg_level: opts.msg_level,
+        mold_base_dir: opts.mold_base_dir,
+        exit_code: Arc::new(Mutex::new(None)),
+        format_override: Arc::new(Mutex::new(None)),
+        output_file: Arc::new(Mutex::new(None)),
+    };
 
-    let result = run_loop(
-        runner,
-        inputs,
-        debug,
-        &exit_code,
-        &format_override,
-        &output_file,
-        msg_level,
-    )?;
+    let result = run_loop(runner, inputs, &ctx)?;
 
-    let exit_val = exit_code.lock().unwrap().take();
-    let fmt_val = format_override.lock().unwrap().take();
-    let out_file_val = output_file.lock().unwrap().take();
+    let exit_val = ctx.exit_code.lock().unwrap().take();
+    let fmt_val = ctx.format_override.lock().unwrap().take();
+    let out_file_val = ctx.output_file.lock().unwrap().take();
     Ok((result, exit_val, fmt_val, out_file_val))
 }
 
-fn run_loop(
-    runner: MontyRun,
-    inputs: Vec<MontyObject>,
-    debug: bool,
-    exit_code: &Arc<Mutex<Option<i32>>>,
-    format_override: &Arc<Mutex<Option<String>>>,
-    output_file: &Arc<Mutex<Option<String>>>,
-    msg_level: u8,
-) -> Result<Value> {
+fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -> Result<Value> {
     let mut sp = StderrPrint;
     let mut progress = runner
         .start(
             inputs,
             NoLimitTracker,
-            if debug {
+            if ctx.debug {
                 PrintWriter::Callback(&mut sp)
             } else {
                 PrintWriter::Stdout
@@ -190,20 +193,15 @@ fn run_loop(
             RunProgress::FunctionCall(mut call) => {
                 let function_name = call.function_name.clone();
                 let args = std::mem::take(&mut call.args);
-                let result = dispatch_external(
-                    &function_name,
-                    args,
-                    exit_code,
-                    format_override,
-                    output_file,
-                    msg_level,
-                )
-                .map_err(|e| anyhow::anyhow!("External function '{function_name}' failed: {e}"))?;
+                let result = dispatch_external(&function_name, args, ctx)
+                    .map_err(|e| {
+                        anyhow::anyhow!("External function '{function_name}' failed: {e}")
+                    })?;
                 let mut sp2 = StderrPrint;
                 progress = call
                     .resume(
                         result,
-                        if debug {
+                        if ctx.debug {
                             PrintWriter::Callback(&mut sp2)
                         } else {
                             PrintWriter::Stdout
@@ -220,7 +218,7 @@ fn run_loop(
                 progress = call
                     .resume(
                         MontyObject::None,
-                        if debug {
+                        if ctx.debug {
                             PrintWriter::Callback(&mut sp2)
                         } else {
                             PrintWriter::Stdout
@@ -242,7 +240,7 @@ fn run_loop(
                 progress = lookup
                     .resume(
                         result,
-                        if debug {
+                        if ctx.debug {
                             PrintWriter::Callback(&mut sp2)
                         } else {
                             PrintWriter::Stdout

@@ -10,6 +10,8 @@
 #   $env:FIMOD_INSTALL   install directory (default: ~\.local\bin)
 #   $env:FIMOD_VERSION   specific version to install (default: latest)
 #   $env:FIMOD_SOURCE    github (default) or gitlab
+#   $env:FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
+#   $env:FIMOD_SETUP_REGISTRY yes=auto-setup, no=skip, unset=interactive prompt
 
 $ErrorActionPreference = "Stop"
 
@@ -130,31 +132,40 @@ if (-not (Test-Path -Path $InstallDir)) {
 
 # -- Download and install -----------------------------------------------
 
-$TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
-New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
+$BinName = "fimod.exe"
+$TargetBin = Join-Path $InstallDir $BinName
 
-try {
-    Write-Host "Downloading $Url..."
-    $TmpZip = Join-Path $TmpDir $Asset
-    Invoke-WebRequest -Uri $Url -OutFile $TmpZip -UseBasicParsing
-
-    # Use Expand-Archive for zip
-    Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
-
-    $BinName = "fimod.exe"
-    $ExtractedBin = Join-Path $TmpDir $BinName
-    $TargetBin = Join-Path $InstallDir $BinName
-
-    if (Test-Path -Path $TargetBin) {
-        Remove-Item -Path $TargetBin -Force
+if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
+    Write-Host "Skipping download (FIMOD_SKIP_DOWNLOAD=1)"
+    if (-not (Test-Path -Path $TargetBin)) {
+        Write-Error "Error: $TargetBin not found - cannot skip download"
+        exit 1
     }
+} else {
+    $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+    New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
 
-    Move-Item -Path $ExtractedBin -Destination $TargetBin -Force
-} catch {
-    Write-Error "Error: download failed - check that version $Version exists`nAvailable releases: $BaseUrl"
-    exit 1
-} finally {
-    Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    try {
+        Write-Host "Downloading $Url..."
+        $TmpZip = Join-Path $TmpDir $Asset
+        Invoke-WebRequest -Uri $Url -OutFile $TmpZip -UseBasicParsing
+
+        # Use Expand-Archive for zip
+        Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
+
+        $ExtractedBin = Join-Path $TmpDir $BinName
+
+        if (Test-Path -Path $TargetBin) {
+            Remove-Item -Path $TargetBin -Force
+        }
+
+        Move-Item -Path $ExtractedBin -Destination $TargetBin -Force
+    } catch {
+        Write-Error "Error: download failed - check that version $Version exists`nAvailable releases: $BaseUrl"
+        exit 1
+    } finally {
+        Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # -- Verify ------------------------------------------------------------
@@ -181,14 +192,47 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 }
 
 Write-Host ""
+
+# -- Migrate "official" -> "examples" ----------------------------------
+# If the old "official" registry points to the bundled molds URL,
+# remove it and re-add as "examples" (no default, no priority).
+$OldOfficialUrl = "https://github.com/pytgaen/fimod/tree/main/molds"
+
+$CurrentUrl = ""
+try {
+    $CurrentUrl = (& $TargetBin registry list --output-format json 2>$null `
+        | & $TargetBin shape -e 'dp_get([s for s in data if s["name"] == "official"], "0.location", "")' --output-format txt 2>$null)
+} catch {}
+
+if ($CurrentUrl -eq $OldOfficialUrl) {
+    Write-Host "  Migrating registry 'official' -> 'examples'..."
+    try { & $TargetBin registry remove official 2>$null } catch {}
+    try { & $TargetBin registry add examples $OldOfficialUrl --default 2>$null } catch {}
+    Write-Host "  Done: renamed 'official' to 'examples'"
+    Write-Host ""
+}
+
+# -- Registry setup ----------------------------------------------------
+# FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
+# FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
+# unset                      → interactive prompt (default)
 Write-Host "-----------------------------------------------"
-Write-Host "  Run 'fimod registry setup' to configure the official mold registry? [Y/n]"
-$Reply = Read-Host "  >"
-Write-Host ""
-if ($Reply -match '^[nN]') {
-    Write-Host "  Skipped. Run 'fimod registry setup' at any time."
-} else {
-    Write-Host "  Setting up registry..."
+$SetupRegistry = $env:FIMOD_SETUP_REGISTRY
+if ($SetupRegistry -eq "yes") {
+    Write-Host "  Setting up registry (FIMOD_SETUP_REGISTRY=yes)..."
     & $TargetBin registry setup --yes
+} elseif ($SetupRegistry -eq "no") {
+    Write-Host "  Skipped registry setup (FIMOD_SETUP_REGISTRY=no)."
+    Write-Host "  Run 'fimod registry setup' at any time."
+} else {
+    Write-Host "  Run 'fimod registry setup' to configure the example mold registry? [Y/n]"
+    $Reply = Read-Host "  >"
+    Write-Host ""
+    if ($Reply -match '^[nN]') {
+        Write-Host "  Skipped. Run 'fimod registry setup' at any time."
+    } else {
+        Write-Host "  Setting up registry..."
+        & $TargetBin registry setup --yes
+    }
 }
 Write-Host "-----------------------------------------------"

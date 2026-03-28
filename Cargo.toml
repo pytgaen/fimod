@@ -1,6 +1,6 @@
 [package]
 name = "fimod"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "fimod - the data shaper CLI. Transform structured data with embedded Python, no install required."
 license = "LGPL-3.0-only"
@@ -33,6 +33,7 @@ sha2 = "0.10"
 digest = "0.10"
 hex = "0.4"
 mimalloc = "0.1"
+minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.

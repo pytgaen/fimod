@@ -13,6 +13,7 @@ pub mod mold;
 pub mod msg;
 pub mod regex;
 pub mod registry;
+pub mod template;
 pub mod test_runner;
 pub mod pipeline;
 

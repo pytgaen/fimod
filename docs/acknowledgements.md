@@ -8,6 +8,9 @@ The core magic of `fimod` — executing Python without a Python installation —
 ## [reqwest](https://crates.io/crates/reqwest)
 Our robust HTTP client capabilities are powered by `reqwest`. This exceptional crate allows `fimod` to seamlessly fetch data from URLs, support HTTPS out-of-the-box, automatically handle system proxies, and manage connection pooling.
 
+## [MiniJinja](https://github.com/mitsuhiko/minijinja)
+Our Jinja2 templating engine (`tpl_render_str`, `tpl_render_from_mold`) is powered by MiniJinja, created by [Armin Ronacher](https://github.com/mitsuhiko) (the author of Jinja2 and Flask). A pure-Rust implementation that works natively with `serde_json::Value`, bringing full Jinja2 syntax — filters, loops, macros, template inheritance — without any Python dependency.
+
 ## [fancy-regex](https://crates.io/crates/fancy-regex)
 The advanced regular expression features in our `re_*` built-in functions are made possible by `fancy-regex`. It brings powerful PCRE-like functionality to Rust, such as lookarounds and backreferences, unlocking complex text processing.
 

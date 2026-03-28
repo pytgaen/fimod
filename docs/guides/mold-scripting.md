@@ -165,6 +165,51 @@ def transform(data, args, env, headers):
 
 Available: `hs_md5` · `hs_sha1` · `hs_sha256` — all return lowercase hex strings.
 
+### 📝 Templating (`tpl_*`)
+
+Generate **any text file** from data using [Jinja2](https://jinja.palletsprojects.com/) templates — Dockerfiles, nginx configs, k8s manifests, reports, `.env` files. This extends fimod from data→data to **data→text**.
+
+**Inline templates** with `tpl_render_str` — great for one-liners and small molds:
+
+```python
+def transform(data, args, env, headers):
+    return tpl_render_str("""
+FROM python:{{ python_version }}-slim
+{% for pkg in packages %}
+RUN pip install {{ pkg }}
+{% endfor %}
+COPY . /app
+CMD {{ cmd | tojson }}
+""", data)
+```
+
+**File templates** with `tpl_render_from_mold` — for larger templates, keep `.j2` files alongside the mold for clean separation of logic and presentation:
+
+```
+my_mold/
+├── my_mold.py           # Python logic
+└── templates/
+    ├── Dockerfile.j2     # Jinja2 template
+    └── compose.yaml.j2
+```
+
+```python
+# my_mold/my_mold.py
+"""Generate Dockerfile from project config."""
+# fimod: output-format=txt
+
+def transform(data, args, env, headers):
+    tpl = args.get("template", "Dockerfile.j2")
+    return tpl_render_from_mold(f"templates/{tpl}", data)
+```
+
+All Jinja2 features are available: loops, conditions, filters (`upper`, `join`, `tojson`, `default`, `selectattr`, …), macros, and `{% break %}`/`{% continue %}`. Dict key order is preserved.
+
+!!! tip
+    Combine with `--output-format txt` (or `# fimod: output-format=txt` in mold defaults) so the rendered text is written as-is, without JSON quoting.
+
+Available: `tpl_render_str(template, ctx)` · `tpl_render_from_mold(path, ctx)` — see [Built-ins Reference](../reference/built-ins.md#template-functions-tpl) for `auto_escape` option and the [Quick Tour](quick-tour.md#data-text-jinja2-templating) for more examples.
+
 ### 📢 Message logging (`msg_*`)
 
 Output diagnostic messages to stderr — useful for progress, warnings, and debugging without polluting stdout:
@@ -293,7 +338,7 @@ When no `--arg` is passed, `args` is an empty dict `{}`.
 - [x] `isinstance()`, `len()`, `int()`, `str()`, `float()`, `bool()`
 - [x] f-strings (`f"Hello {name}"`, `f"{x:.2f}"`, `f"{x!r}"`)
 - [x] Nested functions, multiple return values (tuples)
-- [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`)
+- [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`)
 
 ## ❌ Monty limitations
 

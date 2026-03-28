@@ -36,12 +36,14 @@ src/
 ├── dotpath.rs       — dp_get, dp_set (nested dotpath access)
 ├── iter_helpers.rs  — it_keys, it_values, it_flatten, it_group_by, it_sort_by, it_unique, it_unique_by
 ├── hash.rs          — hs_md5, hs_sha256, hs_sha1
+├── template.rs      — tpl_render_str, tpl_render_from_mold (Jinja2 templating via minijinja)
 ├── msg.rs           — msg_print, msg_info, msg_warn, msg_error (stderr logging)
 ├── gatekeeper.rs    — gk_fail, gk_assert, gk_warn (validation gates with exit code control)
 ├── env_helpers.rs   — env_subst (${VAR} template substitution)
 ├── exit_control.rs  — set_exit() external function
 ├── format_control.rs — External functions: set_input_format, set_output_format, set_output_file, cast_input_format (format/output overrides from within a mold)
 ├── http.rs          — HTTP fetch (reqwest blocking), HttpResponse struct, content-type → format mapping, URL detection
+├── pipeline.rs      — Pipeline orchestration: build_scripts, execute_chain, run_pipeline (MoldStep-based)
 ├── test_runner.rs   — `fimod mold test` runner: discovers test cases from a directory, executes mold against each, diffs output
 └── registry.rs      — Registry system (~/.config/fimod/sources.toml + FIMOD_REGISTRY env var); resolves `@name` / `@source/name` mold references; Catalog/CatalogEntry for catalog.toml (remote registries); `registry setup` command for first-run onboarding
 ```
