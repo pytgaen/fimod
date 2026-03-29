@@ -154,10 +154,11 @@ fimod registry add private https://gitlab.com/team/molds --token-env GITLAB_TOKE
 # 📋 Manage your registries
 fimod registry list
 fimod registry show company
-fimod registry set-default company
+fimod registry set-default company               # set as P0 (highest priority)
+fimod registry set-priority private 1            # set as P1
 
 # 🚀 Use registered molds with @name
-fimod s -i data.json -m @cleanup                  # from default registry
+fimod s -i data.json -m @cleanup                  # searches all registries in priority order
 fimod s -i data.json -m @company/normalize        # from specific registry
 fimod s -i data.json -m @my-molds/csv-to-json     # from local directory
 

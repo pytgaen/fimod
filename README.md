@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/pytgaen/fimod/releases"><img src="https://img.shields.io/github/v/release/pytgaen/fimod?style=flat-square" alt="Release"></a>
-  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-LGPL--3.0-blue?style=flat-square" alt="License"></a>
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License"></a>
   <a href="https://github.com/pytgaen/fimod/actions"><img src="https://img.shields.io/github/actions/workflow/status/pytgaen/fimod/release.yml?style=flat-square" alt="CI"></a>
 </p>
 

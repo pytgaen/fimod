@@ -9,7 +9,7 @@ use std::process;
 use fimod::pipeline::{
     build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
     path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    HttpOptions,
+    HttpOptions, ScriptRef,
 };
 use fimod::MONTY_VERSION;
 use fimod::{convert, format, http, registry, test_runner};
@@ -68,12 +68,12 @@ struct ShapeArgs {
     #[arg(short, long, num_args = 1..)]
     input: Vec<String>,
 
-    /// Mold scripts applied in order (repeatable; mutually exclusive with -e)
-    #[arg(short, long, conflicts_with = "expression")]
+    /// Mold scripts applied in order (repeatable, can be mixed with -e)
+    #[arg(short, long)]
     mold: Vec<String>,
 
-    /// Inline Python expressions applied in order (repeatable; mutually exclusive with -m)
-    #[arg(short = 'e', long = "expression", conflicts_with = "mold")]
+    /// Inline Python expressions applied in order (repeatable, can be mixed with -m)
+    #[arg(short = 'e', long = "expression")]
     expression: Vec<String>,
 
     /// Output file or directory (writes to stdout if not provided; directory required for batch)
@@ -262,10 +262,26 @@ enum RegistryAction {
         /// Name of the registry to remove
         name: String,
     },
-    /// Set the default registry (used when no @registry/ prefix is given)
+    /// Set the default registry (P0, used when no @registry/ prefix is given)
     SetDefault {
         /// Name of the registry to set as default
+        name: Option<String>,
+        /// Clear the default registry
+        #[arg(long)]
+        clear: bool,
+    },
+    /// Set the priority rank for a registry
+    ///
+    /// Registries are searched in priority order (P0 first) when resolving bare @mold references.
+    /// If the requested rank is already taken, existing entries shift up.
+    SetPriority {
+        /// Name of the registry
         name: String,
+        /// Priority rank (1, 2, 3, …). P0 is reserved for the default registry.
+        rank: Option<u32>,
+        /// Clear the priority for this registry
+        #[arg(long)]
+        clear: bool,
     },
     /// Build or rebuild catalog.toml for a local registry
     BuildCatalog {
@@ -303,6 +319,45 @@ enum CacheAction {
     Info,
 }
 
+/// Build an ordered vec of ScriptRef by scanning CLI args to preserve -m/-e ordering.
+fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut mold_iter = molds.iter();
+    let mut expr_iter = expressions.iter();
+    let mut refs = Vec::new();
+
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if (arg == "-m" || arg == "--mold") && i + 1 < args.len() {
+            if let Some(v) = mold_iter.next() {
+                refs.push(ScriptRef::Mold(v.clone()));
+            }
+            i += 2;
+        } else if arg.starts_with("-m") && arg.len() > 2 && !arg.starts_with("-m-") {
+            // -mFOO (no space)
+            if let Some(v) = mold_iter.next() {
+                refs.push(ScriptRef::Mold(v.clone()));
+            }
+            i += 1;
+        } else if (arg == "-e" || arg == "--expression") && i + 1 < args.len() {
+            if let Some(v) = expr_iter.next() {
+                refs.push(ScriptRef::Expr(v.clone()));
+            }
+            i += 2;
+        } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e-") {
+            if let Some(v) = expr_iter.next() {
+                refs.push(ScriptRef::Expr(v.clone()));
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    refs
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -325,7 +380,12 @@ fn main() -> Result<()> {
             } => registry::add(&name, &location, token_env.as_deref(), default),
             RegistryAction::Show { name } => registry::show(&name),
             RegistryAction::Remove { name } => registry::remove(&name),
-            RegistryAction::SetDefault { name } => registry::set_default(&name),
+            RegistryAction::SetDefault { name, clear } => {
+                registry::set_default(name.as_deref(), clear)
+            }
+            RegistryAction::SetPriority { name, rank, clear } => {
+                registry::set_priority(&name, rank, clear)
+            }
             RegistryAction::BuildCatalog { name } => registry::build_catalog(&name),
             RegistryAction::Setup { yes, force } => registry::setup(yes, force),
             RegistryAction::Cache { action } => match action {
@@ -611,7 +671,8 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
     let env_value = build_env(&shape.env_patterns);
 
     // Build scripts chain
-    let scripts = build_scripts(&shape.mold, &shape.expression, shape.no_cache)?;
+    let script_refs = build_script_refs(&shape.mold, &shape.expression);
+    let scripts = build_scripts(&script_refs, shape.no_cache)?;
 
     // First mold's defaults drive input options; last mold's defaults drive output options
     let first_defaults = &scripts[0].defaults;

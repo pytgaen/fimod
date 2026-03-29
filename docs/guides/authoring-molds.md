@@ -215,14 +215,14 @@ fimod registry add my ~/molds/
 cp ./normalize.py ~/molds/
 
 # Use by name — no path needed
-fimod s -i data.json -m @normalize        # default registry
+fimod s -i data.json -m @normalize        # searches all registries in priority order
 fimod s -i data.json -m @my/normalize     # explicit registry name
 ```
 
 List the molds available in a registry:
 
 ```bash
-fimod mold list           # default registry
+fimod mold list           # all registries
 fimod mold list my        # named registry
 ```
 

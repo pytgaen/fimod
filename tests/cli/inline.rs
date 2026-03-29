@@ -42,17 +42,18 @@ fn test_inline_expression_stdin() {
 }
 
 #[test]
-fn test_error_both_mold_and_expression() {
+fn test_mold_then_expression() {
     let dir = assert_fs::TempDir::new().unwrap();
-    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+    let input = setup_input(&dir, "test.json", r#"{"name": "World"}"#);
     let mold = setup_mold(&dir, "greet.py", GREET_MOLD);
 
+    // -m adds greeting, then -e extracts it
     assert_cmd::cargo_bin_cmd!("fimod")
         .arg("shape")
-        .args(["-i", &input, "-m", &mold, "-e", "data"])
+        .args(["-i", &input, "-m", &mold, "-e", r#"data["greeting"]"#])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("cannot be used with"));
+        .success()
+        .stdout(predicate::str::contains("Hello World"));
 }
 
 #[test]

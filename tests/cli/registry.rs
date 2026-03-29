@@ -378,7 +378,7 @@ fn test_at_mold_no_default_registry_fails() {
         .env("HOME", home.path())
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No default registry configured"));
+        .stderr(predicate::str::contains("No registry configured"));
 }
 
 #[test]

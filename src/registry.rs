@@ -78,6 +78,8 @@ pub struct Source {
 #[derive(Serialize, Deserialize, Default)]
 pub struct SourcesConfig {
     pub default: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub priority: BTreeMap<String, u32>,
     #[serde(default)]
     pub sources: BTreeMap<String, Source>,
 }
@@ -105,6 +107,46 @@ fn save_config(cfg: &SourcesConfig) -> Result<()> {
     fs::write(&path, content)
         .with_context(|| format!("Failed to write registry: {}", path.display()))?;
     Ok(())
+}
+
+/// Compute the effective priority for each source in the config.
+///
+/// Returns `(name, source, priority_rank)` sorted by rank.
+/// - `default` is always P0 (if set and exists in sources).
+/// - Entries in `[priority]` get their assigned rank.
+/// - Remaining sources come after all prioritized ones, in file order.
+fn ordered_sources(cfg: &SourcesConfig) -> Vec<(&str, &Source, Option<u32>)> {
+    let mut ranked: Vec<(&str, &Source, Option<u32>)> = Vec::new();
+
+    for (name, source) in &cfg.sources {
+        let rank = if cfg.default.as_deref() == Some(name.as_str()) {
+            Some(0)
+        } else {
+            cfg.priority.get(name).copied()
+        };
+        ranked.push((name.as_str(), source, rank));
+    }
+
+    // Sort: ranked entries first (by rank), then unranked (preserve insertion order)
+    ranked.sort_by(|a, b| match (a.2, b.2) {
+        (Some(ra), Some(rb)) => ra.cmp(&rb),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    });
+
+    ranked
+}
+
+/// Format a priority label for display.
+fn priority_label(cfg: &SourcesConfig, name: &str) -> String {
+    if cfg.default.as_deref() == Some(name) {
+        "P0 (default)".to_string()
+    } else if let Some(&p) = cfg.priority.get(name) {
+        format!("P{p}")
+    } else {
+        String::new()
+    }
 }
 
 // ── registry commands ─────────────────────────────────────────────────────────
@@ -169,6 +211,7 @@ pub fn remove(name: &str) -> Result<()> {
         cfg.default = None;
         eprintln!("warning: removed the default registry; use 'fimod registry set-default <name>'");
     }
+    cfg.priority.remove(name);
     save_config(&cfg)?;
     println!("Removed registry '{name}'");
     Ok(())
@@ -185,14 +228,15 @@ pub fn list(output_format: &str) -> Result<()> {
             name: &'a str,
             kind: &'a SourceType,
             location: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            priority: Option<u32>,
             default: bool,
             #[serde(skip_serializing_if = "std::ops::Not::not")]
             from_env: bool,
         }
-        let mut entries: Vec<RegistryInfo> = cfg
-            .sources
+        let mut entries: Vec<RegistryInfo> = ordered_sources(&cfg)
             .iter()
-            .map(|(name, source)| RegistryInfo {
+            .map(|(name, source, rank)| RegistryInfo {
                 name,
                 kind: &source.kind,
                 location: source
@@ -200,15 +244,14 @@ pub fn list(output_format: &str) -> Result<()> {
                     .as_deref()
                     .or(source.url.as_deref())
                     .unwrap_or("?"),
-                default: cfg.default.as_deref() == Some(name),
+                priority: *rank,
+                default: cfg.default.as_deref() == Some(*name),
                 from_env: false,
             })
             .collect();
         let mut anon_index = 0;
         for entry in &env_entries {
             let display_name = env_display_name(entry, &mut anon_index);
-            // Leak the string so we can store &str in the struct.
-            // This is fine — list() runs once then exits.
             let name_ref: &str = Box::leak(display_name.into_boxed_str());
             entries.push(RegistryInfo {
                 name: name_ref,
@@ -219,6 +262,7 @@ pub fn list(output_format: &str) -> Result<()> {
                     .as_deref()
                     .or(entry.source.url.as_deref())
                     .unwrap_or("?"),
+                priority: Some(0),
                 default: false,
                 from_env: true,
             });
@@ -232,32 +276,12 @@ pub fn list(output_format: &str) -> Result<()> {
         println!("Use 'fimod registry add <name> <path-or-url>' to add one.");
         return Ok(());
     }
-    let has_env_anon = env_has_anonymous(&env_entries);
-    for (name, source) in &cfg.sources {
-        let default_marker = if cfg.default.as_deref() == Some(name) {
-            if has_env_anon {
-                " (fallback default)"
-            } else {
-                " (default)"
-            }
-        } else {
-            ""
-        };
-        let location = source
-            .path
-            .as_deref()
-            .or(source.url.as_deref())
-            .unwrap_or("?");
-        println!(
-            "{:20} [{:6}] {}{}",
-            name, source.kind, location, default_marker
-        );
-    }
+    // Show FIMOD_REGISTRY entries first (they are always P0)
     let mut anon_index = 0;
     for entry in &env_entries {
         let display_name = env_display_name(entry, &mut anon_index);
         let marker = if display_name == "env-default" {
-            "(default FIMOD_REGISTRY)"
+            "P0 (FIMOD_REGISTRY)"
         } else {
             "(FIMOD_REGISTRY)"
         };
@@ -268,8 +292,21 @@ pub fn list(output_format: &str) -> Result<()> {
             .or(entry.source.url.as_deref())
             .unwrap_or("?");
         println!(
-            "{:20} [{:6}] {} {}",
+            "{:20} [{:6}] {:44} {}",
             display_name, entry.source.kind, location, marker
+        );
+    }
+    // Then sources.toml entries in priority order
+    for (name, source, _) in ordered_sources(&cfg) {
+        let label = priority_label(&cfg, name);
+        let location = source
+            .path
+            .as_deref()
+            .or(source.url.as_deref())
+            .unwrap_or("?");
+        println!(
+            "{:20} [{:6}] {:44} {}",
+            name, source.kind, location, label
         );
     }
     Ok(())
@@ -311,14 +348,78 @@ pub fn show(name: &str) -> Result<()> {
 }
 
 /// Set which source is used when no registry prefix is given.
-pub fn set_default(name: &str) -> Result<()> {
+pub fn set_default(name: Option<&str>, clear: bool) -> Result<()> {
+    let mut cfg = load_config()?;
+    if clear {
+        if cfg.default.is_none() {
+            println!("No default registry is set");
+        } else {
+            let old = cfg.default.take().unwrap();
+            save_config(&cfg)?;
+            println!("Cleared default registry (was '{old}')");
+        }
+        return Ok(());
+    }
+    let Some(name) = name else {
+        bail!("Provide a registry name, or use --clear to unset the default");
+    };
+    if !cfg.sources.contains_key(name) {
+        bail!("Registry '{name}' not found");
+    }
+    // Remove from priority if it was there (default is always P0)
+    cfg.priority.remove(name);
+    cfg.default = Some(name.to_string());
+    save_config(&cfg)?;
+    println!("Set '{name}' as default registry (P0)");
+    Ok(())
+}
+
+pub fn set_priority(name: &str, rank: Option<u32>, clear: bool) -> Result<()> {
     let mut cfg = load_config()?;
     if !cfg.sources.contains_key(name) {
         bail!("Registry '{name}' not found");
     }
-    cfg.default = Some(name.to_string());
+    if clear {
+        if cfg.priority.remove(name).is_some() {
+            save_config(&cfg)?;
+            println!("Cleared priority for '{name}'");
+        } else {
+            println!("'{name}' has no priority set");
+        }
+        return Ok(());
+    }
+    let Some(rank) = rank else {
+        bail!("Provide a priority rank, or use --clear to unset");
+    };
+    if cfg.default.as_deref() == Some(name) {
+        bail!("'{name}' is already default (P0). Use 'fimod registry set-default --clear' first.");
+    }
+    // Shift existing entries at this rank or above
+    let mut priorities: Vec<(String, u32)> = cfg
+        .priority
+        .iter()
+        .filter(|(n, _)| n.as_str() != name)
+        .map(|(n, &r)| (n.clone(), r))
+        .collect();
+    priorities.sort_by_key(|&(_, r)| r);
+
+    // Insert at the requested rank, shift conflicts
+    let mut next_rank = rank;
+    for entry in &mut priorities {
+        if entry.1 == next_rank {
+            entry.1 = next_rank + 1;
+            next_rank += 1;
+        }
+    }
+
+    cfg.priority.clear();
+    for (n, r) in priorities {
+        cfg.priority.insert(n, r);
+    }
+    cfg.priority.insert(name.to_string(), rank);
+
     save_config(&cfg)?;
-    println!("Set '{name}' as default registry");
+    println!("Set '{name}' to P{rank}");
     Ok(())
 }
 
@@ -415,12 +516,6 @@ fn env_display_name(entry: &EnvRegistry, anon_index: &mut usize) -> String {
     }
 }
 
-/// Returns true if FIMOD_REGISTRY contains at least one anonymous entry
-/// (which takes priority over the sources.toml default for bare `@mold`).
-fn env_has_anonymous(entries: &[EnvRegistry]) -> bool {
-    entries.iter().any(|e| e.name.is_none())
-}
-
 // ── mold resolution ───────────────────────────────────────────────────────────
 
 /// Try resolving a mold name against a single source.
@@ -467,7 +562,7 @@ pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
         return resolve_source(source, mold_name, no_cache);
     }
 
-    // Bare @name — try FIMOD_REGISTRY anonymous entries first (env overrides config)
+    // Bare @name — try FIMOD_REGISTRY entries first (env overrides config)
     let mold_name = spec;
     for entry in &env_entries {
         if let Ok(result) = resolve_source(&entry.source, mold_name, no_cache) {
@@ -475,19 +570,17 @@ pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
         }
     }
 
-    // Fallback: try sources.toml default registry
-    if let Some(default_name) = cfg.default.as_deref() {
-        if let Some(source) = cfg.sources.get(default_name) {
-            if let Ok(result) = resolve_source(source, mold_name, no_cache) {
-                return Ok(result);
-            }
+    // Then try all sources.toml registries in priority order
+    for (_, source, _) in ordered_sources(&cfg) {
+        if let Ok(result) = resolve_source(source, mold_name, no_cache) {
+            return Ok(result);
         }
     }
 
     // Nothing found — produce a helpful error
-    if cfg.default.is_none() && env_entries.is_empty() {
+    if cfg.sources.is_empty() && env_entries.is_empty() {
         bail!(
-            "No default registry configured and FIMOD_REGISTRY not set. \
+            "No registry configured and FIMOD_REGISTRY not set. \
              Use 'fimod registry add' or set FIMOD_REGISTRY."
         );
     }
@@ -1020,9 +1113,13 @@ pub fn cache_info() -> Result<()> {
 // ── mold commands ─────────────────────────────────────────────────────────────
 
 /// Print molds for a single registry (name + source already resolved).
-fn print_registry_molds(name: &str, source: &Source, is_default: bool) -> Result<()> {
-    let default_marker = if is_default { " (default)" } else { "" };
-    println!("{} [{}]{}", name, source.kind, default_marker);
+fn print_registry_molds(name: &str, source: &Source, prio_label: &str) -> Result<()> {
+    let marker = if prio_label.is_empty() {
+        String::new()
+    } else {
+        format!(" {prio_label}")
+    };
+    println!("{} [{}]{}", name, source.kind, marker);
 
     match &source.kind {
         SourceType::Local => {
@@ -1064,22 +1161,21 @@ fn print_registry_molds(name: &str, source: &Source, is_default: bool) -> Result
     Ok(())
 }
 
-/// `(registry_name, is_default, mold_name, description)` entry from [`collect_all_molds`].
-type MoldEntry = (String, bool, String, Option<String>);
+/// `(registry_name, priority_label, mold_name, description)` entry from [`collect_all_molds`].
+type MoldEntry = (String, String, String, Option<String>);
 
 /// Collect all molds from the configured registries into a flat list.
 ///
-/// Returns `(registry_name, is_default, mold_name, description)` tuples.
+/// Returns `(registry_name, priority_label, mold_name, description)` tuples.
 fn collect_all_molds(cfg: &SourcesConfig, registry_name: Option<&str>) -> Result<Vec<MoldEntry>> {
     let sources = select_sources(cfg, registry_name)?;
     let env_entries = parse_env_registries();
 
-    let default_name = cfg.default.as_deref();
     let mut result = Vec::new();
 
     for (reg_name, source) in sources {
-        let is_default = default_name == Some(reg_name);
-        collect_molds_from_source(reg_name, source, is_default, &mut result);
+        let label = priority_label(cfg, reg_name);
+        collect_molds_from_source(reg_name, source, &label, &mut result);
     }
 
     // Include FIMOD_REGISTRY entries (only when listing all, not a specific registry)
@@ -1087,7 +1183,7 @@ fn collect_all_molds(cfg: &SourcesConfig, registry_name: Option<&str>) -> Result
         let mut anon_index = 0;
         for entry in &env_entries {
             let display_name = env_display_name(entry, &mut anon_index);
-            collect_molds_from_source(&display_name, &entry.source, false, &mut result);
+            collect_molds_from_source(&display_name, &entry.source, "", &mut result);
         }
     }
 
@@ -1098,7 +1194,7 @@ fn collect_all_molds(cfg: &SourcesConfig, registry_name: Option<&str>) -> Result
 fn collect_molds_from_source(
     reg_name: &str,
     source: &Source,
-    is_default: bool,
+    prio_label: &str,
     result: &mut Vec<MoldEntry>,
 ) {
     match &source.kind {
@@ -1107,7 +1203,7 @@ fn collect_molds_from_source(
                 return;
             };
             for (mold_name, desc, _rel) in scan_local_molds(Path::new(base)) {
-                result.push((reg_name.to_string(), is_default, mold_name, desc));
+                result.push((reg_name.to_string(), prio_label.to_string(), mold_name, desc));
             }
         }
         SourceType::Github | SourceType::Gitlab | SourceType::Http => {
@@ -1117,7 +1213,7 @@ fn collect_molds_from_source(
             for (mold_name, entry) in catalog.molds {
                 result.push((
                     reg_name.to_string(),
-                    is_default,
+                    prio_label.to_string(),
                     mold_name,
                     entry.description,
                 ));
@@ -1148,11 +1244,11 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
             let molds = collect_all_molds(&cfg, registry_name)?;
             let arr: Vec<serde_json::Value> = molds
                 .into_iter()
-                .map(|(reg, is_default, name, desc)| {
+                .map(|(reg, prio, name, desc)| {
                     serde_json::json!({
                         "name": name,
                         "registry": reg,
-                        "is_default": is_default,
+                        "priority": prio,
                         "description": desc.unwrap_or_default(),
                     })
                 })
@@ -1161,7 +1257,7 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
         }
         MoldListFormat::Lines => {
             let molds = collect_all_molds(&cfg, registry_name)?;
-            for (reg, _is_default, name, desc) in molds {
+            for (reg, _prio, name, desc) in molds {
                 println!("@{reg}/{name}\t{}", desc.unwrap_or_default());
             }
         }
@@ -1178,17 +1274,17 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                         "Registry '{name}' not found. Use 'fimod registry list' to see configured registries."
                     )
                 })?;
-                let is_default = cfg.default.as_deref() == Some(name);
-                print_registry_molds(name, source, is_default)?;
+                let label = priority_label(&cfg, name);
+                print_registry_molds(name, source, &label)?;
             } else {
                 let mut first = true;
-                for (name, source) in &cfg.sources {
+                for (name, source, _) in ordered_sources(&cfg) {
                     if !first {
                         println!();
                     }
                     first = false;
-                    let is_default = cfg.default.as_deref() == Some(name.as_str());
-                    print_registry_molds(name, source, is_default)?;
+                    let label = priority_label(&cfg, name);
+                    print_registry_molds(name, source, &label)?;
                 }
                 let mut anon_index = 0;
                 for entry in &env_entries {
@@ -1198,12 +1294,12 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                     first = false;
                     let base_name = env_display_name(entry, &mut anon_index);
                     let marker = if base_name == "env-default" {
-                        "(default FIMOD_REGISTRY)"
+                        "P0 (FIMOD_REGISTRY)"
                     } else {
                         "(FIMOD_REGISTRY)"
                     };
                     let display_name = format!("{base_name} {marker}");
-                    print_registry_molds(&display_name, &entry.source, false)?;
+                    print_registry_molds(&display_name, &entry.source, "")?;
                 }
             }
         }
@@ -1266,7 +1362,7 @@ enum MoldDetail {
 
 struct MoldMatch {
     reg_name: String,
-    is_default: bool,
+    prio_label: String,
     detail: MoldDetail,
 }
 
@@ -1277,11 +1373,10 @@ fn collect_mold_matches(
 ) -> Result<Vec<MoldMatch>> {
     let sources = select_sources(cfg, registry_name)?;
 
-    let default_name = cfg.default.as_deref();
     let mut matches: Vec<MoldMatch> = Vec::new();
 
     for (reg_name, source) in sources {
-        let is_default = default_name == Some(reg_name);
+        let label = priority_label(cfg, reg_name);
         match &source.kind {
             SourceType::Local => {
                 let base = source.path.as_deref().ok_or_else(|| {
@@ -1295,7 +1390,7 @@ fn collect_mold_matches(
                 let defaults = crate::mold::parse_mold_defaults(&script);
                 matches.push(MoldMatch {
                     reg_name: reg_name.to_string(),
-                    is_default,
+                    prio_label: label,
                     detail: MoldDetail::Local {
                         script_path,
                         defaults,
@@ -1311,7 +1406,7 @@ fn collect_mold_matches(
                 };
                 matches.push(MoldMatch {
                     reg_name: reg_name.to_string(),
-                    is_default,
+                    prio_label: label,
                     detail: MoldDetail::Remote {
                         registry_url: source.url.clone().unwrap_or_default(),
                         entry,
@@ -1321,14 +1416,16 @@ fn collect_mold_matches(
         }
     }
 
-    // Default registry first, preserve original order otherwise
-    matches.sort_by_key(|m| if m.is_default { 0usize } else { 1 });
     Ok(matches)
 }
 
 fn print_mold_match(mold_name: &str, m: &MoldMatch) {
-    let default_marker = if m.is_default { " (default)" } else { "" };
-    println!("{mold_name}  [{}]{default_marker}", m.reg_name);
+    let marker = if m.prio_label.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", m.prio_label)
+    };
+    println!("{mold_name}  [{}]{marker}", m.reg_name);
     match &m.detail {
         MoldDetail::Local {
             script_path,

@@ -90,22 +90,22 @@ def transform(data, args, env, headers):
 }
 
 #[test]
-fn test_chain_mold_and_expression_conflict() {
+fn test_chain_expression_then_mold() {
     let dir = assert_fs::TempDir::new().unwrap();
-    let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
+    let input = setup_input(&dir, "data.json", r#"{"name": "World"}"#);
     let mold = setup_mold(
         &dir,
-        "id.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "greet.py",
+        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
     );
 
-    // Mixing -m and -e must be rejected by clap
+    // -e passes data through, then -m adds greeting
     assert_cmd::cargo_bin_cmd!("fimod")
         .arg("shape")
-        .args(["-i", &input, "-m", &mold, "-e", "data"])
+        .args(["-i", &input, "-e", "data", "-m", &mold])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("cannot be used with"));
+        .success()
+        .stdout(predicate::str::contains("Hello World"));
 }
 
 #[test]

@@ -245,7 +245,10 @@ fimod registry add official https://github.com/org/molds # ➕ Add GitHub regist
 fimod registry list                                      # 📋 List registries
 fimod registry show my                                   # 🔍 Show details
 fimod registry remove my                                 # 🗑️ Remove
-fimod registry set-default official                      # ⭐ Change default
+fimod registry set-default official                      # ⭐ Set default (P0)
+fimod registry set-default --clear                       # ⭐ Clear default
+fimod registry set-priority mycompany 1                  # 📌 Set priority P1
+fimod registry set-priority mycompany --clear            # 📌 Clear priority
 fimod registry build-catalog my                          # 📦 Generate catalog.toml
 fimod registry cache info                                # 📊 Show cache location and usage
 fimod registry cache clear                               # 🧹 Clear all cached catalogs and molds
@@ -272,6 +275,77 @@ Behaviour summary:
 | Default already exists | adds without changing default | adds and promotes to default |
 | Non-interactive (no TTY) | skips silently | skips silently |
 
+### Priority-based resolution
+
+When you use `@mold` (without a registry prefix), fimod searches **all** configured registries in priority order until the mold is found:
+
+| Priority | Source |
+|----------|--------|
+| P0 | `FIMOD_REGISTRY` anonymous entries (env always wins) |
+| P0 | `default` registry from `sources.toml` |
+| P1, P2, … | Registries listed in `[priority]` section |
+| — | Remaining registries (file order, after all prioritized ones) |
+
+```bash
+$ fimod registry list
+  official    [github]  github.com/org/fimod-powered       P0 (default)
+  mycompany   [http]    registry.corp.com/fimod             P1
+  internal    [local]   /home/user/molds                    P2
+```
+
+With `@registry/mold` (explicit prefix), only that specific registry is searched.
+
+#### `set-default` — set or clear the default registry (P0)
+
+```bash
+fimod registry set-default official     # Set 'official' as P0
+fimod registry set-default --clear      # Remove the P0 default
+```
+
+The default registry is always P0. If a registry was previously in `[priority]`, it is removed from there when promoted to default.
+
+#### `set-priority` — assign a priority rank
+
+```bash
+fimod registry set-priority mycompany 1    # Set mycompany to P1
+fimod registry set-priority internal 2     # Set internal to P2
+fimod registry set-priority mycompany --clear  # Remove priority
+```
+
+If the requested rank is already taken, existing entries shift up automatically:
+
+```bash
+# Before: mycompany=P1, internal=P2
+$ fimod registry set-priority newreg 1
+# After:  newreg=P1, mycompany=P2, internal=P3
+```
+
+A registry that is already default (P0) cannot be assigned a priority — use `set-default --clear` first.
+
+#### `sources.toml` format
+
+```toml
+default = "official"
+
+[priority]
+mycompany = 1
+internal = 2
+
+[sources.official]
+type = "github"
+url = "https://github.com/org/fimod-powered"
+
+[sources.mycompany]
+type = "http"
+url = "https://registry.corp.com/fimod"
+
+[sources.internal]
+type = "local"
+path = "/home/user/molds"
+```
+
+The `[priority]` section is optional. Without it, the default registry is searched first, then the rest in file order.
+
 ### `FIMOD_REGISTRY` — ephemeral registries for CI
 
 In CI/CD or ephemeral environments, use the `FIMOD_REGISTRY` environment variable instead of `fimod registry add`. Comma-separated entries, optionally named:
@@ -294,8 +368,8 @@ FIMOD_REGISTRY="ci=./molds,/opt/shared-molds" fimod s -i data.json -m @clean
 fimod registry add my ~/molds/
 
 # …then reference molds by name
-fimod s -i messy.csv -m @cleanup          # default registry
-fimod s -i messy.csv -m @my/cleanup       # named registry
+fimod s -i messy.csv -m @cleanup          # searches all registries in priority order
+fimod s -i messy.csv -m @my/cleanup       # explicit registry
 ```
 
 **Authentication** — tokens are resolved automatically, or overridden per-registry:
@@ -336,7 +410,7 @@ fimod registry add mylib https://raw.githubusercontent.com/org/repo/refs/tags/st
 ### Browsing available molds
 
 ```bash
-fimod mold list              # list molds in the default registry
+fimod mold list              # list molds in all registries
 fimod mold list official     # list molds in a specific registry
 ```
 
