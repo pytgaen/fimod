@@ -20,7 +20,6 @@ allow = [
   "Zlib",
   "Unicode-3.0",
   "CDLA-Permissive-2.0",
-  "LGPL-3.0-only",
   "BSL-1.0",
 ]
 exceptions = []

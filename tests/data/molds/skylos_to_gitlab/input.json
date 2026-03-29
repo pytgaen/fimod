@@ -1,5 +1,0 @@
-{
-    "unused_functions": [
-        {"name": "foo", "file": "src/lib.rs", "line": 10}
-    ]
-}

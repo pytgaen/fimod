@@ -72,12 +72,12 @@ def transform(data, args, env, headers):
 ### 🗂️ Mold registries
 
 Registries are named sources — local directories or remote repos — that group molds into collections.
-Reference a mold with `@name` (default registry) or `@source/name` (named registry):
+Reference a mold with `@name` (searches all registries in priority order) or `@source/name` (specific registry):
 
 ```bash
 fimod registry add my ~/molds/
 fimod s -i messy.csv -m @my/clean_csv   # resolves to ~/molds/clean_csv.py
-fimod s -i messy.csv -m @clean_csv      # same, if "my" is the default registry
+fimod s -i messy.csv -m @clean_csv      # searches P0, P1, P2… until found
 ```
 
 Config stored in `~/.config/fimod/sources.toml`. See [CLI Reference — Mold Registries](cli-reference.md#mold-registries).

@@ -12,6 +12,13 @@ use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep};
 use crate::{convert, engine, format, http, mold};
 
+/// A single pipeline step reference — either a mold path/name or an inline expression.
+#[derive(Debug, Clone)]
+pub enum ScriptRef {
+    Mold(String),
+    Expr(String),
+}
+
 /// Determine if a JSON value is "truthy" for --check mode.
 /// Falsy: null, false, 0, "", [], {}
 /// Everything else is truthy.
@@ -34,53 +41,52 @@ pub fn is_truthy(v: &serde_json::Value) -> bool {
     }
 }
 
-/// Build the list of mold steps from CLI molds or expressions.
+/// Build the list of mold steps from an ordered sequence of script references.
 ///
-/// Returns at least one step, or an error if neither -m nor -e was provided.
+/// Returns at least one step, or an error if the list is empty.
 pub fn build_scripts(
-    molds: &[String],
-    expressions: &[String],
+    refs: &[ScriptRef],
     no_cache: bool,
 ) -> Result<Vec<MoldStep>> {
-    if !expressions.is_empty() {
-        let mut steps = Vec::new();
-        for e in expressions {
-            let source = MoldSource::Inline(e.clone());
-            let display = source.to_string();
-            let base_dir = source.base_dir();
-            let script = source.load(no_cache)?;
-            steps.push(MoldStep {
-                display,
-                script,
-                defaults: mold::MoldDefaults::default(),
-                base_dir,
-            });
-        }
-        Ok(steps)
-    } else if !molds.is_empty() {
-        let mut steps = Vec::new();
-        for m in molds {
-            let source = MoldSource::from_mold_str(m, no_cache)?;
-            let is_inline = matches!(source, MoldSource::Inline(_));
-            let display = source.to_string();
-            let base_dir = source.base_dir();
-            let script = source.load(no_cache)?;
-            let defaults = if !is_inline {
-                mold::parse_mold_defaults(&script)
-            } else {
-                mold::MoldDefaults::default()
-            };
-            steps.push(MoldStep {
-                display,
-                script,
-                defaults,
-                base_dir,
-            });
-        }
-        Ok(steps)
-    } else {
-        bail!("Either -m/--mold or -e/--expression is required")
+    if refs.is_empty() {
+        bail!("Either -m/--mold or -e/--expression is required");
     }
+    let mut steps = Vec::new();
+    for r in refs {
+        match r {
+            ScriptRef::Expr(e) => {
+                let source = MoldSource::Inline(e.clone());
+                let display = source.to_string();
+                let base_dir = source.base_dir();
+                let script = source.load(no_cache)?;
+                steps.push(MoldStep {
+                    display,
+                    script,
+                    defaults: mold::MoldDefaults::default(),
+                    base_dir,
+                });
+            }
+            ScriptRef::Mold(m) => {
+                let source = MoldSource::from_mold_str(m, no_cache)?;
+                let is_inline = matches!(source, MoldSource::Inline(_));
+                let display = source.to_string();
+                let base_dir = source.base_dir();
+                let script = source.load(no_cache)?;
+                let defaults = if !is_inline {
+                    mold::parse_mold_defaults(&script)
+                } else {
+                    mold::MoldDefaults::default()
+                };
+                steps.push(MoldStep {
+                    display,
+                    script,
+                    defaults,
+                    base_dir,
+                });
+            }
+        }
+    }
+    Ok(steps)
 }
 
 /// Execute a chain of mold scripts sequentially.
@@ -752,10 +758,8 @@ pub fn build_env(env_patterns: &[String]) -> Value {
 /// Configuration for a pipeline run.
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
-    /// Mold script paths/references (mutually exclusive with `expressions`).
-    pub molds: Vec<String>,
-    /// Inline Python expressions (mutually exclusive with `molds`).
-    pub expressions: Vec<String>,
+    /// Ordered pipeline steps (molds and/or expressions, applied in order).
+    pub steps: Vec<ScriptRef>,
     /// Named arguments passed to the mold as `args["key"]`.
     pub args: Vec<(String, String)>,
     /// Environment variables exposed to the mold as `env["KEY"]`.
@@ -783,8 +787,7 @@ pub struct PipelineConfig {
 impl Default for PipelineConfig {
     fn default() -> Self {
         Self {
-            molds: Vec::new(),
-            expressions: Vec::new(),
+            steps: Vec::new(),
             args: Vec::new(),
             env_patterns: Vec::new(),
             input_format: None,
@@ -815,13 +818,13 @@ impl Default for PipelineConfig {
 /// use fimod::pipeline::{run_pipeline, PipelineConfig};
 ///
 /// let mut cfg = PipelineConfig::default();
-/// cfg.expressions = vec!["data['name'].upper()".into()];
+/// cfg.steps = vec![ScriptRef::Expr("data['name'].upper()".into())];
 ///
 /// let result = run_pipeline(Some("data.json"), &cfg)?;
 /// println!("{}", result.value);
 /// ```
 pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result<PipelineResult> {
-    let scripts = build_scripts(&config.molds, &config.expressions, config.no_cache)?;
+    let scripts = build_scripts(&config.steps, config.no_cache)?;
     let env_value = build_env(&config.env_patterns);
 
     let first_defaults = &scripts[0].defaults;
