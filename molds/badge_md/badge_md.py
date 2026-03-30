@@ -10,7 +10,7 @@ Usage:
 # fimod: arg=status  Badge status text (overrides input)
 # fimod: arg=color   Badge color (overrides input)
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     ctx = {
         "label": args.get("label") or data.get("label", "badge"),
         "status": args.get("status") or data.get("status", "unknown"),

@@ -10,7 +10,7 @@ Usage:
 # fimod: input-format=lines
 # fimod: output-format=json
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         regex_arg = args.get("regex", "")
         fields_arg = args.get("fields", "")

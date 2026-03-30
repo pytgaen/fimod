@@ -11,8 +11,8 @@ use fimod::pipeline::{
     path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
     HttpOptions,
 };
-use fimod::{convert, format, http, registry, test_runner};
 use fimod::MONTY_VERSION;
+use fimod::{convert, format, http, registry, test_runner};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
@@ -36,9 +36,8 @@ enum MsgLevel {
 /// Transform structured data with embedded Python. No system Python required.
 #[derive(Parser, Debug)]
 #[command(name = "fimod", about, long_about)]
-// keep "0.0.8" in sync with MONTY_VERSION const and the tag in Cargo.toml
-#[cfg_attr(feature = "reqwest", command(version = concat!(env!("CARGO_PKG_VERSION"), " standard (Monty engine: v0.0.8)")))]
-#[cfg_attr(not(feature = "reqwest"), command(version = concat!(env!("CARGO_PKG_VERSION"), " slim (Monty engine: v0.0.8)")))]
+#[cfg_attr(feature = "reqwest", command(version = concat!(env!("CARGO_PKG_VERSION"), " standard (Monty engine: v", env!("MONTY_VERSION"), ")")))]
+#[cfg_attr(not(feature = "reqwest"), command(version = concat!(env!("CARGO_PKG_VERSION"), " slim (Monty engine: v", env!("MONTY_VERSION"), ")")))]
 #[command(after_help = "\
 EXAMPLES:
   fimod shape -i data.json -e 'data[\"name\"].upper()'
@@ -515,7 +514,6 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             timeout: shape.timeout,
             no_follow: shape.no_follow,
         };
-
 
         // Helper: fetch bytes from a URL or read from a file
         let fetch_bytes = |path: &str| -> Result<Vec<u8>> {

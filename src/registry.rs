@@ -618,15 +618,12 @@ fn remote_catalog_entry(
         .molds
         .get(mold_name)
         .ok_or_else(|| anyhow::anyhow!("Mold '{mold_name}' not found in catalog: {catalog_url}"))?;
-    let path = entry
-        .path
-        .clone()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Mold '{mold_name}' has no 'path' field in catalog: {catalog_url}\n\
+    let path = entry.path.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Mold '{mold_name}' has no 'path' field in catalog: {catalog_url}\n\
                  Hint: regenerate the catalog with 'fimod registry build-catalog'"
-            )
-        })?;
+        )
+    })?;
     Ok(Some((path, entry.hash.clone())))
 }
 
@@ -1043,14 +1040,13 @@ fn print_registry_molds(name: &str, source: &Source, is_default: bool) -> Result
             }
         }
         SourceType::Github | SourceType::Gitlab | SourceType::Http => {
-            let catalog = fetch_catalog(source, false)?
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Failed to fetch catalog for registry '{name}'. \
+            let catalog = fetch_catalog(source, false)?.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Failed to fetch catalog for registry '{name}'. \
                          Hint: push a catalog.toml generated with \
                          'fimod registry build-catalog'."
-                    )
-                })?;
+                )
+            })?;
             if catalog.molds.is_empty() {
                 println!("  (no molds in catalog)");
             } else {
@@ -1543,7 +1539,9 @@ pub fn setup(yes: bool, force: bool) -> Result<()> {
     let set_as_default = !has_default || force;
 
     if has_default && !force {
-        println!("Note: a default registry is already set; adding example registry without changing it.");
+        println!(
+            "Note: a default registry is already set; adding example registry without changing it."
+        );
         println!("      Use --force to promote it to default.");
     }
 

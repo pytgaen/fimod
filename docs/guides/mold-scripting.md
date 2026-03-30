@@ -4,9 +4,18 @@ Mold scripts are written in the Python subset supported by [Monty](https://githu
 
 ## 🎯 The `transform` function
 
-Your script must define a function named `transform` that accepts `data` and returns the result:
+Your script must define a function named `transform` that receives `data` and returns the result. Only declare the parameters you need — `args`, `env`, and `headers` are passed as keyword arguments:
 
 ```python
+# Minimal — data only
+def transform(data, **_):
+    return [item for item in data if item["active"]]
+
+# With args
+def transform(data, args, **_):
+    return [item for item in data if item["age"] > int(args["min_age"])]
+
+# Full signature — all parameters
 def transform(data, args, env, headers):
     # process data
     return data
@@ -342,6 +351,6 @@ When no `--arg` is passed, `args` is an empty dict `{}`.
 
 ## ❌ Monty limitations
 
-- [ ] `import` — no stdlib, no modules
+- [ ] `import` — only `re`, `math`, `datetime`, `json`, `sys`, `typing`, `asyncio`, `pathlib`, `os` (partial)
 - [ ] `del` statement
 - [ ] File I/O, network, system calls

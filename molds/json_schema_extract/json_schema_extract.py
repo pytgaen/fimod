@@ -23,5 +23,5 @@ def extract_type(val):
     else:
         return "any"
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     return extract_type(data)

@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: arg=field  Field name to group by
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         field = args["field"]
     except KeyError:

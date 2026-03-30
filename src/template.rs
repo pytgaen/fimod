@@ -89,7 +89,10 @@ fn tpl_render_str(args: Vec<MontyObject>) -> Result<MontyObject> {
 
 /// `tpl_render_from_mold(path, ctx, auto_escape=False)` — Load a template file relative
 /// to the mold's directory and render it.
-fn tpl_render_from_mold(args: Vec<MontyObject>, mold_base_dir: Option<&str>) -> Result<MontyObject> {
+fn tpl_render_from_mold(
+    args: Vec<MontyObject>,
+    mold_base_dir: Option<&str>,
+) -> Result<MontyObject> {
     if args.len() < 2 || args.len() > 3 {
         bail!(
             "tpl_render_from_mold() takes 2-3 arguments (path, ctx, auto_escape=False), got {}",
@@ -109,22 +112,21 @@ fn tpl_render_from_mold(args: Vec<MontyObject>, mold_base_dir: Option<&str>) -> 
     };
 
     // Security: resolve and check the path stays under base_dir
-    let base = Path::new(base_dir).canonicalize().map_err(|e| {
-        anyhow::anyhow!("Cannot resolve mold base directory '{base_dir}': {e}")
-    })?;
+    let base = Path::new(base_dir)
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Cannot resolve mold base directory '{base_dir}': {e}"))?;
     let target = base.join(&rel_path);
-    let target_canon = target.canonicalize().map_err(|e| {
-        anyhow::anyhow!("Cannot resolve template path '{}': {e}", target.display())
-    })?;
+    let target_canon = target
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Cannot resolve template path '{}': {e}", target.display()))?;
     if !target_canon.starts_with(&base) {
         bail!(
             "tpl_render_from_mold() path traversal denied: '{rel_path}' is outside the mold directory"
         );
     }
 
-    let template_str = std::fs::read_to_string(&target_canon).map_err(|e| {
-        anyhow::anyhow!("Cannot read template '{}': {e}", target_canon.display())
-    })?;
+    let template_str = std::fs::read_to_string(&target_canon)
+        .map_err(|e| anyhow::anyhow!("Cannot read template '{}': {e}", target_canon.display()))?;
 
     let (ctx, auto_escape) = parse_render_args(&args, "tpl_render_from_mold")?;
     render(&template_str, ctx, auto_escape)

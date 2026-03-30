@@ -75,7 +75,11 @@ esac
 
 # ── Resolve version ─────────────────────────────────────────────────
 
-if [ -n "${FIMOD_VERSION:-}" ]; then
+if [ "${FIMOD_SKIP_DOWNLOAD:-}" = "1" ]; then
+  # Binary already installed — skip version resolution entirely
+  VERSION="(skip)"
+  DOWNLOAD_TAG=""
+elif [ -n "${FIMOD_VERSION:-}" ]; then
   VERSION="$FIMOD_VERSION"
   DOWNLOAD_TAG="$VERSION"
 else

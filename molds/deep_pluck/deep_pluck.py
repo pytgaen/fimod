@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: arg=paths  Comma-separated dotpaths to extract (e.g. user.name,user.email)
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         paths_arg = args["paths"]
     except KeyError:

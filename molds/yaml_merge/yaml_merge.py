@@ -7,7 +7,7 @@ Usage:
 # fimod: output-format=yaml
 # fimod: arg=set  Comma-separated list of path=value assignments
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         set_arg = args.get("set", "")
     except NameError:

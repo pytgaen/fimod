@@ -156,7 +156,7 @@ def convert_dependency(name, req, target):
     return None
 
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     """
     Convert Poetry pyproject.toml to PEP 621 / uv / Poetry 2.0 format.
     """

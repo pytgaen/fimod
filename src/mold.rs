@@ -224,7 +224,10 @@ fn load_url_with_cache(
             if let Ok(cached_hash) = fs::read_to_string(&cache_hash_path) {
                 if cached_hash.trim() == expected_hash && cache_script_path.is_file() {
                     return fs::read_to_string(&cache_script_path).with_context(|| {
-                        format!("Failed to read cached mold: {}", cache_script_path.display())
+                        format!(
+                            "Failed to read cached mold: {}",
+                            cache_script_path.display()
+                        )
                     });
                 }
             }

@@ -11,11 +11,11 @@ pub mod http;
 pub mod iter_helpers;
 pub mod mold;
 pub mod msg;
+pub mod pipeline;
 pub mod regex;
 pub mod registry;
 pub mod template;
 pub mod test_runner;
-pub mod pipeline;
 
-/// Monty engine version — keep in sync with the `tag` in Cargo.toml when upgrading monty.
-pub const MONTY_VERSION: &str = "0.0.8";
+/// Monty engine version — extracted from the `tag` in Cargo.toml by build.rs.
+pub const MONTY_VERSION: &str = env!("MONTY_VERSION");

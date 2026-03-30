@@ -7,7 +7,7 @@ Usage:
 # fimod: arg=field    Field name containing the tags string
 # fimod: arg=sep      Separator regex (default: comma/semicolon with optional space)
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         field = args["field"]
     except KeyError:

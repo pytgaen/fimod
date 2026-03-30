@@ -17,7 +17,7 @@ def _flatten(d, result, parent_key='', sep='.'):
             # Preserves empty dicts {}, empty lists [], None, and primitives
             result[new_key] = v
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     if not isinstance(data, dict):
         return data
     result = {}

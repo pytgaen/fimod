@@ -9,7 +9,7 @@ Usage:
 # fimod: output-format=txt
 # fimod: arg=title  Changelog title (default: Changelog)
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     title = args.get("title", "Changelog")
 
     # Group by date

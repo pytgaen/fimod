@@ -7,7 +7,7 @@ Usage:
   fimod s -i users.json -m @jq_compat --arg select=active=true
 """
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     if not args:
         return data
 
