@@ -475,7 +475,10 @@ pub fn process_single_input(
     }
 
     // If set_input_format() or set_output_format() was called (non-raw), it overrides the output format
-    let effective_output_format = result.format_override.as_deref().or(effective_output_format);
+    let effective_output_format = result
+        .format_override
+        .as_deref()
+        .or(effective_output_format);
 
     // Handle set_exit and --check
     if let Some(code) = result.exit_code {
@@ -863,8 +866,8 @@ pub fn parse_data(content: &str, format_name: &str) -> Result<Value> {
 
 /// Parse a file into a `serde_json::Value`, auto-detecting the format from the extension.
 pub fn parse_file(path: &str) -> Result<Value> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read file: {path}"))?;
+    let content =
+        fs::read_to_string(path).with_context(|| format!("Failed to read file: {path}"))?;
     let fmt = format::resolve_format(None, Some(path), DataFormat::Json)?;
     if fmt == DataFormat::Csv {
         let (val, _) = format::parse_csv(&content, &CsvOptions::default())?;

@@ -50,7 +50,7 @@ src/
 
 **Key design decisions:**
 - All parsing/serialization stays in Rust (serde). Monty only manipulates Python dicts — this is a security boundary.
-- Mold scripts must define a `transform(data, args, env, headers)` function. Inline expressions (`-e`) are auto-wrapped into this form.
+- Mold scripts must define a `transform(data, ...)` function. `args`, `env`, and `headers` are passed as keyword arguments, so molds only need to declare what they use (e.g. `def transform(data, args, **_):`). Inline expressions (`-e`) are auto-wrapped into this form.
 - `--arg name=value` populates the `args` parameter — explicit access via `args["key"]`.
 - `--env PATTERN` populates the `env` parameter with filtered environment variables (glob patterns: `*`, `PREFIX_*`, `EXACT`, comma-separated). Without `--env`, `env` is `{}`.
 - CSV column names are passed as the `headers` parameter (list of strings, or `None` for non-CSV).

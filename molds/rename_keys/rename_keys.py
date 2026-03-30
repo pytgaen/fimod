@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: arg=mapping  Comma-separated list of old_key:new_key pairs
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         mapping_arg = args.get("mapping", "")
     except NameError:

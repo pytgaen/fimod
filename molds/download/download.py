@@ -8,7 +8,7 @@ Usage:
 # fimod: input-format=http
 # fimod: arg=out  Output filename (defaults to the last path segment of the URL)
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     url = args.get("url", "") or data.get("url", "")
     filename = args.get("out") or url.split("?")[0].rstrip("/").split("/")[-1]
     set_output_format("raw")

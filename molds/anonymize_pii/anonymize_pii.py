@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: arg=fields  Comma-separated list of fields to anonymize
 
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     try:
         fields_arg = args["fields"]
     except KeyError:

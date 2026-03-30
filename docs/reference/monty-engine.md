@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.8) as its execution engine for mold scripts.
+Fimod uses Monty (v0.0.9) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -30,6 +30,8 @@ Fimod uses Monty (v0.0.8) as its execution engine for mold scripts.
 | Bytes | `b"..."` byte strings, comparison operators |
 | Long integers | Arbitrary precision |
 | Augmented subscript | `data["count"] += 1`, `items[0] *= 2` |
+| Nested subscript assignment | `data[0][1] = x`, `matrix[i][j] = v` |
+| Named keyword args | `str.split(sep=",")`, `max(items, key=...)` |
 | Set/frozenset operators | `s1 \| s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
 
@@ -46,7 +48,7 @@ Fimod uses Monty (v0.0.8) as its execution engine for mold scripts.
 
 ### Built-in Functions
 
-Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `sorted`, `reversed`, `sum`, `min`, `max`, `abs`, `round`, `isinstance`, `getattr`, `type`, `id`, `repr`, `str`, `int`, `float`, `bool`, `list`, `dict`, `set`, `tuple`, `print`, `hash`, etc.
+Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `sorted`, `reversed`, `sum`, `min`, `max` (with `key=` and `default=`), `abs`, `round`, `isinstance`, `getattr`, `type`, `id`, `repr`, `str`, `int`, `float`, `bool`, `list`, `dict`, `set`, `tuple`, `print`, `hash`, etc.
 
 **Not available**: `open`, `exec`, `eval`, `compile`, `__import__`, `input`.
 
@@ -61,8 +63,8 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `os` | Partial (getenv only — see Security section) |
 | `re` | Supported — compile, search, match, fullmatch, findall, sub, split, finditer, escape; flags: IGNORECASE, MULTILINE, DOTALL, ASCII |
 | `math` | Supported — ~50 functions (floor, ceil, sqrt, log, sin, cos, factorial, gcd, lcm, comb…) + constants (pi, e, tau, inf, nan) |
-| `datetime` | Planned |
-| `json` | Planned |
+| `datetime` | Supported — `date`, `datetime`, `timedelta`, `timezone`; arithmetic, `.isoformat()`, `.strftime()`, `.today()`, `.now()`, `.utcnow()` |
+| `json` | Supported — `json.dumps()`, `json.loads()`. Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template |
 
 ## External Function Mechanism
 
@@ -171,13 +173,15 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 3. **You can use closures and lambdas** — functional patterns work
 4. **You can use `import re`** — native regex module available; `re.search`, `re.sub`, `re.findall`, etc.
 5. **You can use `import math`** — `math.floor`, `math.sqrt`, `math.factorial`, `math.pi`, etc.
-6. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
-7. **You cannot read files** — `Path(...)` calls return `None` in fimod
-8. **You cannot access env vars via os** — `os.getenv(...)` returns `None`; use the `env` parameter with `--env PATTERN` instead
-9. **You cannot import pip packages** — no `requests`, `pandas`, etc.
-10. **You cannot define classes** — use dicts and functions instead
-11. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, data out via `return`
-12. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
+6. **You can use `import datetime`** — `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`. Datetime objects returned in the output are automatically serialized as ISO 8601 strings
+7. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
+8. **You only need to declare the parameters you use** — `def transform(data, args, **_):` is valid; fimod passes `args`, `env`, and `headers` as keyword arguments
+9. **You cannot read files** — `Path(...)` calls return `None` in fimod
+10. **You cannot access env vars via os** — `os.getenv(...)` returns `None`; use the `env` parameter with `--env PATTERN` instead
+11. **You cannot import pip packages** — no `requests`, `pandas`, etc.
+12. **You cannot define classes** — use dicts and functions instead
+13. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, data out via `return`
+14. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
 
 ## Interactive REPL
 
@@ -185,7 +189,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)
+Monty REPL v0.0.9 — fimod v0.2.0 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

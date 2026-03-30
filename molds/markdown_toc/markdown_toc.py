@@ -7,7 +7,7 @@ Usage:
 # fimod: input-format=lines
 # fimod: output-format=json
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     toc = []
     for line in data:
         match = re_match(r"^(#+)\s+(.+)", line)

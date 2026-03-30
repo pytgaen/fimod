@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: arg=required  Comma-separated list of dotpaths that must be present (or set FIMOD_REQUIRED_FIELDS env var)
 
-def transform(data, args, env, headers):
+def transform(data, args, env, **_):
     required_arg = args.get("required", "") or env.get("FIMOD_REQUIRED_FIELDS", "")
     if not required_arg:
         return data

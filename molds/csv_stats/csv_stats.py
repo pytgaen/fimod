@@ -7,7 +7,7 @@ Usage:
 # fimod: input-format=csv
 # fimod: output-format=json
 
-def transform(data, args, env, headers):
+def transform(data, headers=None, **_):
     if not isinstance(data, list) or len(data) == 0:
         return {}
 

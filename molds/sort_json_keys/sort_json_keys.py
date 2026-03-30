@@ -16,5 +16,5 @@ def sort_keys_recursive(d):
     else:
         return d
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     return sort_keys_recursive(data)

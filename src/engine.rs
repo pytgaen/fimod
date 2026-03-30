@@ -142,7 +142,7 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
     ];
     let inputs = vec![data, args_dict, env_obj, headers_obj];
 
-    let full_script = format!("{script}\ntransform(data, args, env, headers)");
+    let full_script = format!("{script}\ntransform(data, args=args, env=env, headers=headers)");
 
     if opts.debug {
         eprintln!("[debug] script:");
@@ -193,10 +193,9 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
             RunProgress::FunctionCall(mut call) => {
                 let function_name = call.function_name.clone();
                 let args = std::mem::take(&mut call.args);
-                let result = dispatch_external(&function_name, args, ctx)
-                    .map_err(|e| {
-                        anyhow::anyhow!("External function '{function_name}' failed: {e}")
-                    })?;
+                let result = dispatch_external(&function_name, args, ctx).map_err(|e| {
+                    anyhow::anyhow!("External function '{function_name}' failed: {e}")
+                })?;
                 let mut sp2 = StderrPrint;
                 progress = call
                     .resume(

@@ -6,7 +6,7 @@ Usage:
 """
 # fimod: output-format=txt
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     if not isinstance(data, dict):
         return data
 

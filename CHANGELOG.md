@@ -2,12 +2,29 @@
 
 All notable changes to fimod are documented here.
 
-## [0.2.0] — 2026-03-29
+## [0.2.0] — 2026-04-02
+
+### Highlights
+
+- **⬆️ Monty v0.0.9** — `import datetime`, `import json`, named keyword args (`key=`), nested subscript assignment. Date/DateTime/TimeDelta are auto-serialized as ISO 8601 strings in the output.
+- **🧩 Jinja2 templating** — new `tpl_render_str` and `tpl_render_from_mold` built-ins for data→text generation via MiniJinja (inline strings or `.j2` files).
+- **⚡ Mold cache** — registry molds are cached locally with ETag and content hash validation. No re-download on repeat runs.
 
 ### Features
 
+- **monty:** upgrade to Monty v0.0.9 — `datetime`, `json` modules, named keyword args, nested subscript assignment
+- **convert:** serialize Date, DateTime, TimeDelta, Timezone as ISO 8601 strings
 - **template:** add Jinja2 templating engine (tpl_render_str, tpl_render_from_mold) — data→text generation via MiniJinja, inline strings or .j2 files, path traversal security, badge_md and git_changelog demo molds
 - **cache:** add registry mold cache with ETag and content hash validation
+- **engine:** pass `args`, `env`, `headers` as keyword arguments — molds only need to declare what they use (`def transform(data, args, **_):`)
+
+### Changed
+
+- **molds:** update all bundled mold signatures to use `**_` kwargs pattern
+- **docs:** update monty-engine.md and mold-scripting.md for v0.0.9 capabilities
+- **build:** extract MONTY_VERSION from Cargo.toml via build.rs (no more manual sync)
+- **install:** migrate 'official' registry to 'examples' on upgrade
+- **install:** skip version fetch when `FIMOD_SKIP_DOWNLOAD=1`
 
 ### Bug Fixes
 

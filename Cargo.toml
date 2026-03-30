@@ -15,7 +15,7 @@ full = ["reqwest"]
 slim = []
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.8" }
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.9" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }

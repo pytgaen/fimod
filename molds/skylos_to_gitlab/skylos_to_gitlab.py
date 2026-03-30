@@ -10,7 +10,7 @@ In a GitLab CI pipeline:
 """
 # fimod: output-format=json
 
-def transform(data, args, env, headers):
+def transform(data, **_):
     """
     Convert duriantaco/skylos JSON report to GitLab Code Quality (Code Climate) format.
 

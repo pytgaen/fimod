@@ -92,6 +92,54 @@ pub fn monty_to_json(obj: MontyObject) -> Result<Value> {
             }
             Ok(Value::Object(map))
         }
+        MontyObject::Date(d) => Ok(Value::String(format!(
+            "{:04}-{:02}-{:02}",
+            d.year, d.month, d.day
+        ))),
+        MontyObject::DateTime(dt) => {
+            let base = format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+                dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second
+            );
+            let with_us = if dt.microsecond > 0 {
+                format!("{base}.{:06}", dt.microsecond)
+            } else {
+                base
+            };
+            let with_tz = match dt.offset_seconds {
+                Some(0) => format!("{with_us}+00:00"),
+                Some(offset) => {
+                    let sign = if offset < 0 { '-' } else { '+' };
+                    let abs = offset.unsigned_abs();
+                    format!("{with_us}{sign}{:02}:{:02}", abs / 3600, (abs % 3600) / 60)
+                }
+                None => with_us,
+            };
+            Ok(Value::String(with_tz))
+        }
+        MontyObject::TimeDelta(td) => {
+            let total_seconds = td.days as i64 * 86400 + td.seconds as i64;
+            let us = if td.microseconds != 0 {
+                format!(".{:06}", td.microseconds.unsigned_abs())
+            } else {
+                String::new()
+            };
+            Ok(Value::String(format!("P{total_seconds}{us}S")))
+        }
+        MontyObject::TimeZone(tz) => {
+            if let Some(ref name) = tz.name {
+                Ok(Value::String(name.clone()))
+            } else {
+                let offset = tz.offset_seconds;
+                let sign = if offset < 0 { '-' } else { '+' };
+                let abs = offset.unsigned_abs();
+                Ok(Value::String(format!(
+                    "UTC{sign}{:02}:{:02}",
+                    abs / 3600,
+                    (abs % 3600) / 60
+                )))
+            }
+        }
         other => bail!("Cannot convert MontyObject variant to JSON: {other:?}"),
     }
 }

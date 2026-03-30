@@ -15,7 +15,7 @@ Without it, returns the bare tag (e.g. v1.2.3).
 
 args: dict[str, str]  # noqa: F821 - injected by fimod --arg
 
-def transform(data, args, env, headers):
+def transform(data, args, headers=None, **_):
     location = data["headers"].get("location", "")
     tag = location.rstrip("/").split("/")[-1]
     version = tag.lstrip("v")
