@@ -9,7 +9,7 @@
     ```
 
     Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
-    The script installs the binary then prompts you to run `fimod registry setup` to configure the official mold catalog.
+    The script installs the binary then prompts you to run `fimod registry setup` to configure the examples mold catalog.
 
     **Options** (environment variables):
 
@@ -51,7 +51,7 @@
         $env:PATH = "$BinDir;$env:PATH"
     }
 
-    # 🗂️ 4. Set up the official mold catalog
+    # 🗂️ 4. Set up the examples mold catalog
     fimod registry setup
     ```
 

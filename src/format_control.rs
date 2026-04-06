@@ -120,7 +120,7 @@ fn dispatch_set_output_format(
 /// set_output_file(path) — stores the output file path in the mutex, returns None.
 ///
 /// When set, the final output is written to this file instead of stdout or the -o path.
-/// Useful in molds that determine the output filename dynamically (e.g. @download).
+/// Useful in molds that determine the output filename dynamically.
 fn dispatch_set_output_file(
     args: Vec<MontyObject>,
     output_file: &Arc<Mutex<Option<String>>>,

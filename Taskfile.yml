@@ -102,7 +102,7 @@ tasks:
 
   doc:vhs:build:
     desc: Build the custom VHS Docker image with required dependencies
-    dir: ressources/vhs
+    dir: resources/vhs
     cmds:
       - docker build -t fimod-vhs .
 
@@ -113,13 +113,13 @@ tasks:
         - TAPE
     deps:
       - doc:vhs:build
-    dir: ressources/vhs
+    dir: resources/vhs
     cmds:
       - docker run --rm -v ${PWD}:/vhs -v "$(which fimod)":/usr/local/bin/fimod:ro fimod-vhs "{{.TAPE}}"
 
   doc:vhs:all:
-    desc: Generate VHS GIFs for all tapes in ressources/vhs
-    dir: ressources/vhs
+    desc: Generate VHS GIFs for all tapes in resources/vhs
+    dir: resources/vhs
     cmds:
       - for: sources
         task: doc:vhs

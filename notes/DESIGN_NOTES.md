@@ -149,7 +149,7 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 - Auto-token detection for GitHub (`GITHUB_TOKEN`) and GitLab (`GITLAB_TOKEN`).
 - Remote registries publish a `catalog.toml` for discovery.
 - `fimod registry setup` handles first-run onboarding.
-- Subcommands: `list`, `add`, `show`, `remove`, `set-default`, `build-catalog`, `setup`.
+- Subcommands: `list`, `add`, `show`, `remove`, `set-priority`, `build-catalog`, `setup`.
 
 ### Mold test runner
 
@@ -165,7 +165,7 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 
 ### Shell completions
 
-`--completions <SHELL>` (bash, zsh, fish, etc.) generates shell completion scripts via `clap_complete` and exits immediately.
+Dynamic shell completions via `clap_complete` `CompleteEnv`. When the `COMPLETE=<shell>` env var is set, the binary generates a shell-specific completion script and exits. The `fimod completions <shell>` subcommand prints the activation instruction. Custom `ArgValueCompleter`s provide dynamic completion for `--input/output-format` (format names), `-m @<TAB>` (registry mold names), and registry source name arguments.
 
 ### Optional subcommand
 

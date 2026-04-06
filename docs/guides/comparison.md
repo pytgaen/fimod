@@ -66,4 +66,4 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **Reusable scripts** | ❌ | ❌ | yes | 🟢 mold scripts + registry |
 | **Remote scripts** | ❌ | ❌ | ❌ | 🟢 `-m https://...` |
 | **HTTP input** | ❌ | ❌ | `requests` + boilerplate | 🟢 `-i https://...` (replaces curl) |
-| **Test runner** | ❌ | ❌ | pytest | 🟢 `fimod test mold.py tests/` |
+| **Test runner** | ❌ | ❌ | pytest | 🟢 `fimod mold test mold.py tests/` |

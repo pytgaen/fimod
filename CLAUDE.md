@@ -58,8 +58,8 @@ src/
 - `--debug` outputs to stderr with `[debug]` prefix; in debug mode Monty's print() also goes to stderr via custom `StderrPrint` (implements `PrintWriter`).
 - `--in-place` rewrites the input file; output format auto-detection uses the input path.
 - `--csv-output-delimiter` is separate from `--csv-delimiter` via `CsvOptions::effective_output_delimiter()`.
-- Shell completions use `clap_complete`; `--completions <SHELL>` generates and exits early.
-- CLI uses `Option<Commands>` for subcommands: `None` = shape mode, `Some(Registry{..})` = registry management (list/add/show/remove/set-default/build-catalog/setup), `Some(Mold{..})` = mold browsing/testing.
+- Dynamic shell completions use `clap_complete` `CompleteEnv` (activated via `COMPLETE=<shell>` env var). `fimod completions <shell>` prints activation instructions. Custom completers provide contextual completion for format names, `@mold` references, and registry source names.
+- CLI uses `Option<Commands>` for subcommands: `None` = shape mode, `Some(Registry{..})` = registry management (list/add/show/remove/set-priority/build-catalog/setup), `Some(Mold{..})` = mold browsing/testing.
 - Mold description is extracted from the module-level docstring (`"""..."""`) by `parse_mold_defaults()` into `MoldDefaults.docs`, used by `fimod mold list` (local scan) and `catalog.toml` (remote registries). `# fimod: description=` is no longer supported.
 - `--output-format raw` short-circuits the entire transform pipeline (no mold allowed): fetches URL bytes directly or reads a file as binary and writes to `-o`. `set_output_format("raw")` from within a mold triggers the same binary pass-through but requires `--input-format http` to have populated `http_raw_bytes`.
 - `DataFormat::Txt` serializes `Value::String` as a bare string (no JSON quotes); non-strings fall back to compact JSON. Use `--output-format txt` when piping a mold's string output to another command or to `-i`.

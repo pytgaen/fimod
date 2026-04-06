@@ -1,6 +1,6 @@
 [package]
 name = "fimod"
-version = "0.2.0"
+version = "0.3.0-rc.1"
 edition = "2021"
 description = "fimod - the data shaper CLI. Transform structured data with embedded Python, no install required."
 license = "Apache-2.0"
@@ -9,19 +9,21 @@ homepage = "https://pytgaen.github.io/fimod"
 documentation = "https://pytgaen.github.io/fimod"
 categories = ["command-line-utilities", "development-tools"]
 keywords = ["cli", "data-shaper", "data-transformation", "json", "yaml"]
+rust-version = "1.75"
+
 [features]
 default = ["reqwest"]
 full = ["reqwest"]
 slim = []
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.9" }
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.11" }
 clap = { version = "4", features = ["derive"] }
-clap_complete = "4"
+clap_complete = { version = "4", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde_norway = "0.9"
+serde-saphyr = "0.0.23"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "0.8", features = ["indexmap"] }
 csv = "1.4"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }

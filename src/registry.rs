@@ -9,6 +9,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::mold::MoldSource;
 
+/// Prompt the user with a yes/no question. Returns `false` in non-interactive contexts.
+/// `default_yes` controls the default when the user presses Enter without typing.
+fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
+    use std::io::{IsTerminal, Write};
+    if !std::io::stdin().is_terminal() {
+        return Ok(false);
+    }
+    let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
+    print!("{prompt} {hint} ");
+    std::io::stdout().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    let answer = answer.trim().to_lowercase();
+    if answer.is_empty() {
+        Ok(default_yes)
+    } else {
+        Ok(answer == "y" || answer == "yes")
+    }
+}
+
 // ── config path ───────────────────────────────────────────────────────────────
 
 fn config_path() -> Result<PathBuf> {
@@ -77,7 +97,9 @@ pub struct Source {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct SourcesConfig {
-    pub default: Option<String>,
+    /// Legacy field — migrated to `priority[name] = 0` on load. Kept for deserialization compat.
+    #[serde(default, skip_serializing)]
+    default: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub priority: BTreeMap<String, u32>,
     #[serde(default)]
@@ -93,8 +115,18 @@ fn load_config() -> Result<SourcesConfig> {
     }
     let content = fs::read_to_string(&path)
         .with_context(|| format!("Failed to read registry: {}", path.display()))?;
-    toml::from_str(&content)
-        .with_context(|| format!("Failed to parse registry: {}", path.display()))
+    let mut cfg: SourcesConfig = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse registry: {}", path.display()))?;
+
+    // Migrate legacy `default = "name"` → `priority.name = 0`
+    if let Some(name) = cfg.default.take() {
+        if cfg.sources.contains_key(&name) && !cfg.priority.contains_key(&name) {
+            cfg.priority.insert(name, 0);
+        }
+        save_config(&cfg)?;
+    }
+
+    Ok(cfg)
 }
 
 fn save_config(cfg: &SourcesConfig) -> Result<()> {
@@ -119,11 +151,7 @@ fn ordered_sources(cfg: &SourcesConfig) -> Vec<(&str, &Source, Option<u32>)> {
     let mut ranked: Vec<(&str, &Source, Option<u32>)> = Vec::new();
 
     for (name, source) in &cfg.sources {
-        let rank = if cfg.default.as_deref() == Some(name.as_str()) {
-            Some(0)
-        } else {
-            cfg.priority.get(name).copied()
-        };
+        let rank = cfg.priority.get(name).copied();
         ranked.push((name.as_str(), source, rank));
     }
 
@@ -140,9 +168,7 @@ fn ordered_sources(cfg: &SourcesConfig) -> Vec<(&str, &Source, Option<u32>)> {
 
 /// Format a priority label for display.
 fn priority_label(cfg: &SourcesConfig, name: &str) -> String {
-    if cfg.default.as_deref() == Some(name) {
-        "P0 (default)".to_string()
-    } else if let Some(&p) = cfg.priority.get(name) {
+    if let Some(&p) = cfg.priority.get(name) {
         format!("P{p}")
     } else {
         String::new()
@@ -152,7 +178,7 @@ fn priority_label(cfg: &SourcesConfig, name: &str) -> String {
 // ── registry commands ─────────────────────────────────────────────────────────
 
 /// Add a named source (local directory or remote URL).
-pub fn add(name: &str, location: &str, token_env: Option<&str>, set_default: bool) -> Result<()> {
+pub fn add(name: &str, location: &str, token_env: Option<&str>) -> Result<()> {
     let mut cfg = load_config()?;
 
     if cfg.sources.contains_key(name) {
@@ -161,6 +187,15 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>, set_default: boo
 
     let source = if location.starts_with("http://") || location.starts_with("https://") {
         let kind = SourceType::detect_from_url(location);
+        if let Some((existing_name, _)) = cfg
+            .sources
+            .iter()
+            .find(|(_, s)| s.url.as_deref() == Some(location))
+        {
+            bail!(
+                "URL already registered as '{existing_name}' (use 'fimod registry remove {existing_name}' first)"
+            );
+        }
         Source {
             kind,
             path: None,
@@ -173,9 +208,19 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>, set_default: boo
         if !abs.is_dir() {
             bail!("Local registry must be a directory: {}", abs.display());
         }
+        let abs_str = abs.to_string_lossy();
+        if let Some((existing_name, _)) = cfg
+            .sources
+            .iter()
+            .find(|(_, s)| s.path.as_deref() == Some(abs_str.as_ref()))
+        {
+            bail!(
+                "Path already registered as '{existing_name}' (use 'fimod registry remove {existing_name}' first)"
+            );
+        }
         Source {
             kind: SourceType::Local,
-            path: Some(abs.to_string_lossy().into_owned()),
+            path: Some(abs_str.into_owned()),
             url: None,
             token_env: None,
         }
@@ -188,16 +233,8 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>, set_default: boo
         .unwrap_or_else(|| location.to_string());
     cfg.sources.insert(name.to_string(), source);
 
-    let is_first = cfg.default.is_none();
-    if set_default || is_first {
-        cfg.default = Some(name.to_string());
-    }
-
     save_config(&cfg)?;
     println!("Added registry '{}' → {}", name, &location_display);
-    if set_default || is_first {
-        println!("Set '{name}' as default registry");
-    }
     Ok(())
 }
 
@@ -206,10 +243,6 @@ pub fn remove(name: &str) -> Result<()> {
     let mut cfg = load_config()?;
     if cfg.sources.remove(name).is_none() {
         bail!("Registry '{name}' not found");
-    }
-    if cfg.default.as_deref() == Some(name) {
-        cfg.default = None;
-        eprintln!("warning: removed the default registry; use 'fimod registry set-default <name>'");
     }
     cfg.priority.remove(name);
     save_config(&cfg)?;
@@ -230,7 +263,6 @@ pub fn list(output_format: &str) -> Result<()> {
             location: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             priority: Option<u32>,
-            default: bool,
             #[serde(skip_serializing_if = "std::ops::Not::not")]
             from_env: bool,
         }
@@ -245,7 +277,6 @@ pub fn list(output_format: &str) -> Result<()> {
                     .or(source.url.as_deref())
                     .unwrap_or("?"),
                 priority: *rank,
-                default: cfg.default.as_deref() == Some(*name),
                 from_env: false,
             })
             .collect();
@@ -263,7 +294,6 @@ pub fn list(output_format: &str) -> Result<()> {
                     .or(entry.source.url.as_deref())
                     .unwrap_or("?"),
                 priority: Some(0),
-                default: false,
                 from_env: true,
             });
         }
@@ -304,10 +334,7 @@ pub fn list(output_format: &str) -> Result<()> {
             .as_deref()
             .or(source.url.as_deref())
             .unwrap_or("?");
-        println!(
-            "{:20} [{:6}] {:44} {}",
-            name, source.kind, location, label
-        );
+        println!("{:20} [{:6}] {:44} {}", name, source.kind, location, label);
     }
     Ok(())
 }
@@ -341,40 +368,14 @@ pub fn show(name: &str) -> Result<()> {
             if set { "set" } else { "not set" }
         );
     }
-    if cfg.default.as_deref() == Some(name) {
-        println!("Default: yes");
+    let label = priority_label(&cfg, name);
+    if !label.is_empty() {
+        println!("Priority: {label}");
     }
     Ok(())
 }
 
-/// Set which source is used when no registry prefix is given.
-pub fn set_default(name: Option<&str>, clear: bool) -> Result<()> {
-    let mut cfg = load_config()?;
-    if clear {
-        if cfg.default.is_none() {
-            println!("No default registry is set");
-        } else {
-            let old = cfg.default.take().unwrap();
-            save_config(&cfg)?;
-            println!("Cleared default registry (was '{old}')");
-        }
-        return Ok(());
-    }
-    let Some(name) = name else {
-        bail!("Provide a registry name, or use --clear to unset the default");
-    };
-    if !cfg.sources.contains_key(name) {
-        bail!("Registry '{name}' not found");
-    }
-    // Remove from priority if it was there (default is always P0)
-    cfg.priority.remove(name);
-    cfg.default = Some(name.to_string());
-    save_config(&cfg)?;
-    println!("Set '{name}' as default registry (P0)");
-    Ok(())
-}
-
-pub fn set_priority(name: &str, rank: Option<u32>, clear: bool) -> Result<()> {
+pub fn set_priority(name: &str, rank: Option<u32>, clear: bool, cascade: bool) -> Result<()> {
     let mut cfg = load_config()?;
     if !cfg.sources.contains_key(name) {
         bail!("Registry '{name}' not found");
@@ -391,31 +392,47 @@ pub fn set_priority(name: &str, rank: Option<u32>, clear: bool) -> Result<()> {
     let Some(rank) = rank else {
         bail!("Provide a priority rank, or use --clear to unset");
     };
-    if cfg.default.as_deref() == Some(name) {
-        bail!("'{name}' is already default (P0). Use 'fimod registry set-default --clear' first.");
-    }
-    // Shift existing entries at this rank or above
-    let mut priorities: Vec<(String, u32)> = cfg
-        .priority
-        .iter()
-        .filter(|(n, _)| n.as_str() != name)
-        .map(|(n, &r)| (n.clone(), r))
-        .collect();
-    priorities.sort_by_key(|&(_, r)| r);
+    let old_rank = cfg.priority.get(name).copied();
+    let use_cascade = cascade || old_rank.is_none();
 
-    // Insert at the requested rank, shift conflicts
-    let mut next_rank = rank;
-    for entry in &mut priorities {
-        if entry.1 == next_rank {
-            entry.1 = next_rank + 1;
-            next_rank += 1;
+    if use_cascade {
+        // Cascade: shift existing entries at the requested rank or above
+        let mut priorities: Vec<(String, u32)> = cfg
+            .priority
+            .iter()
+            .filter(|(n, _)| n.as_str() != name)
+            .map(|(n, &r)| (n.clone(), r))
+            .collect();
+        priorities.sort_by_key(|&(_, r)| r);
+
+        let mut next_rank = rank;
+        for entry in &mut priorities {
+            if entry.1 == next_rank {
+                entry.1 = next_rank + 1;
+                next_rank += 1;
+            }
+        }
+
+        cfg.priority.clear();
+        for (n, r) in priorities {
+            cfg.priority.insert(n, r);
+        }
+    } else {
+        // Swap: exchange ranks with the occupant (if any)
+        let occupant = cfg
+            .priority
+            .iter()
+            .find(|(n, &r)| r == rank && n.as_str() != name)
+            .map(|(n, _)| n.clone());
+        if let Some(occupant) = occupant {
+            if let Some(old) = old_rank {
+                cfg.priority.insert(occupant, old);
+            } else {
+                cfg.priority.remove(&occupant);
+            }
         }
     }
 
-    cfg.priority.clear();
-    for (n, r) in priorities {
-        cfg.priority.insert(n, r);
-    }
     cfg.priority.insert(name.to_string(), rank);
 
     save_config(&cfg)?;
@@ -691,17 +708,20 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     )
 }
 
-/// Fetch the relative path (and optional content hash) for a mold from the remote catalog.
+/// `(script_rel_path, content_hash, companion_files)`
+type CatalogLookup = (String, Option<String>, Vec<String>);
+
+/// Fetch the relative path, content hash, and companion files for a mold from the remote catalog.
 ///
 /// Returns:
-/// - `Ok(Some((path, hash)))` — mold found in catalog
-/// - `Ok(None)`               — catalog does not exist (HTTP 404); caller falls back to convention
-/// - `Err(_)`                 — catalog exists but is broken (network error, bad TOML, missing path)
+/// - `Ok(Some(..))` — mold found in catalog
+/// - `Ok(None)` — catalog does not exist (HTTP 404); caller falls back to convention
+/// - `Err(_)` — catalog exists but mold not in it, or broken (network error, bad TOML)
 fn remote_catalog_entry(
     source: &Source,
     mold_name: &str,
     no_cache: bool,
-) -> Result<Option<(String, Option<String>)>> {
+) -> Result<Option<CatalogLookup>> {
     let catalog = match fetch_catalog(source, no_cache)? {
         Some(c) => c,
         None => return Ok(None),
@@ -717,7 +737,7 @@ fn remote_catalog_entry(
                  Hint: regenerate the catalog with 'fimod registry build-catalog'"
         )
     })?;
-    Ok(Some((path, entry.hash.clone())))
+    Ok(Some((path, entry.hash.clone(), entry.files.clone())))
 }
 
 fn resolve_github(
@@ -768,24 +788,29 @@ fn resolve_via_catalog(
     token: Option<String>,
     no_cache: bool,
 ) -> Result<MoldSource> {
-    let (rel, catalog_hash) = match remote_catalog_entry(source, mold_name, no_cache) {
-        Ok(Some((path, hash))) => (path, hash),
+    let (rel, catalog_hash, files) = match remote_catalog_entry(source, mold_name, no_cache) {
+        Ok(Some((path, hash, files))) => (path, hash, files),
         Ok(None) => {
             let catalog_url = catalog_url_for(source).unwrap_or_else(|_| "(unknown)".to_string());
             eprintln!(
                 "warning: catalog not found (HTTP 404): {catalog_url}\n\
                  warning: falling back to '{mold_name}.py'"
             );
-            (format!("{mold_name}.py"), None)
+            (format!("{mold_name}.py"), None, vec![])
         }
         Err(e) => {
-            eprintln!("warning: catalog lookup failed — {e:#}");
-            eprintln!("warning: falling back to '{mold_name}.py'");
-            (format!("{mold_name}.py"), None)
+            // Catalog exists but mold not in it — propagate error so the
+            // caller can try the next registry in priority order.
+            return Err(e);
         }
     };
-    let url = format!("{}/{rel}", base.trim_end_matches('/'));
-    Ok(MoldSource::Url(url, token, catalog_hash))
+    let base_trimmed = base.trim_end_matches('/');
+    let url = format!("{base_trimmed}/{rel}");
+    let companion_urls: Vec<String> = files
+        .iter()
+        .map(|f| format!("{base_trimmed}/{f}"))
+        .collect();
+    Ok(MoldSource::Url(url, token, catalog_hash, companion_urls))
 }
 
 // ── catalog data model ────────────────────────────────────────────────────────
@@ -826,6 +851,10 @@ struct CatalogEntry {
     /// Computed by `build-catalog`; used by the client cache to detect mold changes.
     #[serde(skip_serializing_if = "Option::is_none")]
     hash: Option<String>,
+    /// Companion files (templates, data, etc.) relative to the registry base.
+    /// Downloaded alongside the main script into the mold cache directory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    files: Vec<String>,
 }
 
 // ── local mold scanning ───────────────────────────────────────────────────────
@@ -954,7 +983,10 @@ fn catalog_cache_dir(catalog_url: &str) -> PathBuf {
     cache_base_dir().join("catalog").join(&hash[..16])
 }
 
-/// Fetch (with ETag caching) and parse a remote catalog.
+/// TTL for cached catalogs: skip HTTP entirely if the cache file is younger than this.
+const CATALOG_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Fetch (with ETag caching + TTL) and parse a remote catalog.
 ///
 /// Returns:
 /// - `Ok(Some(catalog))` — catalog found and parsed
@@ -967,6 +999,22 @@ fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Catalog>> {
     let cache_dir = catalog_cache_dir(&catalog_url);
     let cached_catalog_path = cache_dir.join("catalog.toml");
     let cached_etag_path = cache_dir.join("etag");
+
+    // TTL fast path: if the cached catalog is fresh enough, use it without any HTTP.
+    if !no_cache {
+        let is_fresh = fs::metadata(&cached_catalog_path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|m| m.elapsed().ok())
+            .is_some_and(|age| age < CATALOG_CACHE_TTL);
+        if is_fresh {
+            if let Ok(body) = fs::read_to_string(&cached_catalog_path) {
+                let catalog: Catalog =
+                    toml::from_str(&body).context("Failed to parse cached catalog.toml")?;
+                return Ok(Some(catalog));
+            }
+        }
+    }
 
     // Add If-None-Match if we have a cached ETag.
     if !no_cache {
@@ -989,15 +1037,16 @@ fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Catalog>> {
         }
     };
 
-    // 304 Not Modified — use cached catalog.
+    // 304 Not Modified — use cached catalog and refresh mtime for TTL.
     if resp.status == 304 {
         if let Ok(body) = fs::read_to_string(&cached_catalog_path) {
+            // Touch the file so TTL resets from now.
+            let _ = fs::write(&cached_catalog_path, &body);
             let catalog: Catalog =
                 toml::from_str(&body).context("Failed to parse cached catalog.toml")?;
             return Ok(Some(catalog));
         }
         // Cache file gone? Fall through to re-fetch without ETag.
-        // This shouldn't normally happen — treat as a cache miss.
     }
 
     let body = &resp.body;
@@ -1161,6 +1210,50 @@ fn print_registry_molds(name: &str, source: &Source, prio_label: &str) -> Result
     Ok(())
 }
 
+// ── shell completion helpers ──────────────────────────────────────────────────
+
+/// List source names matching `prefix` for shell completion.
+pub fn complete_source_names(prefix: &str) -> Vec<String> {
+    let Ok(cfg) = load_config() else {
+        return Vec::new();
+    };
+    cfg.sources
+        .keys()
+        .filter(|name| name.starts_with(prefix))
+        .cloned()
+        .collect()
+}
+
+/// List mold `@name` and `@source/name` references matching `prefix` for shell completion.
+///
+/// Returns `(completion, description)` pairs. Silently returns empty on errors.
+pub fn complete_mold_names(prefix: &str) -> Vec<(String, Option<String>)> {
+    let Ok(cfg) = load_config() else {
+        return Vec::new();
+    };
+    let Ok(entries) = collect_all_molds(&cfg, None) else {
+        return Vec::new();
+    };
+
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    for (reg_name, _prio, mold_name, desc) in &entries {
+        // @source/name form
+        let qualified = format!("@{reg_name}/{mold_name}");
+        if qualified.starts_with(prefix) && seen.insert(qualified.clone()) {
+            result.push((qualified, desc.clone()));
+        }
+        // @name bare form
+        let bare = format!("@{mold_name}");
+        if bare.starts_with(prefix) && seen.insert(bare.clone()) {
+            result.push((bare, desc.clone()));
+        }
+    }
+
+    result
+}
+
 /// `(registry_name, priority_label, mold_name, description)` entry from [`collect_all_molds`].
 type MoldEntry = (String, String, String, Option<String>);
 
@@ -1203,7 +1296,12 @@ fn collect_molds_from_source(
                 return;
             };
             for (mold_name, desc, _rel) in scan_local_molds(Path::new(base)) {
-                result.push((reg_name.to_string(), prio_label.to_string(), mold_name, desc));
+                result.push((
+                    reg_name.to_string(),
+                    prio_label.to_string(),
+                    mold_name,
+                    desc,
+                ));
             }
         }
         SourceType::Github | SourceType::Gitlab | SourceType::Http => {
@@ -1586,72 +1684,109 @@ pub fn show_mold(mold_ref: &str, registry_name: Option<&str>) -> Result<()> {
 /// - Fresh install (no default yet) → adds as default, no prompt needed.
 /// - Default already set, `--force` absent → adds without overriding default (asks first unless `--yes`).
 /// - Default already set, `--force` present → adds and promotes to default (asks first unless `--yes`).
-pub fn setup(yes: bool, force: bool) -> Result<()> {
+pub fn setup(yes: bool) -> Result<()> {
     const EXAMPLES_NAME: &str = "examples";
     const EXAMPLES_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
+    const POWERED_NAME: &str = "fimod-powered";
+    const POWERED_URL: &str = "https://github.com/pytgaen/fimod-powered/tree/main/molds";
 
-    let cfg = load_config()?;
+    let mut cfg = load_config()?;
 
-    // Already present (check by URL, regardless of name)
-    if cfg
+    // ── Migrate legacy "official" → "examples" ──
+    if let Some(source) = cfg.sources.get("official") {
+        if source.url.as_deref() == Some(EXAMPLES_URL) {
+            let do_migrate = yes || confirm(
+                "Registry 'official' detected — this name has been renamed to 'examples'. Migrate?",
+                true,
+            )?;
+            if do_migrate {
+                let source = cfg.sources.remove("official").unwrap();
+                cfg.sources.insert(EXAMPLES_NAME.to_string(), source);
+                cfg.priority.remove("official");
+                cfg.priority.insert(EXAMPLES_NAME.to_string(), 99);
+                save_config(&cfg)?;
+                println!("Migrated registry 'official' → 'examples' (P99).");
+                cfg = load_config()?;
+            }
+        }
+    }
+
+    // ── Detect which registries are already installed (by URL) ──
+    let has_powered = cfg
         .sources
         .values()
-        .any(|s| s.url.as_deref() == Some(EXAMPLES_URL))
-    {
-        println!("Example molds registry is already configured.");
+        .any(|s| s.url.as_deref() == Some(POWERED_URL));
+    let has_examples = cfg
+        .sources
+        .values()
+        .any(|s| s.url.as_deref() == Some(EXAMPLES_URL));
+
+    if has_powered && has_examples {
+        println!("Community registries are already configured.");
         return Ok(());
     }
 
-    let has_default = cfg.default.is_some();
+    // ── Build the list of registries to install ──
+    struct Entry {
+        name: &'static str,
+        url: &'static str,
+        priority: u32,
+        label: &'static str,
+    }
+    let mut to_install: Vec<Entry> = Vec::new();
+    if !has_powered {
+        to_install.push(Entry {
+            name: POWERED_NAME,
+            url: POWERED_URL,
+            priority: 10,
+            label: "production-ready molds",
+        });
+    }
+    if !has_examples {
+        to_install.push(Entry {
+            name: EXAMPLES_NAME,
+            url: EXAMPLES_URL,
+            priority: 99,
+            label: "learning & demo molds",
+        });
+    }
 
-    // In interactive mode, ask confirmation (unless --yes)
+    // ── Ask confirmation ──
     if !yes {
-        use std::io::IsTerminal;
-        if !std::io::stdin().is_terminal() {
-            // Non-interactive context: skip silently
-            return Ok(());
-        }
-        if has_default && !force {
-            print!(
-                "Install the fimod example molds registry (without changing your current default)? [y/N] "
+        println!("\nAdd community registries?");
+        for entry in &to_install {
+            println!(
+                "  • {:<16} ({})    P{}",
+                entry.name, entry.label, entry.priority
             );
-        } else {
-            print!("Install the fimod example molds registry as default? [y/N] ");
         }
-        use std::io::Write;
-        std::io::stdout().flush()?;
-        let mut answer = String::new();
-        std::io::stdin().read_line(&mut answer)?;
-        let answer = answer.trim().to_lowercase();
-        if answer != "y" && answer != "yes" {
+        println!();
+        if !confirm("Install?", true)? {
             println!("Skipped.");
             return Ok(());
         }
     }
 
-    // Determine whether to set as default
-    // - No existing default → always set as default (fresh install)
-    // - Existing default + --force → override
-    // - Existing default, no --force → add without touching default
-    let set_as_default = !has_default || force;
-
-    if has_default && !force {
-        println!(
-            "Note: a default registry is already set; adding example registry without changing it."
-        );
-        println!("      Use --force to promote it to default.");
+    // ── Install each registry ──
+    for entry in &to_install {
+        let name = if cfg.sources.contains_key(entry.name) {
+            let alt = format!("fimod-{}", entry.name);
+            println!(
+                "Note: registry name '{}' is already taken, using '{alt}' instead.",
+                entry.name
+            );
+            add(&alt, entry.url, None)?;
+            set_priority(&alt, Some(entry.priority), false, false)?;
+            alt
+        } else {
+            add(entry.name, entry.url, None)?;
+            set_priority(entry.name, Some(entry.priority), false, false)?;
+            entry.name.to_string()
+        };
+        println!("✓ Added {} (P{})", name, entry.priority);
     }
 
-    // Resolve name (handle unlikely collision where 'examples' name is already taken)
-    let name = if cfg.sources.contains_key(EXAMPLES_NAME) {
-        let alt = "fimod-examples";
-        println!("Note: registry name 'examples' is already taken, using '{alt}' instead.");
-        alt
-    } else {
-        EXAMPLES_NAME
-    };
-
-    add(name, EXAMPLES_URL, None, set_as_default)
+    Ok(())
 }
 
 /// Compute a deterministic content hash for a mold.
@@ -1720,28 +1855,55 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
     Ok(digest[..32].to_string())
 }
 
-/// Build or rebuild `catalog.toml` for a local registry.
-pub fn build_catalog(registry_name: &str) -> Result<()> {
-    let cfg = load_config()?;
-
-    let source = cfg.sources.get(registry_name).ok_or_else(|| {
-        anyhow::anyhow!(
-            "Registry '{registry_name}' not found. Use 'fimod registry list' to see configured registries."
-        )
-    })?;
-
-    if source.kind != SourceType::Local {
-        bail!(
-            "Registry '{}' is of type '{}'; build-catalog only works for local registries.",
-            registry_name,
-            source.kind
-        );
+/// Recursively collect files under `dir`, storing paths relative to `prefix`.
+fn collect_companion_files(dir: &Path, prefix: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let rel = prefix.join(entry.file_name());
+        if path.is_dir() {
+            collect_companion_files(&path, &rel, out);
+        } else {
+            out.push(rel.to_string_lossy().replace('\\', "/"));
+        }
     }
+}
 
-    let base = source
-        .path
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("Local registry has no path configured"))?;
+/// Build or rebuild `catalog.toml` for a local registry.
+pub fn build_catalog(registry_name: Option<&str>, direct_path: Option<&str>) -> Result<()> {
+    let base: String = if let Some(p) = direct_path {
+        let path = Path::new(p);
+        if !path.is_dir() {
+            bail!("Path '{p}' is not a directory");
+        }
+        p.to_string()
+    } else {
+        let name = registry_name.expect("either name or --path must be provided");
+        let cfg = load_config()?;
+
+        let source = cfg.sources.get(name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Registry '{name}' not found. Use 'fimod registry list' to see configured registries."
+            )
+        })?;
+
+        if source.kind != SourceType::Local {
+            bail!(
+                "Registry '{}' is of type '{}'; build-catalog only works for local registries.",
+                name,
+                source.kind
+            );
+        }
+
+        source
+            .path
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("Local registry has no path configured"))?
+            .to_string()
+    };
+    let base = &base;
 
     let molds = scan_local_molds(Path::new(base));
 
@@ -1777,6 +1939,24 @@ pub fn build_catalog(registry_name: &str) -> Result<()> {
                 eprintln!("[fimod] warning: could not hash mold '{name}': {e}");
                 None
             });
+
+        // Collect companion files (templates, data, etc.) — everything in the
+        // mold directory except the main script and README.md.
+        let files: Vec<String> = Path::new(rel_path)
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(|mold_dir| {
+                let abs_dir = Path::new(base).join(mold_dir);
+                let mut companion = Vec::new();
+                collect_companion_files(&abs_dir, mold_dir, &mut companion);
+                let script_rel = rel_path.replace('\\', "/");
+                let readme_rel = readme.as_deref().unwrap_or("");
+                companion.retain(|f| f != &script_rel && f != readme_rel);
+                companion.sort();
+                companion
+            })
+            .unwrap_or_default();
+
         catalog.molds.insert(
             name.clone(),
             CatalogEntry {
@@ -1790,6 +1970,7 @@ pub fn build_catalog(registry_name: &str) -> Result<()> {
                 args,
                 envs,
                 hash: mold_hash,
+                files,
             },
         );
     }

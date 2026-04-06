@@ -16,7 +16,8 @@ use fimod::{convert, format, http, registry, test_runner};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
-use clap_complete::{generate, Shell};
+use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, CompletionCandidate};
+use clap_complete::CompleteEnv;
 use monty::MontyObject;
 use serde_json::Value;
 
@@ -49,14 +50,10 @@ EXAMPLES:
   fimod s -i data.json -e 'data[\"users\"]' -e '[u for u in data if u[\"active\"]]'
   fimod s -i a.json b.json -m cleanup.py -o cleaned/
   fimod registry add my ./my-molds/
-  fimod registry add official https://github.com/org/fimod-molds
+  fimod registry add examples https://github.com/org/fimod-molds
   fimod s -m @cleanup
   fimod s -m @my/toto")]
 struct Cli {
-    /// Generate shell completion script and exit
-    #[arg(long, value_name = "SHELL")]
-    completions: Option<Shell>,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -69,7 +66,7 @@ struct ShapeArgs {
     input: Vec<String>,
 
     /// Mold scripts applied in order (repeatable, can be mixed with -e)
-    #[arg(short, long)]
+    #[arg(short, long, add = ArgValueCompleter::new(complete_molds))]
     mold: Vec<String>,
 
     /// Inline Python expressions applied in order (repeatable, can be mixed with -m)
@@ -98,11 +95,11 @@ struct ShapeArgs {
     input_list: Option<String>,
 
     /// Input format (auto-detected from extension if not specified)
-    #[arg(long, value_name = "FORMAT")]
+    #[arg(long, value_name = "FORMAT", add = ArgValueCandidates::new(format_candidates))]
     input_format: Option<String>,
 
     /// Output format (defaults to input format if not specified)
-    #[arg(long, value_name = "FORMAT")]
+    #[arg(long, value_name = "FORMAT", add = ArgValueCandidates::new(format_candidates))]
     output_format: Option<String>,
 
     /// Pass a named string variable to the mold (can be repeated): --arg name=value
@@ -191,18 +188,26 @@ enum Commands {
         #[command(subcommand)]
         action: MoldAction,
     },
-    /// Run tests for a mold against *.input.* / *.expected.* file pairs
-    Test {
-        /// Mold script to test
-        mold: String,
-        /// Directory containing test cases
-        tests_dir: String,
-    },
     /// Monty Python engine utilities
     Monty {
         #[command(subcommand)]
         action: MontyAction,
     },
+    /// Show how to enable shell completions
+    Completions {
+        /// Shell to generate instructions for
+        #[arg(value_enum)]
+        shell: CompletionShell,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CompletionShell {
+    Bash,
+    Zsh,
+    Fish,
+    Elvish,
+    Powershell,
 }
 
 #[derive(Subcommand, Debug)]
@@ -216,17 +221,25 @@ enum MoldAction {
     /// List molds available in a registry (local scan or remote catalog.toml)
     List {
         /// Registry name (lists all registries if not specified)
+        #[arg(add = ArgValueCompleter::new(complete_sources))]
         registry: Option<String>,
         /// Output format
         #[arg(long = "output-format", value_name = "FORMAT", default_value = "text")]
         output_format: registry::MoldListFormat,
+    },
+    /// Run tests for a mold against *.input.* / *.expected.* file pairs
+    Test {
+        /// Mold script to test
+        mold: String,
+        /// Directory containing test cases
+        tests_dir: String,
     },
     /// Show metadata and defaults for a mold
     Show {
         /// Mold name (use @registry/name to disambiguate)
         name: String,
         /// Registry to search (searches all registries if not specified)
-        #[arg(short, long)]
+        #[arg(short, long, add = ArgValueCompleter::new(complete_sources))]
         registry: Option<String>,
     },
 }
@@ -248,58 +261,55 @@ enum RegistryAction {
         /// Environment variable name for authentication token (overrides default GITHUB_TOKEN / GITLAB_TOKEN)
         #[arg(long = "token-env", value_name = "VAR")]
         token_env: Option<String>,
-        /// Set this registry as the default
-        #[arg(long)]
-        default: bool,
     },
     /// Show details of a registry
     Show {
         /// Name of the registry
+        #[arg(add = ArgValueCompleter::new(complete_sources))]
         name: String,
     },
     /// Remove a registry
     Remove {
         /// Name of the registry to remove
+        #[arg(add = ArgValueCompleter::new(complete_sources))]
         name: String,
-    },
-    /// Set the default registry (P0, used when no @registry/ prefix is given)
-    SetDefault {
-        /// Name of the registry to set as default
-        name: Option<String>,
-        /// Clear the default registry
-        #[arg(long)]
-        clear: bool,
     },
     /// Set the priority rank for a registry
     ///
     /// Registries are searched in priority order (P0 first) when resolving bare @mold references.
-    /// If the requested rank is already taken, existing entries shift up.
+    /// By default, swaps ranks if both registries already have a priority;
+    /// cascades (shifts others down) if the source had no prior rank.
+    /// Use --cascade to force cascade behavior.
     SetPriority {
         /// Name of the registry
+        #[arg(add = ArgValueCompleter::new(complete_sources))]
         name: String,
-        /// Priority rank (1, 2, 3, …). P0 is reserved for the default registry.
+        /// Priority rank (0, 1, 2, …)
         rank: Option<u32>,
         /// Clear the priority for this registry
         #[arg(long)]
         clear: bool,
+        /// Force cascade: shift existing entries down instead of swapping
+        #[arg(long)]
+        cascade: bool,
     },
-    /// Build or rebuild catalog.toml for a local registry
+    /// Build or rebuild catalog.toml from a directory or registered registry
     BuildCatalog {
-        /// Name of the local registry
-        name: String,
+        /// Path to a molds directory
+        #[arg(required_unless_present = "registry")]
+        path: Option<String>,
+        /// Use a registered registry name instead of a path
+        #[arg(long, add = ArgValueCompleter::new(complete_sources))]
+        registry: Option<String>,
     },
     /// Set up the fimod example molds registry
     ///
-    /// Adds the example molds registry if not already present.
-    /// In a fresh install (no default registry yet) it becomes the default automatically.
-    /// If a default already exists it is left unchanged unless --force is given.
+    /// Adds the example molds registry (P99) if not already present.
+    /// Migrates the legacy 'official' registry to 'examples' if detected.
     Setup {
         /// Answer yes to all prompts (non-interactive / CI use)
         #[arg(short, long)]
         yes: bool,
-        /// Promote the example registry to default even if another default is already set
-        #[arg(short, long)]
-        force: bool,
     },
     /// Manage the local cache for remote catalogs and molds
     Cache {
@@ -358,15 +368,78 @@ fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef>
     refs
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+fn format_candidates() -> Vec<CompletionCandidate> {
+    [
+        ("json", "Pretty-printed JSON"),
+        ("json-compact", "Single-line JSON"),
+        ("ndjson", "Newline-delimited JSON"),
+        ("jsonl", "Alias for ndjson"),
+        ("yaml", "YAML"),
+        ("yml", "Alias for yaml"),
+        ("toml", "TOML"),
+        ("csv", "CSV"),
+        ("tsv", "Alias for csv (tab-separated)"),
+        ("txt", "Plain text (bare string)"),
+        ("lines", "One line per array element"),
+        ("raw", "Binary pass-through (output only)"),
+        ("http", "HTTP response dict (input only)"),
+    ]
+    .into_iter()
+    .map(|(val, help)| CompletionCandidate::new(val).help(Some(help.into())))
+    .collect()
+}
 
-    // Handle --completions
-    if let Some(shell) = cli.completions {
-        let mut cmd = Cli::command();
-        generate(shell, &mut cmd, "fimod", &mut io::stdout());
-        return Ok(());
+fn complete_molds(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let prefix = current.to_str().unwrap_or("");
+    if !prefix.starts_with('@') {
+        return Vec::new();
     }
+    registry::complete_mold_names(prefix)
+        .into_iter()
+        .map(|(name, desc): (String, Option<String>)| {
+            let mut c = CompletionCandidate::new(name);
+            if let Some(d) = desc {
+                c = c.help(Some(d.into()));
+            }
+            c
+        })
+        .collect()
+}
+
+fn complete_sources(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let prefix = current.to_str().unwrap_or("");
+    registry::complete_source_names(prefix)
+        .into_iter()
+        .map(CompletionCandidate::new)
+        .collect()
+}
+
+fn print_completion_instructions(shell: CompletionShell) {
+    let (shell_name, instruction) = match shell {
+        CompletionShell::Bash => ("Bash", "echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc"),
+        CompletionShell::Zsh => ("Zsh", "echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc"),
+        CompletionShell::Fish => (
+            "Fish",
+            "echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish",
+        ),
+        CompletionShell::Elvish => (
+            "Elvish",
+            "echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv",
+        ),
+        CompletionShell::Powershell => (
+            "PowerShell",
+            r#"echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE"#,
+        ),
+    };
+    eprintln!(
+        "# {shell_name}: add this to your shell config, then restart your shell:\n{instruction}"
+    );
+}
+
+fn main() -> Result<()> {
+    CompleteEnv::with_factory(Cli::command).complete();
+
+    let cli = Cli::parse();
 
     match cli.command {
         Some(Commands::Shape(shape)) => run_shape(*shape),
@@ -376,18 +449,19 @@ fn main() -> Result<()> {
                 name,
                 location,
                 token_env,
-                default,
-            } => registry::add(&name, &location, token_env.as_deref(), default),
+            } => registry::add(&name, &location, token_env.as_deref()),
             RegistryAction::Show { name } => registry::show(&name),
             RegistryAction::Remove { name } => registry::remove(&name),
-            RegistryAction::SetDefault { name, clear } => {
-                registry::set_default(name.as_deref(), clear)
+            RegistryAction::SetPriority {
+                name,
+                rank,
+                clear,
+                cascade,
+            } => registry::set_priority(&name, rank, clear, cascade),
+            RegistryAction::BuildCatalog { path, registry } => {
+                registry::build_catalog(registry.as_deref(), path.as_deref())
             }
-            RegistryAction::SetPriority { name, rank, clear } => {
-                registry::set_priority(&name, rank, clear)
-            }
-            RegistryAction::BuildCatalog { name } => registry::build_catalog(&name),
-            RegistryAction::Setup { yes, force } => registry::setup(yes, force),
+            RegistryAction::Setup { yes } => registry::setup(yes),
             RegistryAction::Cache { action } => match action {
                 CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
                 CacheAction::Info => registry::cache_info(),
@@ -399,11 +473,15 @@ fn main() -> Result<()> {
                 output_format,
             } => registry::list_molds(registry.as_deref(), output_format),
             MoldAction::Show { name, registry } => registry::show_mold(&name, registry.as_deref()),
+            MoldAction::Test { mold, tests_dir } => test_runner::run(&mold, &tests_dir),
         },
-        Some(Commands::Test { mold, tests_dir }) => test_runner::run(&mold, &tests_dir),
         Some(Commands::Monty { action }) => match action {
             MontyAction::Repl => run_monty_repl(),
         },
+        Some(Commands::Completions { shell }) => {
+            print_completion_instructions(shell);
+            Ok(())
+        }
         None => {
             Cli::command().print_help()?;
             std::process::exit(2);

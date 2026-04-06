@@ -174,6 +174,31 @@ else
     exit 1
   }
 
+  # ── SHA256 verification ──────────────────────────────────────────────
+  SUMS_FILE="fimod-${VERSION}-sha256sums.txt"
+  case "$SOURCE" in
+    gitlab) SUMS_URL="${GL_PKG_BASE}/${VERSION}/${SUMS_FILE}" ;;
+    *)      SUMS_URL="${BASE_URL}/download/${DOWNLOAD_TAG}/${SUMS_FILE}" ;;
+  esac
+
+  if curl -fsSL -o "${TMPDIR}/${SUMS_FILE}" "$SUMS_URL" 2>/dev/null; then
+    EXPECTED=$(grep "$(basename "${ASSET}")" "${TMPDIR}/${SUMS_FILE}" | awk '{print $1}')
+    if [ -n "$EXPECTED" ]; then
+      ACTUAL=$(sha256sum "${TMPDIR}/${ASSET}" | awk '{print $1}')
+      if [ "$ACTUAL" != "$EXPECTED" ]; then
+        echo "Error: SHA256 mismatch!" >&2
+        echo "  expected: ${EXPECTED}" >&2
+        echo "  got:      ${ACTUAL}" >&2
+        exit 1
+      fi
+      echo "SHA256 verified ✓"
+    else
+      echo "Warning: asset not found in checksums file, skipping verification" >&2
+    fi
+  else
+    echo "Warning: could not download checksums file, skipping verification" >&2
+  fi
+
   case "$EXT" in
     tar.gz)
       tar xzf "${TMPDIR}/${ASSET}" -C "$TMPDIR"
@@ -208,23 +233,8 @@ fi
 
 echo ""
 
-# ── Migrate "official" → "examples" ────────────────────────────────
-# If the old "official" registry points to the bundled molds URL,
-# remove it and re-add as "examples" (no default, no priority).
-OLD_OFFICIAL_URL="https://github.com/pytgaen/fimod/tree/main/molds"
-FIMOD_BIN="${INSTALL_DIR}/${BIN_NAME}"
-
-CURRENT_URL=$("$FIMOD_BIN" registry list --output-format json 2>/dev/null \
-  | "$FIMOD_BIN" shape -e 'dp_get([s for s in data if s["name"] == "official"], "0.location", "")' --output-format txt 2>/dev/null) || true
-if [ "$CURRENT_URL" = "$OLD_OFFICIAL_URL" ]; then
-    echo "  Migrating registry 'official' → 'examples'..."
-    "$FIMOD_BIN" registry remove official 2>/dev/null || true
-    "$FIMOD_BIN" registry add examples "$OLD_OFFICIAL_URL" --default 2>/dev/null || true
-    echo "  ✓ Renamed 'official' to 'examples'"
-    echo ""
-fi
-
 # ── Registry setup ──────────────────────────────────────────────────
+# Migration "official" → "examples" is handled by `fimod registry setup`.
 # FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
 # FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
 # unset                      → interactive prompt (default)

@@ -496,28 +496,37 @@ fn test_in_place_error_with_output() {
 #[test]
 fn test_completions_bash() {
     assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["--completions", "bash"])
+        .env("COMPLETE", "bash")
         .assert()
         .success()
-        .stdout(predicate::str::contains("_fimod"));
+        .stdout(predicate::str::contains("fimod"));
 }
 
 #[test]
 fn test_completions_zsh() {
     assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["--completions", "zsh"])
+        .env("COMPLETE", "zsh")
         .assert()
         .success()
-        .stdout(predicate::str::contains("#compdef fimod"));
+        .stdout(predicate::str::contains("fimod"));
 }
 
 #[test]
 fn test_completions_fish() {
     assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["--completions", "fish"])
+        .env("COMPLETE", "fish")
         .assert()
         .success()
         .stdout(predicate::str::contains("fimod"));
+}
+
+#[test]
+fn test_completions_subcommand() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["completions", "zsh"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("COMPLETE=zsh fimod"));
 }
 
 #[test]
