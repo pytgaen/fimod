@@ -1,86 +1,6 @@
 # Mold Gallery
 
-A curated selection of molds from the official registry, showcasing what fimod can do out of the box. All of these are available immediately after running `fimod registry setup`.
-
----
-
-## 🌐 HTTP & APIs
-
-### `@gh_latest` — GitHub latest release
-
-Fetches the latest release tag from any GitHub repository. With `--arg asset`, resolves the full download URL for a specific release asset, substituting `{version}` and `{tag}` placeholders automatically.
-
-```bash
-# Get the latest release tag
-fimod s -i https://github.com/cli/cli/releases/latest -m @gh_latest
-# → v2.67.0
-
-# Resolve a release asset URL
-fimod s -i https://github.com/cli/cli/releases/latest -m @gh_latest \
-  --arg repo=cli/cli \
-  --arg asset=gh_{version}_linux_amd64.tar.gz
-# → https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_linux_amd64.tar.gz
-```
-
-Pipe the resolved URL directly into a second `fimod` invocation to download the asset — no `xargs`, no shell intermediary:
-
-```bash
-# Download, filename inferred from the URL
-fimod s -i https://github.com/sinelaw/fresh/releases/latest \
-  -m @gh_latest \
-  --arg repo="sinelaw/fresh" \
-  --arg asset='fresh-editor_{version}-1_amd64.deb' \
-  | fimod s -I - --output-format raw -O
-
-# Download to an explicit filename
-fimod s -i https://github.com/sinelaw/fresh/releases/latest \
-  -m @gh_latest \
-  --arg repo="sinelaw/fresh" \
-  --arg asset='fresh-editor_{version}-1_amd64.deb' \
-  | fimod s -I - --output-format raw -o fresh-editor.deb
-```
-
----
-
-### `@download` — File download (wget-like)
-
-Downloads a URL to a local file. The output filename defaults to the last path segment of the URL; override it with `--arg out`.
-
-```bash
-# Download to the inferred filename
-fimod s -i https://example.com/data/archive.tar.gz -m @download
-# → writes archive.tar.gz
-
-# Override the output filename
-fimod s -i https://example.com/data/archive.tar.gz -m @download --arg out=backup.tar.gz
-# → writes backup.tar.gz
-```
-
-Handles binary content correctly (images, archives, binaries) via the raw binary pass-through.
-
----
-
-## 🛠️ Developer Tooling
-
-### `@poetry_migrate` — Migrate `pyproject.toml` to Poetry 2 / uv
-
-Converts a legacy [Poetry](https://python-poetry.org/) `pyproject.toml` (1.x) to the modern PEP 621 format — either for Poetry 2 or [uv](https://docs.astral.sh/uv/).
-
-```bash
-# Migrate to uv (default)
-fimod s -i pyproject.toml -m @poetry_migrate -o pyproject.toml
-
-# Migrate to Poetry 2
-fimod s -i pyproject.toml -m @poetry_migrate -o pyproject.toml --arg target=poetry2
-```
-
-What gets migrated:
-
-- `[tool.poetry]` metadata → `[project]` (name, version, description, authors, …)
-- Dependency constraints (`^1.2.3`, `~1.2.3`, `*`) → PEP 440 equivalents
-- `[tool.poetry.dev-dependencies]` / groups → `[dependency-groups]` (PEP 735)
-- `[[tool.poetry.source]]` → `[[tool.uv.index]]`
-- `build-system` updated to `hatchling` (uv) or `poetry-core>=2.0.0` (Poetry 2)
+A curated selection of molds from the examples registry, showcasing what fimod can do out of the box. All of these are available immediately after running `fimod registry setup`.
 
 ---
 
@@ -114,19 +34,21 @@ metadata:
     env: prod
 ```
 
----
+### `@env_to_dotenv` — Config to `.env` format
 
-### `@skylos_to_gitlab` — Dead code report → GitLab Code Quality
-
-Converts [Skylos](https://github.com/duriantaco/skylos) dead code analysis output to the [GitLab Code Quality](https://docs.gitlab.com/ee/ci/testing/code_quality.html) (Code Climate) JSON format, ready to upload as a CI artifact.
+Flattens a JSON/YAML config into a `.env` file with `KEY=value` lines.
 
 ```bash
-# In a GitLab CI job
-skylos --json > skylos_report.json
-fimod s -i skylos_report.json -m @skylos_to_gitlab -o gl-code-quality-report.json
+fimod s -i config.yaml -m @env_to_dotenv -o .env
 ```
 
-Each finding becomes a Code Climate issue with a stable `fingerprint` (MD5 of check name + file + line + symbol), so GitLab can track it across pipeline runs.
+### `@validate_fields` — Assert required fields exist
+
+Checks that a set of dotpaths are present in the input. Exits with code 1 if any are missing — perfect for CI gates.
+
+```bash
+fimod s -i config.json -m @validate_fields --arg required=database.host,database.port,api.key
+```
 
 ---
 
@@ -145,6 +67,72 @@ fimod s -i users.json -m @jq_compat --arg map=name
 
 # Filter by field value
 fimod s -i users.json -m @jq_compat --arg select=active=true
+```
+
+### `@deep_pluck` — Extract nested fields into a flat object
+
+Pulls values from deep dotpaths and returns a flat key/value object.
+
+```bash
+fimod s -i order.json -m @deep_pluck --arg paths=customer.name,shipping.address.city,total
+# → {"customer.name": "Alice", "shipping.address.city": "Paris", "total": 99}
+```
+
+### `@flatten_nested` — Flatten a nested object to dot-path keys
+
+```bash
+fimod s -i config.json -m @flatten_nested
+# {"database": {"host": "localhost", "port": 5432}} → {"database.host": "localhost", "database.port": 5432}
+```
+
+### `@json_schema_extract` — Extract a simplified JSON schema
+
+Infers a schema from a JSON document — useful for quick documentation or validation scaffolding.
+
+```bash
+fimod s -i data.json -m @json_schema_extract
+```
+
+---
+
+## 🔄 Data Transformation
+
+### `@pick_fields` — Keep only specified fields
+
+```bash
+fimod s -i users.json -m @pick_fields --arg fields=name,email
+```
+
+### `@rename_keys` — Rename keys via mapping
+
+```bash
+fimod s -i data.json -m @rename_keys --arg mapping=firstName:first_name,lastName:last_name
+```
+
+### `@dedup_by` — Deduplicate records by a field
+
+```bash
+fimod s -i contacts.json -m @dedup_by --arg field=email
+```
+
+### `@group_count` — Group by field and count
+
+```bash
+fimod s -i events.json -m @group_count --arg field=type
+# → [{"type": "click", "count": 42}, {"type": "view", "count": 128}]
+```
+
+### `@split_tags` — Split a delimiter-separated field into a list
+
+```bash
+fimod s -i articles.json -m @split_tags --arg field=tags
+# "rust,cli,tools" → ["rust", "cli", "tools"]
+```
+
+### `@sort_json_keys` — Recursively sort JSON keys
+
+```bash
+fimod s -i messy.json -m @sort_json_keys -o clean.json
 ```
 
 ---
@@ -168,3 +156,86 @@ fimod s -i users.json -m @anonymize_pii --arg fields=email,phone -o users_anon.j
 ```
 
 The original `id` and any non-listed fields are preserved. Deterministic hashing means the same input always produces the same fingerprint — useful for consistent pseudonymisation across datasets.
+
+---
+
+## 📊 CSV
+
+### `@csv_stats` — Basic statistics on numeric columns
+
+```bash
+fimod s -i data.csv -m @csv_stats
+# → {"salary": {"min": 30000, "max": 120000, "mean": 65000, "count": 50}, ...}
+```
+
+### `@csv_to_json_records` — CSV to JSON array of objects
+
+```bash
+fimod s -i data.csv -m @csv_to_json_records -o data.json
+```
+
+---
+
+## 📝 Text & Markdown
+
+### `@badge_md` — Generate a shields.io badge
+
+```bash
+fimod s -i status.json -m @badge_md --arg label=build --arg status=passing --arg color=green
+# → [![build](https://img.shields.io/badge/build-passing-green)]()
+```
+
+### `@git_changelog` — Markdown changelog from structured data
+
+```bash
+fimod s -i commits.json -m @git_changelog -o CHANGELOG.md
+```
+
+### `@markdown_toc` — Extract table of contents from Markdown
+
+```bash
+fimod s -i README.md -m @markdown_toc
+```
+
+### `@log_parse` — Parse log lines into structured records
+
+Extracts structured fields from log lines using regex capture groups.
+
+```bash
+fimod s -i app.log -m @log_parse
+```
+
+---
+
+## 🗄️ BigQuery
+
+### `@bq_insert` — Generate INSERT statement from `bq show`
+
+```bash
+bq show --format=json project:dataset.table | fimod s -m @bq_insert
+```
+
+### `@bq_select` — Generate SELECT statement from `bq show`
+
+```bash
+bq show --format=json project:dataset.table | fimod s -m @bq_select
+```
+
+---
+
+## 🚀 fimod-powered registry
+
+More production-ready molds are available in the [fimod-powered](https://github.com/pytgaen/fimod-powered) registry:
+
+```bash
+fimod registry add fimod-powered https://github.com/pytgaen/fimod-powered
+```
+
+| Mold | Description |
+|------|-------------|
+| `@gh_latest` | Fetch latest GitHub release tag, resolve asset download URLs |
+| `@download` | wget-like file download with binary pass-through |
+| `@poetry_migrate` | Migrate Poetry 1.x `pyproject.toml` to uv or Poetry 2 |
+| `@skylos_to_gitlab` | Convert Skylos dead code reports to GitLab Code Quality JSON |
+
+> See the [fimod-powered README](https://github.com/pytgaen/fimod-powered) for the full list.

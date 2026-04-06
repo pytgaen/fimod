@@ -150,6 +150,33 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
         $TmpZip = Join-Path $TmpDir $Asset
         Invoke-WebRequest -Uri $Url -OutFile $TmpZip -UseBasicParsing
 
+        # -- SHA256 verification --
+        $SumsFile = "fimod-$Version-sha256sums.txt"
+        if ($Source -eq "gitlab") {
+            $SumsUrl = "$GlPkgBase/$Version/$SumsFile"
+        } else {
+            $SumsUrl = "$BaseUrl/download/$DownloadTag/$SumsFile"
+        }
+
+        $TmpSums = Join-Path $TmpDir $SumsFile
+        try {
+            Invoke-WebRequest -Uri $SumsUrl -OutFile $TmpSums -UseBasicParsing
+            $AssetName = [System.IO.Path]::GetFileName($Asset)
+            $Expected = (Get-Content $TmpSums | Where-Object { $_ -match $AssetName }) -replace '\s+.*$',''
+            if ($Expected) {
+                $Actual = (Get-FileHash -Path $TmpZip -Algorithm SHA256).Hash.ToLower()
+                if ($Actual -ne $Expected) {
+                    Write-Error "SHA256 mismatch!`n  expected: $Expected`n  got:      $Actual"
+                    exit 1
+                }
+                Write-Host "SHA256 verified"
+            } else {
+                Write-Host "Warning: asset not found in checksums file, skipping verification" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "Warning: could not download checksums file, skipping verification" -ForegroundColor Yellow
+        }
+
         # Use Expand-Archive for zip
         Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
 
@@ -193,26 +220,8 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 
 Write-Host ""
 
-# -- Migrate "official" -> "examples" ----------------------------------
-# If the old "official" registry points to the bundled molds URL,
-# remove it and re-add as "examples" (no default, no priority).
-$OldOfficialUrl = "https://github.com/pytgaen/fimod/tree/main/molds"
-
-$CurrentUrl = ""
-try {
-    $CurrentUrl = (& $TargetBin registry list --output-format json 2>$null `
-        | & $TargetBin shape -e 'dp_get([s for s in data if s["name"] == "official"], "0.location", "")' --output-format txt 2>$null)
-} catch {}
-
-if ($CurrentUrl -eq $OldOfficialUrl) {
-    Write-Host "  Migrating registry 'official' -> 'examples'..."
-    try { & $TargetBin registry remove official 2>$null } catch {}
-    try { & $TargetBin registry add examples $OldOfficialUrl --default 2>$null } catch {}
-    Write-Host "  Done: renamed 'official' to 'examples'"
-    Write-Host ""
-}
-
 # -- Registry setup ----------------------------------------------------
+# Migration "official" -> "examples" is handled by `fimod registry setup`.
 # FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
 # FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
 # unset                      → interactive prompt (default)

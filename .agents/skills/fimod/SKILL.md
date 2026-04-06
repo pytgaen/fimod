@@ -68,7 +68,7 @@ Process all JSON files using a mold script:
 Fimod has a registry system for reusable scripts. The `@` prefix resolves molds from configured registries:
 `fimod s -i users.csv -m @cleanup -o clean.json`
 
-Set up the official registry first:
+Set up the examples registry first:
 `fimod registry setup`
 
 **12. Download binaries (bypass transform pipeline)**
@@ -76,7 +76,7 @@ Set up the official registry first:
 
 **13. Built-in Testing**
 If you write a reusable `.py` mold, fimod has a built-in test runner for input/expected file pairs:
-`fimod test cleanup.py tests/`
+`fimod mold test cleanup.py tests/`
 
 **14. No-input mode — generate data from scratch**
 `fimod s --no-input -e '{"status": "ok", "ts": args["ts"]}' --arg ts="2024-01-01"`
@@ -204,23 +204,23 @@ Supported: `json` · `json-compact` · `ndjson` · `yaml` · `toml` · `csv` · 
 | `--arg name=value` | Pass variable (access via `args["key"]`; repeatable) |
 | `--env PATTERN` | Filter env vars by glob (`*`, `PREFIX_*`, `EXACT`, comma-separated) |
 
-## Built-in Molds (Official Registry)
+## Built-in Molds (Examples Registry)
 
 After running `fimod registry setup`, these molds are available with the `@` prefix:
 
 ### HTTP & APIs
 | Mold | Description | Key args |
 |------|-------------|----------|
-| `@gh_latest` | GitHub latest release tag + asset URL resolution | `--arg repo=owner/repo`, `--arg asset=pattern` |
-| `@download` | wget-like file download | `--arg out=filename` |
+| `@gh_latest` | GitHub latest release tag + asset URL resolution (fimod-powered) | `--arg repo=owner/repo`, `--arg asset=pattern` |
+| `@download` | wget-like file download (fimod-powered) | `--arg out=filename` |
 
 ### DevOps & Config
 | Mold | Description | Key args |
 |------|-------------|----------|
 | `@yaml_merge` | Patch YAML with dot-path assignments | `--arg set="spec.replicas=3,metadata.labels.env=prod"` |
 | `@env_to_dotenv` | Convert config to `.env` format | — |
-| `@poetry_migrate` | Migrate Poetry pyproject.toml to uv/Poetry 2 | `--arg target=uv\|poetry2` |
-| `@skylos_to_gitlab` | Skylos dead code report → GitLab Code Quality JSON | — |
+| `@poetry_migrate` | Migrate Poetry pyproject.toml to uv/Poetry 2 (fimod-powered) | `--arg target=uv\|poetry2` |
+| `@skylos_to_gitlab` | Skylos dead code report → GitLab Code Quality JSON (fimod-powered) | — |
 
 ### Data Exploration
 | Mold | Description | Key args |

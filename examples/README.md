@@ -1,18 +1,23 @@
 # Examples
 
-This directory contains examples of mold scripts for various use cases.
+This directory contains standalone mold scripts that demonstrate common fimod patterns.
 
 ## Usage
 
-Run any of these scripts with `fimod`:
-
 ```bash
-fimod s -i input.json -m examples/script_name.py
+fimod s -i input.json -m examples/jq_filter.py
 ```
 
 ## Contents
 
-- `jq_filter.py`: Filter a list of objects based on criteria (like `jq 'select(...)'`).
-- `jq_map.py`: Transform (map) objects to a new structure.
-- `merge_files.py`: Merge data from the input file with another file (Read-side pattern).
-- `skylos_to_gitlab.py`: Convert **Skylos** JSON report to **GitLab Code Quality** format.
+- `jq_filter.py`: Filter a list of objects based on criteria (like `jq 'map(select(...))'`).
+- `jq_map.py`: Map/transform objects to a new structure (like `jq 'map({...})'`).
+
+## Looking for more molds?
+
+Production-ready molds are available in the [fimod-powered](https://github.com/pytgaen/fimod-powered) registry:
+
+```bash
+fimod registry add fimod-powered https://github.com/pytgaen/fimod-powered
+fimod mold list
+```

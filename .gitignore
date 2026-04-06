@@ -41,3 +41,4 @@ Thumbs.db
 /tmp/
 *.log
 .skylos/cache/osv_cache.json
+src/.astx/cache.db

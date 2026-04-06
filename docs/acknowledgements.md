@@ -17,7 +17,7 @@ The advanced regular expression features in our `re_*` built-in functions are ma
 ## Other Open Source Bricks
 We also rely on several other phenomenal crates from the Rust ecosystem:
 
-- **[Serde](https://serde.rs/) & ecosystem** (`serde_json`, `serde_norway`, `toml`, `csv`): For flawless and incredibly fast data parsing and serialization.
+- **[Serde](https://serde.rs/) & ecosystem** (`serde_json`, `serde-saphyr`, `toml`, `csv`): For flawless and incredibly fast data parsing and serialization.
 - **[Clap](https://docs.rs/clap/)**: For crafting our powerful, documented, and predictable command-line interface.
 - **[Anyhow](https://docs.rs/anyhow/)**: For flexible and context-rich error handling.
 

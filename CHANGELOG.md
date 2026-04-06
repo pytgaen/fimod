@@ -2,6 +2,16 @@
 
 All notable changes to fimod are documented here.
 
+## [Unreleased]
+
+### Features
+
+- **registry:** `build-catalog` now takes a directory path as positional argument, no registered registry needed
+
+### Breaking Changes
+
+- **registry:** `fimod registry build-catalog <name>` is now `fimod registry build-catalog <path>`. Use `--registry <name>` to build from a registered registry.
+
 ## [0.2.0] — 2026-04-02
 
 ### Highlights

@@ -154,7 +154,7 @@ fimod registry add private https://gitlab.com/team/molds --token-env GITLAB_TOKE
 # 📋 Manage your registries
 fimod registry list
 fimod registry show company
-fimod registry set-default company               # set as P0 (highest priority)
+fimod registry set-priority company 0             # set as P0 (highest priority)
 fimod registry set-priority private 1            # set as P1
 
 # 🚀 Use registered molds with @name
@@ -173,7 +173,7 @@ The registry config lives in `~/.config/fimod/sources.toml` — one file, human-
 Write test cases as `*.input.<ext>` / `*.expected.<ext>` file pairs, and fimod validates your mold produces the expected output:
 
 ```bash
-fimod test cleanup.py tests/
+fimod mold test cleanup.py tests/
 # ✅ 001 ... ok
 # ✅ 002 ... ok
 # ❌ 003 ... FAILED
@@ -201,46 +201,19 @@ fimod s -i data.json -e 'len(env)'  # → 0
 
 ## 💼 Real-world examples
 
-**API response to Code Climate format (GitLab):**
-
-Skylos (dead code detector) outputs its own JSON. GitLab expects Code Climate format:
-
-```python
-# skylos_to_gitlab.py
-"""Convert Skylos dead code reports to GitLab Code Quality format."""
-# fimod: output-format=json
-
-def transform(data, args, env, headers):
-    issues = []
-    categories = {
-        "unused_functions":  "unused-function",
-        "unused_imports":    "unused-import",
-        "unused_variables":  "unused-variable",
-        "unused_classes":    "unused-class",
-        "unused_parameters": "unused-parameter",
-        "unused_files":      "dead-file",
-    }
-    for key, check_name in categories.items():
-        items = data.get(key, [])
-        if not isinstance(items, list):
-            continue
-        for item in items:
-            name = item.get("name") or item.get("simple_name") or "unknown"
-            path = item.get("file") or item.get("filename") or "unknown"
-            line = item.get("line") or 1
-            readable_type = key.replace("unused_", "").rstrip("s")
-            issues.append({
-                "description": f"Unused {readable_type}: {name}",
-                "check_name": check_name,
-                "fingerprint": hs_md5(f"{check_name}:{path}:{line}:{name}"),
-                "severity": "info",
-                "location": {"path": path, "lines": {"begin": int(line)}}
-            })
-    return issues
-```
+**Patch a Kubernetes manifest before deploy:**
 
 ```bash
-fimod s -i skylos-report.json -m skylos_to_gitlab.py -o gl-code-quality.json
+fimod s -i deployment.yaml -m @yaml_merge \
+  --arg set="spec.replicas=3,metadata.labels.env=prod" \
+  -o deployment.yaml
+```
+
+**Validate required config fields in CI:**
+
+```bash
+fimod s -i config.json -m @validate_fields --arg required=database.host,database.port,api.key
+# → exits 1 if any field is missing
 ```
 
 **📊 API response → flat CSV for a spreadsheet:**
@@ -309,6 +282,8 @@ Each assertion prints a specific error to stderr and exits with a non-zero code 
   run: |
     fimod s -i data.json -m @normalize -o output.json
 ```
+
+> Looking for `@gh_latest`, `@download`, `@poetry_migrate`, `@skylos_to_gitlab`? See the [fimod-powered](https://github.com/pytgaen/fimod-powered) registry.
 
 ## 📝 Data→Text: Jinja2 Templating
 

@@ -44,10 +44,7 @@ pub fn is_truthy(v: &serde_json::Value) -> bool {
 /// Build the list of mold steps from an ordered sequence of script references.
 ///
 /// Returns at least one step, or an error if the list is empty.
-pub fn build_scripts(
-    refs: &[ScriptRef],
-    no_cache: bool,
-) -> Result<Vec<MoldStep>> {
+pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>> {
     if refs.is_empty() {
         bail!("Either -m/--mold or -e/--expression is required");
     }
@@ -273,6 +270,7 @@ fn run_pipeline_core(
                     "body": body_val,
                     "body_size": resp.body_bytes.len(),
                     "content_type": resp.content_type.as_deref().unwrap_or(""),
+                    "url": url,
                 });
                 // Short-circuit: skip normal content parsing
                 (String::new(), ct_fmt, Some((DataFormat::Http, http_data)))

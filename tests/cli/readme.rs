@@ -156,58 +156,6 @@ fn test_readme_csv_normalize() {
 }
 
 #[test]
-fn test_readme_skylos_to_gitlab() {
-    let dir = assert_fs::TempDir::new().unwrap();
-    let input = setup_input(
-        &dir,
-        "skylos.json",
-        r#"{"unused_functions": [{"name": "foo", "file": "src/lib.rs", "line": 10}], "unused_imports": [{"name": "bar", "file": "src/main.rs", "line": 3}]}"#,
-    );
-
-    let mold = setup_mold(
-        &dir,
-        "skylos.py",
-        r#"def transform(data, args, env, headers):
-    issues = []
-    categories = {
-        "unused_functions": "unused-function",
-        "unused_imports":   "unused-import",
-        "unused_variables": "unused-variable",
-    }
-    for key, check_name in categories.items():
-        for item in data.get(key, []):
-            name = item.get("name", "unknown")
-            path = item.get("file", "unknown")
-            line = item.get("line", 1)
-            issues.append({
-                "description": f"Unused {key.replace('unused_', '')}: {name}",
-                "check_name": check_name,
-                "fingerprint": f"{check_name}:{path}:{name}",
-                "severity": "info",
-                "location": {"path": path, "lines": {"begin": int(line)}}
-            })
-    return issues
-"#,
-    );
-
-    let output = assert_cmd::cargo_bin_cmd!("fimod")
-        .arg("shape")
-        .args(["-i", &input, "-m", &mold])
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-
-    let stdout = String::from_utf8(output).unwrap();
-    assert!(stdout.contains("\"description\": \"Unused functions: foo\""));
-    assert!(stdout.contains("\"check_name\": \"unused-function\""));
-    assert!(stdout.contains("\"description\": \"Unused imports: bar\""));
-    assert!(stdout.contains("\"severity\": \"info\""));
-    assert!(stdout.contains("\"begin\": 10"));
-}
-
-#[test]
 fn test_readme_log_counting() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(

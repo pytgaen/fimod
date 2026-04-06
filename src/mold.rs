@@ -19,14 +19,17 @@ pub enum MoldSource {
     /// Local file path.
     File(String),
     /// HTTP/HTTPS URL, with an optional Bearer token for authentication,
-    /// and an optional catalog content hash for cache validation.
+    /// an optional catalog content hash for cache validation, and companion
+    /// file URLs to download alongside the main script.
     ///
     /// The token is populated from:
     /// - A named registry's `token_env` override, or default `GITHUB_TOKEN`/`GITLAB_TOKEN`
     /// - Domain detection when the URL is passed directly via `-m https://...`
     ///
     /// The catalog hash is present only for registry-based molds; direct URLs have `None`.
-    Url(String, Option<String>, Option<String>),
+    /// Companion files (templates, data) are listed in catalog.toml and fetched into the
+    /// same cache directory.
+    Url(String, Option<String>, Option<String>, Vec<String>),
     /// Inline expression passed via `-e`.
     Inline(String),
 }
@@ -35,7 +38,7 @@ impl std::fmt::Display for MoldSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MoldSource::File(path) => write!(f, "file({path})"),
-            MoldSource::Url(url, _, _) => write!(f, "url({url})"),
+            MoldSource::Url(url, _, _, _) => write!(f, "url({url})"),
             MoldSource::Inline(_) => write!(f, "inline(-e)"),
         }
     }
@@ -86,7 +89,7 @@ impl MoldSource {
         // Direct URL — auto-detect auth token from domain
         if s.starts_with("http://") || s.starts_with("https://") {
             let token = crate::registry::token_for_url(s);
-            return Ok(Self::Url(s.to_string(), token, None));
+            return Ok(Self::Url(s.to_string(), token, None, vec![]));
         }
 
         // Local path or directory
@@ -124,14 +127,20 @@ impl MoldSource {
             MoldSource::File(path) => {
                 fs::read_to_string(path).with_context(|| format!("Mold not found: {path}"))
             }
-            MoldSource::Url(url, token, catalog_hash) => {
+            MoldSource::Url(url, token, catalog_hash, companion_files) => {
                 #[cfg(feature = "reqwest")]
                 {
-                    load_url_with_cache(url, token.as_deref(), catalog_hash.as_deref(), no_cache)
+                    load_url_with_cache(
+                        url,
+                        token.as_deref(),
+                        catalog_hash.as_deref(),
+                        companion_files,
+                        no_cache,
+                    )
                 }
                 #[cfg(not(feature = "reqwest"))]
                 {
-                    let _ = (token, catalog_hash, no_cache);
+                    let _ = (token, catalog_hash, companion_files, no_cache);
                     bail!(
                         "HTTP mold loading is not available (compiled with the 'slim' feature): {}",
                         url
@@ -159,7 +168,7 @@ impl MoldSource {
                 .parent()
                 .filter(|p| !p.as_os_str().is_empty())
                 .map(|p| p.to_string_lossy().into_owned()),
-            MoldSource::Url(url, _, catalog_hash) => {
+            MoldSource::Url(url, _, catalog_hash, _) => {
                 #[cfg(feature = "reqwest")]
                 {
                     use sha2::{Digest, Sha256};
@@ -206,6 +215,7 @@ fn load_url_with_cache(
     url: &str,
     token: Option<&str>,
     catalog_hash: Option<&str>,
+    companion_urls: &[String],
     no_cache: bool,
 ) -> Result<String> {
     use sha2::{Digest, Sha256};
@@ -238,6 +248,10 @@ fn load_url_with_cache(
         let _ = fs::create_dir_all(&mold_cache_dir);
         let _ = fs::write(&cache_script_path, &content);
         let _ = fs::write(&cache_hash_path, expected_hash);
+
+        // Fetch companion files (templates, data, etc.) into the cache dir.
+        fetch_companion_files(&mold_cache_dir, url, companion_urls, token);
+
         return Ok(content);
     }
 
@@ -283,6 +297,43 @@ fn load_url_with_cache(
     }
 
     Ok(content)
+}
+
+/// Download companion files (templates, data) into the mold cache directory.
+/// Each companion URL is resolved relative to the script URL's parent directory.
+#[cfg(feature = "reqwest")]
+fn fetch_companion_files(
+    cache_dir: &std::path::Path,
+    script_url: &str,
+    companion_urls: &[String],
+    token: Option<&str>,
+) {
+    // Compute the base URL (parent of the script URL)
+    let script_base = script_url
+        .rfind('/')
+        .map(|i| &script_url[..i])
+        .unwrap_or(script_url);
+
+    for companion_url in companion_urls {
+        // Derive relative path from companion URL vs script base
+        let rel_path = companion_url
+            .strip_prefix(&format!("{script_base}/"))
+            .unwrap_or(companion_url);
+
+        let target = cache_dir.join(rel_path);
+        if let Some(parent) = target.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        match fetch_mold_content(companion_url, token) {
+            Ok(content) => {
+                let _ = fs::write(&target, &content);
+            }
+            Err(e) => {
+                eprintln!("[fimod] warning: could not fetch companion file '{rel_path}': {e:#}");
+            }
+        }
+    }
 }
 
 /// Fetch a mold script from a URL with optional Bearer token.
@@ -494,13 +545,13 @@ mod tests {
     #[test]
     fn test_resolve_url_http() {
         let src = MoldSource::resolve(Some("http://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _, _) if u == "http://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url(u, _, _, _) if u == "http://example.com/m.py"));
     }
 
     #[test]
     fn test_resolve_url_https() {
         let src = MoldSource::resolve(Some("https://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _, _) if u == "https://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url(u, _, _, _) if u == "https://example.com/m.py"));
     }
 
     #[test]

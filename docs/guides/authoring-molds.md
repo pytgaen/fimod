@@ -229,7 +229,8 @@ fimod mold list my        # named registry
 If you publish the registry remotely (GitHub, GitLab, HTTP), generate a `catalog.toml` first so remote users can browse it:
 
 ```bash
-fimod registry build-catalog my   # writes ~/molds/catalog.toml
+fimod registry build-catalog ./molds         # scans directory and writes catalog.toml
+fimod registry build-catalog --registry my   # same, resolving path from a registered registry
 # commit and push catalog.toml alongside the molds
 ```
 

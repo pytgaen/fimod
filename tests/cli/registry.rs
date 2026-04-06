@@ -44,8 +44,7 @@ fn test_registry_add_local_and_list() {
         .env("HOME", home.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Added registry 'my'"))
-        .stdout(predicate::str::contains("Set 'my' as default registry"));
+        .stdout(predicate::str::contains("Added registry 'my'"));
 
     // List
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -53,30 +52,11 @@ fn test_registry_add_local_and_list() {
         .env("HOME", home.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("my"))
-        .stdout(predicate::str::contains("(default)"));
+        .stdout(predicate::str::contains("my"));
 }
 
 #[test]
-fn test_registry_add_first_becomes_default_automatically() {
-    let home = assert_fs::TempDir::new().unwrap();
-    let molds_dir = assert_fs::TempDir::new().unwrap();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args([
-            "registry",
-            "add",
-            "first",
-            molds_dir.path().to_str().unwrap(),
-        ])
-        .env("HOME", home.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Set 'first' as default registry"));
-}
-
-#[test]
-fn test_registry_add_second_does_not_override_default() {
+fn test_registry_set_priority_makes_p0() {
     let home = assert_fs::TempDir::new().unwrap();
     let dir1 = assert_fs::TempDir::new().unwrap();
     let dir2 = assert_fs::TempDir::new().unwrap();
@@ -91,42 +71,22 @@ fn test_registry_add_second_does_not_override_default() {
         .args(["registry", "add", "second", dir2.path().to_str().unwrap()])
         .env("HOME", home.path())
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Added registry 'second'"));
+        .success();
 
-    // first should still be default
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["registry", "set-priority", "second", "0"])
+        .env("HOME", home.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set 'second' to P0"));
+
+    // second should be P0 in the list
     assert_cmd::cargo_bin_cmd!("fimod")
         .args(["registry", "list"])
         .env("HOME", home.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("first").and(predicate::str::contains("(default)")));
-}
-
-#[test]
-fn test_registry_add_with_default_flag() {
-    let home = assert_fs::TempDir::new().unwrap();
-    let dir1 = assert_fs::TempDir::new().unwrap();
-    let dir2 = assert_fs::TempDir::new().unwrap();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "add", "first", dir1.path().to_str().unwrap()])
-        .env("HOME", home.path())
-        .assert()
-        .success();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args([
-            "registry",
-            "add",
-            "second",
-            dir2.path().to_str().unwrap(),
-            "--default",
-        ])
-        .env("HOME", home.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Set 'second' as default registry"));
+        .stdout(predicate::str::contains("P0"));
 }
 
 #[test]
@@ -146,6 +106,25 @@ fn test_registry_add_duplicate_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("already exists"));
+}
+
+#[test]
+fn test_registry_add_duplicate_path_different_name_fails() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let dir = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["registry", "add", "first", dir.path().to_str().unwrap()])
+        .env("HOME", home.path())
+        .assert()
+        .success();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["registry", "add", "second", dir.path().to_str().unwrap()])
+        .env("HOME", home.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("already registered as 'first'"));
 }
 
 #[test]
@@ -256,44 +235,11 @@ fn test_registry_remove_not_found() {
 // ── registry set-default ──────────────────────────────────────────────────────
 
 #[test]
-fn test_registry_set_default() {
-    let home = assert_fs::TempDir::new().unwrap();
-    let dir1 = assert_fs::TempDir::new().unwrap();
-    let dir2 = assert_fs::TempDir::new().unwrap();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "add", "alpha", dir1.path().to_str().unwrap()])
-        .env("HOME", home.path())
-        .assert()
-        .success();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "add", "beta", dir2.path().to_str().unwrap()])
-        .env("HOME", home.path())
-        .assert()
-        .success();
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "set-default", "beta"])
-        .env("HOME", home.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Set 'beta' as default registry"));
-
-    assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "list"])
-        .env("HOME", home.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("beta").and(predicate::str::contains("(default)")));
-}
-
-#[test]
-fn test_registry_set_default_not_found() {
+fn test_registry_set_priority_not_found() {
     let home = assert_fs::TempDir::new().unwrap();
 
     assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["registry", "set-default", "ghost"])
+        .args(["registry", "set-priority", "ghost", "1"])
         .env("HOME", home.path())
         .assert()
         .failure()
@@ -392,4 +338,72 @@ fn test_at_mold_unknown_registry_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Registry 'ghost' not found"));
+}
+
+// ── build-catalog ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_build_catalog_direct_path() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let molds_dir = assert_fs::TempDir::new().unwrap();
+    let mold_subdir = molds_dir.child("cleanup");
+    mold_subdir.create_dir_all().unwrap();
+    mold_subdir
+        .child("cleanup.py")
+        .write_str("\"\"\"Clean up data.\"\"\"\ndef transform(data, **_):\n    return data\n")
+        .unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "registry",
+            "build-catalog",
+            molds_dir.path().to_str().unwrap(),
+        ])
+        .env("HOME", home.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Scanned 1 molds"))
+        .stdout(predicate::str::contains("cleanup"));
+
+    // catalog.toml should exist in the molds directory
+    let catalog = std::fs::read_to_string(molds_dir.path().join("catalog.toml")).unwrap();
+    assert!(catalog.contains("[molds.cleanup]"));
+}
+
+#[test]
+fn test_build_catalog_nonexistent_path() {
+    let home = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["registry", "build-catalog", "/nonexistent/path"])
+        .env("HOME", home.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not a directory"));
+}
+
+#[test]
+fn test_build_catalog_registry_flag() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let (molds_dir, _script) = setup_mold_dir();
+
+    // Register first
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "registry",
+            "add",
+            "local",
+            molds_dir.path().to_str().unwrap(),
+        ])
+        .env("HOME", home.path())
+        .assert()
+        .success();
+
+    // Build catalog via --registry
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["registry", "build-catalog", "--registry", "local"])
+        .env("HOME", home.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Scanned 1 molds"));
 }

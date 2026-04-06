@@ -100,7 +100,10 @@ When you need the full HTTP response (status code, headers, body), use `--input-
 data = {
     "status": 200,
     "headers": {"content-type": "application/json", "location": "..."},
-    "body": "..."  # raw response body as a string
+    "body": "...",          # raw response body as a string
+    "body_size": 1234,      # response size in bytes
+    "content_type": "application/json",
+    "url": "https://example.com/api/data"
 }
 ```
 
@@ -239,17 +242,17 @@ Registries are named collections of molds (local directories or remote repos).
 Use `@name` or `@registry/name` with `-m` to reference a mold by name.
 
 ```bash
-fimod registry setup                                     # 🚀 First-run setup (official catalog)
+fimod registry setup                                     # 🚀 First-run setup (example molds, P99)
 fimod registry add my ~/molds/                          # ➕ Add local registry
-fimod registry add official https://github.com/org/molds # ➕ Add GitHub registry
+fimod registry add corp https://github.com/org/molds    # ➕ Add GitHub registry
 fimod registry list                                      # 📋 List registries
 fimod registry show my                                   # 🔍 Show details
 fimod registry remove my                                 # 🗑️ Remove
-fimod registry set-default official                      # ⭐ Set default (P0)
-fimod registry set-default --clear                       # ⭐ Clear default
+fimod registry set-priority corp 0                       # ⭐ Set P0 (highest priority)
 fimod registry set-priority mycompany 1                  # 📌 Set priority P1
 fimod registry set-priority mycompany --clear            # 📌 Clear priority
-fimod registry build-catalog my                          # 📦 Generate catalog.toml
+fimod registry build-catalog ./molds                     # 📦 Generate catalog.toml from a directory
+fimod registry build-catalog --registry my               # 📦 Generate catalog.toml for a registered registry
 fimod registry cache info                                # 📊 Show cache location and usage
 fimod registry cache clear                               # 🧹 Clear all cached catalogs and molds
 ```
@@ -258,22 +261,19 @@ Config stored in `~/.config/fimod/sources.toml`. Cache stored in `~/.cache/fimod
 
 ### `registry setup` — first-run onboarding
 
-`fimod registry setup` adds the official fimod mold catalog if not already present. The install scripts call it automatically, but it is safe to run manually at any time (idempotent).
+`fimod registry setup` adds the fimod example molds registry (P99) if not already present. The install scripts call it automatically, but it is safe to run manually at any time (idempotent).
 
 ```bash
 fimod registry setup           # interactive — asks before adding
 fimod registry setup --yes     # non-interactive / CI — skips the prompt
-fimod registry setup --force   # promote official registry to default even if another default exists
 ```
 
-Behaviour summary:
+Behaviour:
 
-| Situation | Without `--force` | With `--force` |
-|---|---|---|
-| Already configured | "already configured", no-op | same |
-| No default registry yet | adds as default (fresh install) | same |
-| Default already exists | adds without changing default | adds and promotes to default |
-| Non-interactive (no TTY) | skips silently | skips silently |
+- **Already configured** (same URL found) → no-op, prints "already configured".
+- **Legacy "official" registry detected** → prompts to migrate it to "examples" (P99).
+- **Fresh install** → adds "examples" at P99 (not default — your own registries take precedence).
+- **Non-interactive (no TTY)** → skips silently unless `--yes` is passed.
 
 ### Priority-based resolution
 
@@ -282,27 +282,18 @@ When you use `@mold` (without a registry prefix), fimod searches **all** configu
 | Priority | Source |
 |----------|--------|
 | P0 | `FIMOD_REGISTRY` anonymous entries (env always wins) |
-| P0 | `default` registry from `sources.toml` |
-| P1, P2, … | Registries listed in `[priority]` section |
+| P0, P1, P2, … | Registries with a `[priority]` rank |
 | — | Remaining registries (file order, after all prioritized ones) |
 
 ```bash
 $ fimod registry list
-  official    [github]  github.com/org/fimod-powered       P0 (default)
+  corp        [github]  github.com/org/fimod-powered       P0
   mycompany   [http]    registry.corp.com/fimod             P1
   internal    [local]   /home/user/molds                    P2
+  examples    [github]  github.com/pytgaen/fimod            P99
 ```
 
 With `@registry/mold` (explicit prefix), only that specific registry is searched.
-
-#### `set-default` — set or clear the default registry (P0)
-
-```bash
-fimod registry set-default official     # Set 'official' as P0
-fimod registry set-default --clear      # Remove the P0 default
-```
-
-The default registry is always P0. If a registry was previously in `[priority]`, it is removed from there when promoted to default.
 
 #### `set-priority` — assign a priority rank
 
@@ -312,26 +303,36 @@ fimod registry set-priority internal 2     # Set internal to P2
 fimod registry set-priority mycompany --clear  # Remove priority
 ```
 
-If the requested rank is already taken, existing entries shift up automatically:
+When the requested rank is already taken, the behaviour depends on context:
 
-```bash
-# Before: mycompany=P1, internal=P2
-$ fimod registry set-priority newreg 1
-# After:  newreg=P1, mycompany=P2, internal=P3
-```
+- **Swap (default)** — if both registries already have a rank, they exchange positions:
 
-A registry that is already default (P0) cannot be assigned a priority — use `set-default --clear` first.
+    ```bash
+    # Before: mycompany=P1, internal=P2
+    $ fimod registry set-priority internal 1
+    # After:  internal=P1, mycompany=P2
+    ```
+
+- **Cascade** — if the source had no prior rank (or `--cascade` is passed), existing entries shift down:
+
+    ```bash
+    # Before: mycompany=P1, internal=P2
+    $ fimod registry set-priority newreg 1
+    # After:  newreg=P1, mycompany=P2, internal=P3
+    ```
+
+Use `--cascade` to force cascade behaviour even when both registries already have a rank.
 
 #### `sources.toml` format
 
 ```toml
-default = "official"
-
 [priority]
+corp = 0
 mycompany = 1
 internal = 2
+examples = 99
 
-[sources.official]
+[sources.corp]
 type = "github"
 url = "https://github.com/org/fimod-powered"
 
@@ -342,9 +343,13 @@ url = "https://registry.corp.com/fimod"
 [sources.internal]
 type = "local"
 path = "/home/user/molds"
+
+[sources.examples]
+type = "github"
+url = "https://github.com/pytgaen/fimod/tree/main/molds"
 ```
 
-The `[priority]` section is optional. Without it, the default registry is searched first, then the rest in file order.
+The `[priority]` section is optional. Without it, registries are searched in file order.
 
 ### `FIMOD_REGISTRY` — ephemeral registries for CI
 
@@ -411,7 +416,7 @@ fimod registry add mylib https://raw.githubusercontent.com/org/repo/refs/tags/st
 
 ```bash
 fimod mold list              # list molds in all registries
-fimod mold list official     # list molds in a specific registry
+fimod mold list examples     # list molds in a specific registry
 ```
 
 For **local** registries, mold names and descriptions are discovered by scanning `.py` files.
@@ -420,7 +425,8 @@ For **remote** registries (GitHub, GitLab, HTTP), a `catalog.toml` must be prese
 Maintainers generate it with:
 
 ```bash
-fimod registry build-catalog my   # scans ~/molds/ and writes catalog.toml
+fimod registry build-catalog ./molds         # scans directory and writes catalog.toml
+fimod registry build-catalog --registry my   # same, resolving path from a registered registry
 ```
 
 The `catalog.toml` is a simple TOML file committed alongside the molds:
@@ -648,20 +654,53 @@ Features:
 
 ## 🐚 Shell completion
 
+Fimod provides **dynamic** shell completions: subcommands, flags, format names, mold `@references`, and registry source names are all completed contextually.
+
+Run `fimod completions <shell>` to see the setup instruction for your shell, or use the snippets below:
+
 === "Bash"
 
     ```bash
-    fimod --completions bash > ~/.local/share/bash-completion/completions/fimod
+    echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc
     ```
 
 === "Zsh"
 
     ```bash
-    fimod --completions zsh > ~/.zfunc/_fimod
+    echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc
     ```
 
 === "Fish"
 
     ```bash
-    fimod --completions fish > ~/.config/fish/completions/fimod.fish
+    echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish
     ```
+
+=== "Elvish"
+
+    ```bash
+    echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE
+    ```
+
+### What gets completed
+
+| You type | ++tab++ completes |
+| --- | --- |
+| `fimod` | Subcommands: `shape`, `registry`, `mold`, `completions`… |
+| `fimod shape --` | All flags: `--input`, `--mold`, `--debug`… |
+| `fimod shape --input-format` | Format names: `json`, `yaml`, `csv`, `ndjson`, `toml`… |
+| `fimod shape --output-format` | Same format list |
+| `fimod shape -m @` | Registry molds: `@pick_fields`, `@examples/flatten_nested`… |
+| `fimod registry show` | Configured source names |
+| `fimod registry remove` | Configured source names |
+| `fimod registry set-priority` | Configured source names |
+| `fimod registry build-catalog --registry` | Configured source names |
+| `fimod mold list` | Configured source names |
+| `fimod mold show --registry` | Configured source names |
+| `fimod completions` | Shell names: `bash`, `zsh`, `fish`, `elvish`, `powershell` |

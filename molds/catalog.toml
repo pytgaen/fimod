@@ -2,7 +2,7 @@
 description = "Hash specified fields with SHA-256 for anonymization"
 path = "anonymize_pii/anonymize_pii.py"
 readme = "anonymize_pii/README.md"
-hash = "1a25b931844e916b0e97bf65d266ab6c"
+hash = "71bf528758cd9b63dfdb80d342cc1186"
 
 [molds.anonymize_pii.args]
 fields = "Comma-separated list of fields to anonymize"
@@ -12,12 +12,24 @@ description = "Generate a shields.io badge in Markdown"
 path = "badge_md/badge_md.py"
 readme = "badge_md/README.md"
 output_format = "txt"
-hash = "e5065603f49123c815f12b957cf69dee"
+hash = "c1961a8d9f655882ddcd9afac44fa8e4"
 
 [molds.badge_md.args]
 color = "Badge color (overrides input)"
 label = "Badge label (overrides input)"
 status = "Badge status text (overrides input)"
+
+[molds.bq_insert]
+description = "Generate an INSERT INTO (VALUES or SELECT) statement from a BigQuery table (bq show --format=json)"
+path = "bq_insert/bq_insert.py"
+readme = "bq_insert/README.md"
+hash = "aca06651216540f67e4ad983947eb19b"
+
+[molds.bq_select]
+description = "Generate a SELECT statement from a BigQuery table (bq show --format=json)"
+path = "bq_select/bq_select.py"
+readme = "bq_select/README.md"
+hash = "dfbf11712d8763ec984029aa90b2612c"
 
 [molds.csv_stats]
 description = "Compute basic statistics on numeric CSV columns"
@@ -25,7 +37,7 @@ path = "csv_stats/csv_stats.py"
 readme = "csv_stats/README.md"
 input_format = "csv"
 output_format = "json"
-hash = "3d207b83549bfecd36598c3d17ddf3c0"
+hash = "4ed97ee6877ae840cd73cc68ede4e433"
 
 [molds.csv_to_json_records]
 description = "Convert CSV to JSON array of objects"
@@ -33,13 +45,13 @@ path = "csv_to_json_records/csv_to_json_records.py"
 readme = "csv_to_json_records/README.md"
 input_format = "csv"
 output_format = "json"
-hash = "b03246ed011a0137e0d7896b0fa69292"
+hash = "805514d40ffb439e100c507c38e25df0"
 
 [molds.dedup_by]
 description = "Deduplicate records by a field (keeps first occurrence)"
 path = "dedup_by/dedup_by.py"
 readme = "dedup_by/README.md"
-hash = "f96c8f31853501134f1b61f61850fb21"
+hash = "b8688b02f3b820651798efb44b492d41"
 
 [molds.dedup_by.args]
 field = "Field name to deduplicate on"
@@ -48,53 +60,30 @@ field = "Field name to deduplicate on"
 description = "Extract nested fields by dotpath into a flat object"
 path = "deep_pluck/deep_pluck.py"
 readme = "deep_pluck/README.md"
-hash = "ca38c507251f78e4052dc0704e21da6d"
+hash = "0d271e5a24d750e9dfb517707d9d4198"
 
 [molds.deep_pluck.args]
 paths = "Comma-separated dotpaths to extract (e.g. user.name"
-
-[molds.download]
-description = "Download a file from a URL (wget-like)"
-path = "download/download.py"
-readme = "download/README.md"
-input_format = "http"
-hash = "4dc13c18f0742a551332a39dd2b48977"
-
-[molds.download.args]
-out = "Output filename (defaults to the last path segment of the URL)"
 
 [molds.env_to_dotenv]
 description = "Transform JSON/YAML config to .env format"
 path = "env_to_dotenv/env_to_dotenv.py"
 readme = "env_to_dotenv/README.md"
 output_format = "txt"
-hash = "b541ac777d31c2169389576663861a93"
+hash = "35d5e3f80fd32115d972d1d5504f66f7"
 
 [molds.flatten_nested]
 description = "Flatten a nested JSON object into dot-path keys"
 path = "flatten_nested/flatten_nested.py"
 readme = "flatten_nested/README.md"
-hash = "dc6f7cedd4d2983fe83c574ffb08e3bd"
-
-[molds.gh_latest]
-description = "Get the latest release tag or download URL from a GitHub repository"
-path = "gh_latest/gh_latest.py"
-readme = "gh_latest/README.md"
-input_format = "http"
-output_format = "txt"
-options = ["no-follow"]
-hash = "8764d42967f54700352c00d803ce61dc"
-
-[molds.gh_latest.args]
-asset = "Asset filename pattern — supports {tag} and {version} placeholders"
-repo = "GitHub repository (owner/repo) — required for download URL"
+hash = "670cbc45301fe55511f8762602e8ade6"
 
 [molds.git_changelog]
 description = "Generate a Markdown changelog from a JSON array of data"
 path = "git_changelog/git_changelog.py"
 readme = "git_changelog/README.md"
 output_format = "txt"
-hash = "c6ec8e8113d4f82f326f74da8ecfcec6"
+hash = "08ed192c7cbe0339e135c6f44cd85510"
 
 [molds.git_changelog.args]
 title = "Changelog title (default: Changelog)"
@@ -103,7 +92,7 @@ title = "Changelog title (default: Changelog)"
 description = "Group records by field and count occurrences"
 path = "group_count/group_count.py"
 readme = "group_count/README.md"
-hash = "906f937d678de2db2666bab298e44146"
+hash = "071cd9f0c3f2423211ad053d084f720a"
 
 [molds.group_count.args]
 field = "Field name to group by"
@@ -112,13 +101,13 @@ field = "Field name to group by"
 description = "Common jq operations (get, map, select) via --arg"
 path = "jq_compat/jq_compat.py"
 readme = "jq_compat/README.md"
-hash = "6424f275fe683d035e516e2ce93392d2"
+hash = "237d4d771224ca387b3d9fd9400a1f1d"
 
 [molds.json_schema_extract]
 description = "Extract a simplified JSON schema from a document"
 path = "json_schema_extract/json_schema_extract.py"
 readme = "json_schema_extract/README.md"
-hash = "33c25cc7cc8f61d7a3f5f09af35769f5"
+hash = "51af64a5cec2c7e706946ffa43a15aa4"
 
 [molds.log_parse]
 description = "Parse log lines into structured records via regex capture groups"
@@ -126,7 +115,7 @@ path = "log_parse/log_parse.py"
 readme = "log_parse/README.md"
 input_format = "lines"
 output_format = "json"
-hash = "7bc24b6d514652ebb2242ec9651187d6"
+hash = "4cc934abb1a2f4269b994f0f1a14893d"
 
 [molds.markdown_toc]
 description = "Extract the table of contents from a Markdown file"
@@ -134,54 +123,37 @@ path = "markdown_toc/markdown_toc.py"
 readme = "markdown_toc/README.md"
 input_format = "lines"
 output_format = "json"
-hash = "e1a7009de20dbab4ab83d31b7bf6afac"
+hash = "53f4fca3d0fe567661c15dc444f60dd7"
 
 [molds.pick_fields]
 description = "Keep only specified fields from an object or array of objects"
 path = "pick_fields/pick_fields.py"
 readme = "pick_fields/README.md"
-hash = "5ca716ddae780dff94df97bd61cffa70"
+hash = "e0b8957157bab5687d44c6aee24b6a32"
 
 [molds.pick_fields.args]
 fields = "Comma-separated list of fields to keep"
-
-[molds.poetry_migrate]
-description = "Migrate a Poetry pyproject.toml to Poetry 2 or uv format"
-path = "poetry_migrate/poetry_migrate.py"
-readme = "poetry_migrate/README.md"
-output_format = "toml"
-hash = "1a9f4266d38308ce73ae34aeb3df0595"
-
-[molds.poetry_migrate.args]
-target = "Migration target: poetry2 or uv (default: uv)"
 
 [molds.rename_keys]
 description = "Rename keys via mapping 'old1:new1,old2:new2'"
 path = "rename_keys/rename_keys.py"
 readme = "rename_keys/README.md"
-hash = "7a022a11af1fb6c7411b4758cd28a5c7"
+hash = "196fd4d7b75fb322e49348f6c8b914f2"
 
 [molds.rename_keys.args]
 mapping = "Comma-separated list of old_key:new_key pairs"
-
-[molds.skylos_to_gitlab]
-description = "Convert Skylos dead code reports to GitLab Code Quality format"
-path = "skylos_to_gitlab/skylos_to_gitlab.py"
-readme = "skylos_to_gitlab/README.md"
-output_format = "json"
-hash = "71c8062d2dcd7c55845e00815ffb8613"
 
 [molds.sort_json_keys]
 description = "Recursively sort the keys of a JSON structure"
 path = "sort_json_keys/sort_json_keys.py"
 readme = "sort_json_keys/README.md"
-hash = "62fa0dc4f48af844c7a82a3c9321dd47"
+hash = "4e7bd3733d20edd0aa672c173de79e6f"
 
 [molds.split_tags]
 description = "Split a delimiter-separated tags field into a list and deduplicate"
 path = "split_tags/split_tags.py"
 readme = "split_tags/README.md"
-hash = "84629fde0fd1d3bb24b82d4987578c48"
+hash = "56702dfba249513b311f0e4ce630a51e"
 
 [molds.split_tags.args]
 field = "Field name containing the tags string"
@@ -191,7 +163,7 @@ sep = "Separator regex (default: comma/semicolon with optional space)"
 description = "Validate that required fields exist (exits 1 if missing)"
 path = "validate_fields/validate_fields.py"
 readme = "validate_fields/README.md"
-hash = "5dc4c37a11b3a01824a0a69777425bec"
+hash = "c7de293019a80ba80c66f6a04a6f6c78"
 
 [molds.validate_fields.args]
 required = "Comma-separated list of dotpaths that must be present (or set FIMOD_REQUIRED_FIELDS env var)"
@@ -201,7 +173,7 @@ description = "Merge patch values into an existing YAML structure"
 path = "yaml_merge/yaml_merge.py"
 readme = "yaml_merge/README.md"
 output_format = "yaml"
-hash = "29106b925eb290b9d3b49a748d8c36c0"
+hash = "69ba0df5c3b5b741b8376502b669b740"
 
 [molds.yaml_merge.args]
 set = "Comma-separated list of path=value assignments"

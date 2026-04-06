@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Cursor;
 use std::path::Path;
 
@@ -95,7 +96,7 @@ impl DataFormat {
                     .collect();
                 Ok(Value::Array(values?))
             }
-            DataFormat::Yaml => serde_norway::from_str(content).context("Failed to parse YAML"),
+            DataFormat::Yaml => serde_saphyr::from_str(content).context("Failed to parse YAML"),
             DataFormat::Toml => {
                 let toml_value: toml::Value =
                     toml::from_str(content).context("Failed to parse TOML")?;
@@ -155,7 +156,7 @@ impl DataFormat {
                 }
             },
             DataFormat::Yaml => {
-                serde_norway::to_string(value).context("Failed to serialize to YAML")
+                serde_saphyr::to_string(value).context("Failed to serialize to YAML")
             }
             DataFormat::Toml => {
                 toml::to_string_pretty(value).context("Failed to serialize to TOML")
@@ -404,8 +405,8 @@ pub fn csv_to_monty(
 pub fn serialize_csv(value: &Value, opts: &CsvOptions) -> Result<String> {
     let rows = value.as_array().ok_or_else(|| {
         anyhow::anyhow!(
-            "CSV output expects an array of objects, got {}. \
-             Hint: your transform must return a list of dicts.",
+            "CSV output expects an array of objects or an array of arrays, got {}. \
+             Hint: your transform must return a list of dicts or a list of lists.",
             match value {
                 Value::Object(_) => "an object",
                 Value::String(_) => "a string",
@@ -427,37 +428,58 @@ pub fn serialize_csv(value: &Value, opts: &CsvOptions) -> Result<String> {
             .delimiter(opts.effective_output_delimiter())
             .from_writer(&mut output);
 
-        // Determine column order from the first object's keys
-        let first_obj = rows[0]
-            .as_object()
-            .ok_or_else(|| anyhow::anyhow!("CSV output: each row must be an object"))?;
-        let columns: Vec<String> = first_obj.keys().cloned().collect();
-
-        // Write header if needed
-        if !opts.no_output_header {
-            wtr.write_record(&columns)
-                .context("Failed to write CSV header")?;
+        fn value_to_field(v: &Value) -> Cow<'_, str> {
+            match v {
+                Value::String(s) => Cow::Borrowed(s.as_str()),
+                Value::Null => Cow::Borrowed(""),
+                other => Cow::Owned(other.to_string()),
+            }
         }
 
-        // Write data rows
-        for row in rows {
-            let obj = row
-                .as_object()
-                .ok_or_else(|| anyhow::anyhow!("CSV output: each row must be an object"))?;
-            let fields: Vec<String> = columns
-                .iter()
-                .map(|col| {
-                    obj.get(col)
-                        .map(|v| match v {
-                            Value::String(s) => s.clone(),
-                            Value::Null => String::new(),
-                            other => other.to_string(),
-                        })
-                        .unwrap_or_default()
-                })
-                .collect();
-            wtr.write_record(&fields)
-                .context("Failed to write CSV record")?;
+        if rows[0].is_array() {
+            // Array-of-arrays mode: write header from --csv-header-names if provided
+            if let Some(ref names) = opts.header_names {
+                if !opts.no_output_header {
+                    wtr.write_record(names)
+                        .context("Failed to write CSV header")?;
+                }
+            }
+
+            for row in rows {
+                let arr = row.as_array().ok_or_else(|| {
+                    anyhow::anyhow!("CSV output: mixed rows (expected all arrays)")
+                })?;
+                let fields: Vec<Cow<'_, str>> = arr.iter().map(|v| value_to_field(v)).collect();
+                wtr.write_record(fields.iter().map(|f| f.as_bytes()))
+                    .context("Failed to write CSV record")?;
+            }
+        } else {
+            // Array-of-objects mode
+            let first_obj = rows[0].as_object().ok_or_else(|| {
+                anyhow::anyhow!("CSV output: each row must be an object or an array")
+            })?;
+            let columns: Vec<String> = first_obj.keys().cloned().collect();
+
+            if !opts.no_output_header {
+                wtr.write_record(&columns)
+                    .context("Failed to write CSV header")?;
+            }
+
+            for row in rows {
+                let obj = row.as_object().ok_or_else(|| {
+                    anyhow::anyhow!("CSV output: mixed rows (expected all objects)")
+                })?;
+                let fields: Vec<Cow<'_, str>> = columns
+                    .iter()
+                    .map(|col| {
+                        obj.get(col)
+                            .map(|v| value_to_field(v))
+                            .unwrap_or(Cow::Borrowed(""))
+                    })
+                    .collect();
+                wtr.write_record(fields.iter().map(|f| f.as_bytes()))
+                    .context("Failed to write CSV record")?;
+            }
         }
 
         wtr.flush().context("Failed to flush CSV writer")?;

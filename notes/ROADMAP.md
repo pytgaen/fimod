@@ -2,27 +2,6 @@
 
 Remaining features to implement.
 
-## Power user
-
-- **Multi-document YAML** `[P2]` — support for `---` separators
-- **`--jobs N`** `[P2]` — parallelize batch processing (`-i *.json`) over N threads. Files are independent, so the gain is immediate. Implementation: `rayon` or `std::thread::spawn` + result channel. Watch out: stdout interleaving and partial error handling to be addressed.
-- **Multi-file output** `[P3]` — a mold that generates N files (jsonnet style)
-- **Large files streaming** `[P3]` — line-by-line processing without loading everything into memory. Limited to line-oriented formats (NDJSON, CSV, TXT/lines); tree formats (JSON, JSON5, YAML, TOML) require full loading by nature.
-
-## `dt_` Helpers (date/time)
-
-`[P2]` — Same pattern as `re_`, `dp_`, `hs_`. One of the most common gaps in data pipelines.
-
-| Helper | Example |
-| ------ | ------- |
-| `dt_parse(s)` | Parse an ISO 8601 date → manipulable object |
-| `dt_format(d, fmt)` | Format a date (`"%Y-%m-%d"`, `"%d/%m/%Y"`) |
-| `dt_now()` | Current UTC date/time |
-| `dt_diff(a, b)` | Difference in seconds between two dates |
-| `dt_add(d, days=N)` | Add/subtract a duration |
-
-Implementation: `chrono` crate (often already a transitive dependency). Use cases: normalize dates in CSV/JSON exports, filter by time range, add timestamps.
-
 ## `df_` Helpers (diff/patch)
 
 `[P2]` — Structural diff and JSON patching via the [`json-patch`](https://crates.io/crates/json-patch) crate (RFC 6902 / RFC 7396, 2.5MA+ dl/month, operates directly on `serde_json::Value`). Same pattern as `re_`, `dp_`, `hs_`.
@@ -60,18 +39,12 @@ Ready-to-use wrapper molds for CI/CD pipelines:
 
 Depends on: `df_*` helpers (slurp already implemented via `-i f1 -i f2 -s`).
 
-## ✅ Verbosity & diagnostics
+## Power user
 
-`--debug` kept for Rust traces (script displayed, input/output data, formats). Two new flags to control molds' `msg_*`:
-
-| CLI Flag | Level | `msg_print/info/warn` | `msg_error` | `msg_verbose` | `msg_trace` |
-| -------- | :----: | :-------------------: | :---------: | :-----------: | :---------: |
-| `--quiet` | 0 | — | ✓ | — | — |
-| (default) | 1 | ✓ | ✓ | — | — |
-| `--msg-level=verbose` | 2 | ✓ | ✓ | ✓ | — |
-| `--msg-level=trace` | 3 | ✓ | ✓ | ✓ | ✓ |
-
-`--quiet` and `--msg-level` are mutually exclusive. `msg_verbose` and `msg_trace` are the two new external functions added.
+- **Multi-document YAML** `[P2]` — support for `---` separators
+- **`--jobs N`** `[P2]` — parallelize batch processing (`-i *.json`) over N threads. Files are independent, so the gain is immediate. Implementation: `rayon` or `std::thread::spawn` + result channel. Watch out: stdout interleaving, partial error handling, and interaction with `--in-place` to be addressed.
+- **Multi-file output** `[P3]` — a mold that generates N files (jsonnet style)
+- **Large files streaming** `[P3]` — line-by-line processing without loading everything into memory. Limited to line-oriented formats (NDJSON, CSV, TXT/lines); tree formats (JSON, JSON5, YAML, TOML) require full loading by nature.
 
 ## Ecosystem
 
@@ -81,9 +54,41 @@ Depends on: `df_*` helpers (slurp already implemented via `-i f1 -i f2 -s`).
 - **Module system** `[P3]` — imports between molds via `# fimod: import=utils,helpers`. Fimod resolves the referenced files and concatenates them before Monty compilation (no native Python import — Monty doesn't support it). Uses the existing `# fimod:` mechanism (`parse_mold_defaults()`). Resolution: same directory as the mold, then registry. *(De-prioritized: at the beginning of use cases, monolithic molds will be more than enough)*.
 - **Schema validation** `[P3]` — validate input/output against a JSON Schema
 
+## Observability
+
+### Local Usage Stats `[P3]`
+
+Track `@mold` usage locally in `~/.config/fimod/usage.toml` — increment a counter + last-used timestamp on each registry mold resolution. No network, no opt-in required.
+
+Add `fimod registry stats` to display usage:
+
+```
+@flatten_nested    47 runs   last: 2026-04-01
+@pick_fields       23 runs   last: 2026-03-28
+@badge_md           3 runs   last: 2026-03-15
+```
+
+Useful for the user (which molds do I actually use?) and for maintainers via voluntary sharing. Optional `--json` output for programmatic consumption.
+
+## Workspace & WASM Playground `[P3]`
+
+Split fimod into a Cargo workspace to cleanly separate the transformation core from CLI tooling:
+
+```
+fimod-core/     → convert, engine, format, mold, pipeline, regex, dotpath,
+                  iter_helpers, hash, template, msg, gatekeeper, exit_control,
+                  env_helpers, format_control
+fimod-cli/      → main.rs, registry, test_runner, rustyline, clap
+fimod-wasm/     → wasm-bindgen wrapper around fimod-core
+```
+
+**Why:** the current `lib.rs` re-exports everything including modules with platform-specific deps (`registry` → `home` crate, `main.rs` → `rustyline` → `fd-lock`). These two crates are the only WASM blockers — the rest of the pipeline compiles to `wasm32-unknown-unknown` as-is (verified 2026-04-03). A workspace split makes the core genuinely portable and enables a static-site playground (Monaco editor + WASM, hosted on GitHub Pages) with zero backend.
+
+**Minimal alternative:** `#[cfg(not(target_arch = "wasm32"))]` gates on `registry` and `test_runner` in `lib.rs` + optional deps in `Cargo.toml`. Gets WASM working without restructuring, but doesn't modularize.
+
 ## Future ideas
 
-- **PyO3 Python API** `[P3]` — expose fimod as a native Python module via PyO3. Requires extracting the pipeline core into a separate `lib.rs` from `main.rs`. Would allow `import fimod; fimod.shape(data, mold="@pick_fields")` from Python. Significant effort, to consider if Python integration demand materializes.
+- **PyO3 Python API** `[P3]` — expose fimod as a native Python module via PyO3. Pipeline core already extracted into `lib.rs` / `pipeline.rs`. Would allow `import fimod; fimod.shape(data, mold="@pick_fields")` from Python. Significant effort, to consider if Python integration demand materializes.
 - **Global config file** `[P3]` — `~/.config/fimod/config.toml` (or `$FIMOD_CONFIG`) to centralize HTTP defaults: custom User-Agent, default headers (e.g. auth tokens), timeout, proxy. To implement when other defaults (proxy, retries) justify a real config file.
 - **PyPI distribution** `[P3]` — distribute fimod via PyPI following the `ruff`/`uv` model: platform-specific packages + meta-package. Pure CI/packaging effort.
 - **npm distribution** `[P3]` — distribute fimod via npm following the `@biomejs/biome` model: platform-specific packages as `optionalDependencies`. Pure CI/packaging effort.
@@ -97,26 +102,24 @@ Priority legend: **P1** critical, **P2** important, **P3** nice-to-have.
 Impact legend: **+++** transforms the product, **++** strong improvement, **+** minor improvement.
 Complexity legend: 🟢 simple, 🟡 moderate, 🔴 complex.
 
-| # | Feature | Prio | Impact | Complexity | Estimated time | Dependencies |
-| - | ------- | ---- | ------ | ---------- | -------------- | ------------ |
-| 1 | `dt_` Helpers (date/time) | P2 | ++ | 🟢 | 1d | `chrono` crate |
-| 2 | `df_` Helpers (diff/patch/merge) | P2 | +++ | 🟢 | 1d | `json-patch` crate |
-| 3 | CI registry molds (`@gh-matrix`, `@diff`…) | P2 | ++ | 🟢 | 1-2d | #2 |
-| 4 | Dry-Run Check (`@pr-diff-summary`) | P2 | ++ | 🟢 | 0.5d | #2 |
-| 5 | Multi-document YAML (`---`) | P2 | + | 🟡 | 1d | — |
-| 6 | `--jobs N` (parallel batch) | P2 | ++ | 🟡 | 2d | `rayon` crate |
-| 7 | Devcontainer Feature | P2 | + | 🟢 | 1d | separate repo |
-| 8 | aqua-registry | P2 | + | 🟢 | 0.5d | PR externe |
-| 9 | Manpage (`clap_mangen`) | P3 | + | 🟢 | 0.5d | — |
-| 10 | Schema validation (JSON Schema) | P3 | ++ | 🟡 | 2-3d | crate to pick |
-| 11 | Module system (`# fimod: import=`) | P3 | ++ | 🟢 | 1d | `parse_mold_defaults()` |
-| 12 | Multi-file output | P3 | + | 🔴 | 2-3d | — |
-| 13 | Large files streaming | P3 | + | 🔴 | 3-5d | — |
+| # | Feature | Prio | Impact | Complexity | Dependencies |
+| - | ------- | ---- | ------ | ---------- | ------------ |
+| 1 | `df_` Helpers (diff/patch/merge) | P2 | +++ | 🟢 | `json-patch` crate |
+| 2 | CI registry molds (`@gh-matrix`, `@diff`…) | P2 | ++ | 🟢 | #1 |
+| 3 | Dry-Run Check (`@pr-diff-summary`) | P2 | ++ | 🟢 | #1 |
+| 4 | Multi-document YAML (`---`) | P2 | + | 🟡 | — |
+| 5 | `--jobs N` (parallel batch) | P2 | ++ | 🟡 | `rayon` crate |
+| 6 | Devcontainer Feature | P2 | + | 🟢 | separate repo |
+| 7 | aqua-registry | P2 | + | 🟢 | PR externe |
+| 8 | Manpage (`clap_mangen`) | P3 | + | 🟢 | — |
+| 9 | Schema validation (JSON Schema) | P3 | ++ | 🟡 | crate to pick |
+| 10 | Module system (`# fimod: import=`) | P3 | ++ | 🟡 | `parse_mold_defaults()` |
+| 11 | Multi-file output | P3 | + | 🔴 | — |
+| 12 | Large files streaming | P3 | + | 🔴 | — |
+| 13 | Local usage stats (`registry stats`) | P3 | + | 🟢 | — |
+| 14 | Workspace split & WASM playground | P3 | ++ | 🟡 | `wasm-bindgen` |
 
 ### Suggested next sprint
 
 **CI/data Sprint** (~2-3d):
 `df_` helpers → CI molds (`@pr-diff-summary`, `@diff`…)
-
-**Helpers Sprint** (~1d):
-`dt_` helpers

@@ -42,7 +42,7 @@ fimod s -i logs/*.json -m normalize.py -o cleaned/
 curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 ```
 
-The script downloads the right binary, installs it, then runs `fimod registry setup` to configure the official mold catalog.
+The script downloads the right binary, installs it, then runs `fimod registry setup` to configure the examples mold catalog.
 
 > 💡 Options via env vars: `FIMOD_VARIANT=slim` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0`
 
@@ -73,7 +73,7 @@ if ($UserPath -notlike "*$BinDir*") {
     $env:PATH = "$BinDir;$env:PATH"
 }
 
-# 🗂️ 4. Set up the official mold catalog
+# 🗂️ 4. Set up the examples mold catalog
 fimod registry setup
 ```
 
@@ -175,22 +175,31 @@ fimod s -i users.json -e '[{**u, "slug": u["name"].lower().replace(" ", "-"), "d
 📦 **Registry molds — reusable recipes, one `@name` away:**
 
 ```bash
-# 📥 Download a file, wget-style
-fimod s -i https://example.com/archive.tar.gz -m @download
+# 🔀 Patch a YAML config with dot-path assignments
+fimod s -i deployment.yaml -m @yaml_merge --arg set="spec.replicas=3,metadata.labels.env=prod" -o deployment.yaml
 ```
 
 ```bash
-# 🔄 Migrate pyproject.toml from Poetry to uv
-fimod s -i pyproject.toml -m @poetry_migrate --arg target=uv -o pyproject.toml
+# 🔐 Anonymize PII fields with SHA-256
+fimod s -i users.json -m @anonymize_pii --arg fields=email,phone -o users_anon.json
 ```
 
 ```bash
-# 🔗 Get latest GitHub release and download it in one pipe
-fimod s -i https://github.com/sinelaw/fresh/releases/latest \
-  -m @gh_latest \
-  --arg repo="sinelaw/fresh" \
-  --arg asset='fresh-editor_{version}-1_amd64.deb' \
-  | fimod s -I - --output-format raw -O
+# 📊 Deduplicate records by a field
+fimod s -i data.json -m @dedup_by --arg field=email
+```
+
+📦 **More molds** in the [fimod-powered](https://github.com/pytgaen/fimod-powered) registry:
+
+| Mold | Description |
+|------|-------------|
+| `@gh_latest` | GitHub release resolver |
+| `@download` | wget-like fetch |
+| `@poetry_migrate` | Poetry → uv/Poetry 2 |
+| `@skylos_to_gitlab` | dead code → GitLab Code Quality |
+
+```bash
+fimod registry add fimod-powered https://github.com/pytgaen/fimod-powered
 ```
 
 <details>

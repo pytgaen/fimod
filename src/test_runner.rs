@@ -147,7 +147,7 @@ fn discover_test_cases(tests_dir: &str) -> Result<Vec<TestCase>> {
 }
 
 /// Run a single test case. Returns `Ok(None)` on pass, `Ok(Some(msg))` on failure.
-fn run_case(script: &str, case: &TestCase) -> Result<Option<String>> {
+fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Result<Option<String>> {
     let input_str = case.input_path.to_str().unwrap_or("");
     let input_content = fs::read_to_string(&case.input_path)
         .with_context(|| format!("Cannot read: {}", case.input_path.display()))?;
@@ -183,7 +183,7 @@ fn run_case(script: &str, case: &TestCase) -> Result<Option<String>> {
         headers_value: &serde_json::Value::Null,
         debug: false,
         msg_level: 1,
-        mold_base_dir: None,
+        mold_base_dir,
     };
     let execute_result = engine::execute_mold(script, convert::json_to_monty(&input_data), &opts);
 
@@ -254,13 +254,14 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<()> {
     }
 
     let source = MoldSource::from_mold_str(mold_path, false)?;
+    let base_dir = source.base_dir();
     let script = source.load(false)?;
 
     let mut passed = 0usize;
     let mut failed = 0usize;
 
     for case in &cases {
-        match run_case(&script, case) {
+        match run_case(&script, case, base_dir.as_deref()) {
             Ok(None) => {
                 println!("  ✓ {}", case.name);
                 passed += 1;

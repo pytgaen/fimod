@@ -136,7 +136,10 @@ or conditional logic on the response**.
 data = {
     "status": 200,
     "headers": {"content-type": "application/json", ...},
-    "body": "..."  # raw string
+    "body": "...",          # raw string
+    "body_size": 1234,      # response size in bytes
+    "content_type": "application/json",
+    "url": "https://example.com/api/data"
 }
 ```
 

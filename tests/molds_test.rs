@@ -262,4 +262,3 @@ fn test_monty_dict_update() {
         .stdout(predicate::str::contains("\"a\""))
         .stdout(predicate::str::contains("\"b\""));
 }
-
