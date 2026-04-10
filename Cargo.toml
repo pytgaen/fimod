@@ -1,6 +1,6 @@
 [package]
 name = "fimod"
-version = "0.3.0-rc.1"
+version = "0.3.0"
 edition = "2021"
 description = "fimod - the data shaper CLI. Transform structured data with embedded Python, no install required."
 license = "Apache-2.0"

@@ -2,15 +2,42 @@
 
 All notable changes to fimod are documented here.
 
-## [Unreleased]
+## [0.3.0] — 2026-04-10
+
+### Highlights
+
+- **🐚 Dynamic shell completions** — context-aware Tab completion for subcommands, flags, format names, `@mold` references, and registry source names.
+- **📌 Priority-based registry resolution** — registries searched in priority order (P0→P99). New `set-priority` command replaces `set-default`.
+- **🐍 Monty v0.0.11** — `json.loads()` ~2x faster than CPython (string cache), `json.dumps()` ~1.65x faster (lookup-table escaping).
 
 ### Features
 
-- **registry:** `build-catalog` now takes a directory path as positional argument, no registered registry needed
+- **completions:** dynamic shell completions via `clap_complete` `CompleteEnv` — Tab-completes format names, `@mold` references, registry source names. New `fimod completions <shell>` subcommand.
+- **registry:** `set-priority <name> <rank>` command for priority-based resolution. Bare `@mold` references resolved in priority order across all registries. Swap semantics by default; `--cascade` to shift others down.
+- **registry:** `build-catalog` now takes a directory path as positional argument. `--registry <name>` resolves from a registered source.
+- **registry:** duplicate URL/path detection in `registry add`.
+- **registry:** `setup` migrates legacy "official" registry to "examples" (P99) and adds fimod-powered (P10).
+- **registry:** catalog TTL cache (60s) — Tab completion and repeated calls skip HTTP when cache is fresh.
+- **registry:** companion files support — remote molds with templates/data files are downloaded alongside the main script.
+- **pipeline:** `-m` and `-e` can now be mixed and interleaved freely in CLI order.
+- **pipeline:** `--input-format http` exposes `data["url"]`, `data["body_size"]`, `data["content_type"]`.
+- **format:** CSV output supports array-of-arrays (`[[v1, v2], ...]`) with `--csv-header-names`.
+- **install:** SHA-256 checksum verification for downloaded binaries.
+- **monty:** upgrade from v0.0.9 to v0.0.11 (json perf, mount fixes, filesystem mounting, multi-module imports).
+
+### Bug Fixes
+
+- **registry:** fix resolution fallthrough when catalog exists but mold not found.
+- **registry:** fix fimod-powered registry URL in setup (missing `/tree/main/molds`).
+- **test-runner:** `fimod mold test` now resolves mold base directory for `tpl_render_from_mold()`.
 
 ### Breaking Changes
 
-- **registry:** `fimod registry build-catalog <name>` is now `fimod registry build-catalog <path>`. Use `--registry <name>` to build from a registered registry.
+- **completions:** `--completions <shell>` flag removed. Use `COMPLETE=<shell> fimod` or `fimod completions <shell>`.
+- **registry:** `fimod registry build-catalog <name>` is now `fimod registry build-catalog <path>`. Use `--registry <name>`.
+- **registry:** `fimod registry set-default` removed — use `fimod registry set-priority <name> 0`.
+- **license:** LGPL-3.0-only → Apache-2.0.
+- **deps:** `serde_yaml` replaced by `serde-saphyr` (pure-Rust YAML).
 
 ## [0.2.0] — 2026-04-02
 
