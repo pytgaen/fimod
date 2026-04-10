@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.31">
+      <meta name="generator" content="zensical-0.0.32">
     
     
       
@@ -1413,10 +1413,10 @@ For multi-statement, write <code>def transform</code> explicitly inside <code>-e
 </div>
 <h3 id="mold-registries">🗂️ Mold registries</h3>
 <p>Registries are named sources — local directories or remote repos — that group molds into collections.
-Reference a mold with <code>@name</code> (default registry) or <code>@source/name</code> (named registry):</p>
+Reference a mold with <code>@name</code> (searches all registries in priority order) or <code>@source/name</code> (specific registry):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@my/clean_csv<span class="w">   </span><span class="c1"># resolves to ~/molds/clean_csv.py</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@clean_csv<span class="w">      </span><span class="c1"># same, if &quot;my&quot; is the default registry</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@clean_csv<span class="w">      </span><span class="c1"># searches P0, P1, P2… until found</span>
 </code></pre></div>
 <p>Config stored in <code>~/.config/fimod/sources.toml</code>. See <a href="../cli-reference/#mold-registries">CLI Reference — Mold Registries</a>.</p>
 <h3 id="directory-molds">📁 Directory molds</h3>

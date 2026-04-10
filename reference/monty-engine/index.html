@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.31">
+      <meta name="generator" content="zensical-0.0.32">
     
     
       
@@ -1472,7 +1472,7 @@
 
 <h1 id="monty-engine-capabilities-security-model">Monty Engine — Capabilities &amp; Security Model</h1>
 <p>Monty is a Python interpreter written in Rust from scratch by Pydantic. It is <strong>not</strong> CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.</p>
-<p>Fimod uses Monty (v0.0.9) as its execution engine for mold scripts.</p>
+<p>Fimod uses Monty (v0.0.11) as its execution engine for mold scripts.</p>
 <p><strong>Source</strong>: <a href="https://github.com/pydantic/monty">pydantic/monty</a> — <a href="https://pydantic.dev/articles/pydantic-monty">blog post</a></p>
 <h2 id="python-language-support">Python Language Support</h2>
 <h3 id="supported">Supported</h3>
@@ -1655,7 +1655,7 @@
 </tr>
 <tr>
 <td><code>json</code></td>
-<td>Supported — <code>json.dumps()</code>, <code>json.loads()</code>. Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template</td>
+<td>Supported — <code>json.dumps()</code>, <code>json.loads()</code>. ~2x faster than CPython for loads, ~1.65x for dumps (v0.0.11 string cache + lookup-table escaping). Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template</td>
 </tr>
 </tbody>
 </table>
@@ -1789,6 +1789,14 @@
 <td>Snapshot size</td>
 <td>Single-digit KB</td>
 </tr>
+<tr>
+<td><code>json.loads()</code> vs CPython</td>
+<td>~2x faster (string cache, optimized dict insertion)</td>
+</tr>
+<tr>
+<td><code>json.dumps()</code> vs CPython</td>
+<td>~1.65x faster (lookup-table escaping, in-place sort)</td>
+</tr>
 </tbody>
 </table>
 <p>For comparison: Docker startup is ~195ms, Pyodide ~2800ms.</p>
@@ -1812,7 +1820,7 @@
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p>The <code>fimod monty repl</code> command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$ fimod monty repl
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.9 — fimod v0.2.0 (exit or Ctrl+D to quit)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.11 — fimod v0.3.0 (exit or Ctrl+D to quit)
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>&gt;&gt;&gt; data = {&quot;name&quot;: &quot;Alice&quot;, &quot;age&quot;: 30}
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&gt;&gt;&gt; data[&quot;name&quot;].upper()
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>&#39;ALICE&#39;

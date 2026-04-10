@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.31">
+      <meta name="generator" content="zensical-0.0.32">
     
     
       
@@ -1491,16 +1491,17 @@
 <a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>cp<span class="w"> </span>./normalize.py<span class="w"> </span>~/molds/
 <a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
 <a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="c1"># Use by name — no path needed</span>
-<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@normalize<span class="w">        </span><span class="c1"># default registry</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@normalize<span class="w">        </span><span class="c1"># searches all registries in priority order</span>
 <a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@my/normalize<span class="w">     </span><span class="c1"># explicit registry name</span>
 </code></pre></div>
 <p>List the molds available in a registry:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">           </span><span class="c1"># default registry</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">           </span><span class="c1"># all registries</span>
 <a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w"> </span>my<span class="w">        </span><span class="c1"># named registry</span>
 </code></pre></div>
 <p>If you publish the registry remotely (GitHub, GitLab, HTTP), generate a <code>catalog.toml</code> first so remote users can browse it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>my<span class="w">   </span><span class="c1"># writes ~/molds/catalog.toml</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1"># commit and push catalog.toml alongside the molds</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>./molds<span class="w">         </span><span class="c1"># scans directory and writes catalog.toml</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>--registry<span class="w"> </span>my<span class="w">   </span><span class="c1"># same, resolving path from a registered registry</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="c1"># commit and push catalog.toml alongside the molds</span>
 </code></pre></div>
 <hr />
 <h2 id="suggested-project-layout">🗂️ Suggested project layout</h2>
