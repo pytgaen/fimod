@@ -213,6 +213,9 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
                     })?;
             }
             RunProgress::OsCall(call) => {
+                if ctx.debug {
+                    eprintln!("[debug] OsCall intercepted and denied (no filesystem access)");
+                }
                 let mut sp2 = StderrPrint;
                 progress = call
                     .resume(

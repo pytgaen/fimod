@@ -4,7 +4,7 @@ Extract nested fields by dotpath into a flat object.
 Usage:
   fimod s -i users.json -m @deep_pluck --arg paths=user.name,user.address.city
 """
-# fimod: arg=paths  Comma-separated dotpaths to extract (e.g. user.name,user.email)
+# fimod: arg=paths  "Comma-separated dotpaths to extract (e.g. user.name,user.email)"
 
 def transform(data, args, **_):
     try:

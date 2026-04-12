@@ -4,7 +4,7 @@ Hash specified fields with SHA-256 for anonymization.
 Usage:
   fimod s -i users.json -m @anonymize_pii --arg fields=email,phone
 """
-# fimod: arg=fields  Comma-separated list of fields to anonymize
+# fimod: arg=fields  "Comma-separated list of fields to anonymize"
 
 def transform(data, args, **_):
     try:

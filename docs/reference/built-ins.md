@@ -117,7 +117,7 @@ Convenience functions for common list/dict operations not natively supported by 
 | `it_keys` | `it_keys(dict)` | List of keys |
 | `it_values` | `it_values(dict)` | List of values |
 | `it_flatten` | `it_flatten(array)` | Recursively flattened list |
-| `it_group_by` | `it_group_by(array, key)` | Dict of lists, grouped by field name |
+| `it_group_by` | `it_group_by(array, key)` | Dict of lists, grouped by field name (insertion order) |
 | `it_sort_by` | `it_sort_by(array, key)` | Sorted list by field name (stable sort) |
 | `it_unique` | `it_unique(array)` | Deduplicated list (first occurrence kept) |
 | `it_unique_by` | `it_unique_by(array, key)` | Deduplicated by field name (first occurrence kept) |

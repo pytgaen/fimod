@@ -5,7 +5,7 @@ Usage:
   fimod s -i articles.json -m @split_tags --arg field=tags
 """
 # fimod: arg=field    Field name containing the tags string
-# fimod: arg=sep      Separator regex (default: comma/semicolon with optional space)
+# fimod: arg=sep      "Separator regex (default: comma/semicolon with optional space)"
 
 def transform(data, args, **_):
     try:

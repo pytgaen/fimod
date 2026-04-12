@@ -395,6 +395,74 @@ pub struct MoldDefaults {
 /// Directives are scanned in contiguous comment lines that follow the docstring
 /// (or from the start of the script when there is no docstring).
 /// Syntax: `# fimod: key=value, key2=value2` or `# fimod: key` for bools.
+/// Split a `# fimod:` directive line on commas, respecting quoted strings.
+/// Supports `"..."` and `'...'` with backslash escapes (`\"`, `\'`, `\\`).
+fn split_directives(input: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let mut start = 0;
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    let mut in_quote: Option<u8> = None;
+
+    while i < bytes.len() {
+        match (bytes[i], in_quote) {
+            (b'\\', Some(_)) => {
+                i += 2; // skip escaped char
+                continue;
+            }
+            (b'"' | b'\'', None) => in_quote = Some(bytes[i]),
+            (q, Some(open)) if q == open => in_quote = None,
+            (b',', None) => {
+                items.push(&input[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    items.push(&input[start..]);
+    items
+}
+
+/// Strip surrounding quotes and unescape `\"`, `\'`, `\\` in a description.
+/// Returns the string as-is if not quoted.
+fn unquote_desc(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let q = s.as_bytes()[0];
+    if q != b'"' && q != b'\'' {
+        return Some(s.to_string());
+    }
+    let inner = if s.len() >= 2 && s.as_bytes()[s.len() - 1] == q {
+        &s[1..s.len() - 1]
+    } else {
+        &s[1..]
+    };
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some(next) if next == q as char || next == '\\' => out.push(next),
+                Some(next) => {
+                    out.push(c);
+                    out.push(next);
+                }
+                None => out.push(c),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
     let mut defaults = MoldDefaults::default();
     let lines: Vec<&str> = script.lines().collect();
@@ -476,7 +544,7 @@ pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
         if rest.is_empty() {
             continue;
         }
-        for item in rest.split(',') {
+        for item in split_directives(rest) {
             let item = item.trim();
             if item.is_empty() {
                 continue;
@@ -499,11 +567,7 @@ pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
                                 let d = d.trim();
                                 (
                                     n.trim().to_string(),
-                                    if d.is_empty() {
-                                        None
-                                    } else {
-                                        Some(d.to_string())
-                                    },
+                                    if d.is_empty() { None } else { unquote_desc(d) },
                                 )
                             }
                             None => (value.to_string(), None),
@@ -701,6 +765,73 @@ mod tests {
         let d = parse_mold_defaults(script);
         assert_eq!(d.docs.as_deref(), Some("Doc with blank lines before."));
         assert!(d.no_follow);
+    }
+
+    // ─── quoted description tests ───────────────────────────────
+
+    #[test]
+    fn test_arg_quoted_desc_with_commas() {
+        let script = "# fimod: arg=build \"Build backend: hatchling, setuptools, flit\"\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args.len(), 1);
+        assert_eq!(d.args[0].0, "build");
+        assert_eq!(
+            d.args[0].1.as_deref(),
+            Some("Build backend: hatchling, setuptools, flit")
+        );
+    }
+
+    #[test]
+    fn test_arg_quoted_desc_single_quotes() {
+        let script =
+            "# fimod: arg=name 'It\\'s a name'\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args[0].1.as_deref(), Some("It's a name"));
+    }
+
+    #[test]
+    fn test_arg_quoted_desc_with_escaped_quotes() {
+        let script = "# fimod: arg=style \"Use \\\"compact\\\" or \\\"pretty\\\"\"\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(
+            d.args[0].1.as_deref(),
+            Some("Use \"compact\" or \"pretty\"")
+        );
+    }
+
+    #[test]
+    fn test_arg_quoted_desc_mixed_quotes_no_escape() {
+        let script = "# fimod: arg=style 'Use \"compact\" or \"pretty\"'\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(
+            d.args[0].1.as_deref(),
+            Some("Use \"compact\" or \"pretty\"")
+        );
+    }
+
+    #[test]
+    fn test_arg_quoted_with_other_directives() {
+        let script = "# fimod: arg=build \"hatchling, setuptools, flit\", output-format=json\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args.len(), 1);
+        assert_eq!(d.args[0].1.as_deref(), Some("hatchling, setuptools, flit"));
+        assert_eq!(d.output_format.as_deref(), Some("json"));
+    }
+
+    #[test]
+    fn test_arg_unquoted_desc_unchanged() {
+        let script =
+            "# fimod: arg=build Build backend\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args[0].1.as_deref(), Some("Build backend"));
+    }
+
+    #[test]
+    fn test_env_quoted_desc() {
+        let script = "# fimod: env=TOKEN \"API token, required\"\ndef transform(data, env, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.envs[0].0, "TOKEN");
+        assert_eq!(d.envs[0].1.as_deref(), Some("API token, required"));
     }
 
     // ─── resolve_directory_mold tests ─────────────────────────

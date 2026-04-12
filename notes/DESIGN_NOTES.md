@@ -72,6 +72,7 @@ Convention: 2-letter prefix to avoid collisions with Python builtins and make th
 | `hs_` | `hash.rs` | `hs_md5`, `hs_sha1`, `hs_sha256` (hex lowercase) |
 | `gk_` | `gatekeeper.rs` | `gk_fail`, `gk_assert`, `gk_warn` (validation gates with exit code control) |
 | `msg_` | `msg.rs` | `msg_print`, `msg_info`, `msg_warn`, `msg_error`, `msg_verbose`, `msg_trace` |
+| `tpl_` | `template.rs` | `tpl_render_str`, `tpl_render_from_mold` (Jinja2 templating via minijinja) |
 | — | `env_helpers.rs` | `env_subst` (`${VAR}` template substitution) |
 | — | `exit_control.rs` | `set_exit(code)` |
 | — | `format_control.rs` | `set_input_format`, `set_output_format`, `set_output_file`, `cast_input_format` |
@@ -205,5 +206,5 @@ All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `rust-toolchain
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.8` (both in `Cargo.toml` tag and `MONTY_VERSION` const). The `MontyRun::new` API and error types can change between releases.
+- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.11` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.
