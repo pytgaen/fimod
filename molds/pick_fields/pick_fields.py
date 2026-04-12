@@ -4,7 +4,7 @@ Keep only specified fields from an object or array of objects.
 Usage:
   fimod s -i users.json -m @pick_fields --arg fields=id,name,email
 """
-# fimod: arg=fields  Comma-separated list of fields to keep
+# fimod: arg=fields  "Comma-separated list of fields to keep"
 
 def transform(data, args, **_):
     try:

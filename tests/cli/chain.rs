@@ -134,3 +134,55 @@ fn test_chain_args_available_all_steps() {
         // "hello" appears twice in the compact array
         .stdout(predicate::str::contains(r#"["hello","hello"]"#));
 }
+
+#[test]
+fn test_chain_long_form_equals() {
+    // --mold=PATH and --expression=CODE (= syntax) must preserve order
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"name": "World"}"#);
+    let mold = setup_mold(
+        &dir,
+        "greet.py",
+        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            &format!("--mold={mold}"),
+            r#"--expression=data["greeting"]"#,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello World"));
+}
+
+#[test]
+fn test_chain_expr_mold_expr_ordering() {
+    // Three steps: -e (uppercase name) → -m (add greeting) → -e (extract greeting)
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"name": "alice"}"#);
+    let mold = setup_mold(
+        &dir,
+        "greet.py",
+        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-e",
+            r#"{"name": data["name"].upper()}"#,
+            "-m",
+            &mold,
+            "-e",
+            r#"data["greeting"]"#,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello ALICE"));
+}

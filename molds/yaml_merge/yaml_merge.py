@@ -5,7 +5,7 @@ Usage:
   fimod s -i deployment.yaml -m @yaml_merge --arg set="spec.replicas=3,metadata.labels.env=prod"
 """
 # fimod: output-format=yaml
-# fimod: arg=set  Comma-separated list of path=value assignments
+# fimod: arg=set  "Comma-separated list of path=value assignments"
 
 def transform(data, args, **_):
     try:

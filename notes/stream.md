@@ -99,3 +99,56 @@ Stream output is flushed unit-by-unit (natural for NDJSON, CSV, TXT/lines). `fin
 ### Scope
 
 Aligns with ROADMAP.md #12 (Large files streaming, P3).
+
+---
+
+## `fimod stream` — persistent stdin/stdout loop
+
+Separate from `--stream` (which processes a file unit-by-unit), `fimod stream` keeps a mold loaded and transforms messages in a loop over stdin/stdout. Think "mold as a micro-service" without the HTTP overhead.
+
+### Usage
+
+```bash
+# NDJSON mode (default): one JSON object per line in, one per line out
+fimod stream -m transform.py
+
+# Explicit format
+fimod stream -m transform.py --input-format json --output-format yaml
+```
+
+### Protocol
+
+- Each input is one JSON object per line (NDJSON)
+- Fimod parses the line, runs the mold, writes the result as one line to stdout, flushes
+- Empty lines and lines starting with `#` are ignored
+- EOF closes the stream gracefully
+
+```
+$ fimod stream -m upper.py
+{"name": "alice"}          ← stdin
+{"name": "ALICE"}          → stdout
+{"name": "bob"}            ← stdin
+{"name": "BOB"}            → stdout
+^D
+```
+
+### Why not `fimod serve --port`?
+
+| | `fimod stream` | `fimod serve` |
+|---|---|---|
+| Dependency | none (stdin/stdout) | HTTP server crate |
+| Concurrency | sequential (simple) | needs thread-safe Monty pool |
+| Integration | pipes, socat, xinetd, subprocess | curl, webhooks, any HTTP client |
+| Complexity | ~100-200 lines | ~400-800 lines + lifecycle mgmt |
+
+`fimod stream` stays Unix-native: composable, no new deps, and sidesteps Monty's thread-safety constraints entirely. A `fimod serve` wrapper could always be built on top later (pipe HTTP body to a `fimod stream` subprocess).
+
+### Monty engine reuse
+
+The engine is created once at startup and reused for every message. Since processing is sequential, no concurrency issues. This also amortizes Monty's startup cost across all messages.
+
+### Open questions
+
+- Support `--arg` and `--env` at startup? Probably yes, same as regular shape mode.
+- Delimiter mode for non-JSON? e.g. `--input-format csv` reads one CSV row per line (headerless or with a `--csv-header-names`).
+- Error handling: write error JSON to stderr and continue, or abort? Probably continue + stderr warning by default, `--strict` to abort.

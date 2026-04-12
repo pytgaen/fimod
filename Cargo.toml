@@ -36,6 +36,7 @@ digest = "0.10"
 hex = "0.4"
 mimalloc = "0.1"
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
+indexmap = "2.11.4"
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
