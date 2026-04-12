@@ -241,6 +241,9 @@ enum MoldAction {
         /// Registry to search (searches all registries if not specified)
         #[arg(short, long, add = ArgValueCompleter::new(complete_sources))]
         registry: Option<String>,
+        /// Output format
+        #[arg(long = "output-format", value_name = "FORMAT", default_value = "text")]
+        output_format: registry::MoldShowFormat,
     },
 }
 
@@ -344,6 +347,11 @@ fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef>
                 refs.push(ScriptRef::Mold(v.clone()));
             }
             i += 2;
+        } else if arg.starts_with("--mold=") {
+            if let Some(v) = mold_iter.next() {
+                refs.push(ScriptRef::Mold(v.clone()));
+            }
+            i += 1;
         } else if arg.starts_with("-m") && arg.len() > 2 && !arg.starts_with("-m-") {
             // -mFOO (no space)
             if let Some(v) = mold_iter.next() {
@@ -355,7 +363,9 @@ fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef>
                 refs.push(ScriptRef::Expr(v.clone()));
             }
             i += 2;
-        } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e-") {
+        } else if arg.starts_with("--expression=")
+            || (arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e-"))
+        {
             if let Some(v) = expr_iter.next() {
                 refs.push(ScriptRef::Expr(v.clone()));
             }
@@ -472,7 +482,11 @@ fn main() -> Result<()> {
                 registry,
                 output_format,
             } => registry::list_molds(registry.as_deref(), output_format),
-            MoldAction::Show { name, registry } => registry::show_mold(&name, registry.as_deref()),
+            MoldAction::Show {
+                name,
+                registry,
+                output_format,
+            } => registry::show_mold(&name, registry.as_deref(), output_format),
             MoldAction::Test { mold, tests_dir } => test_runner::run(&mold, &tests_dir),
         },
         Some(Commands::Monty { action }) => match action {

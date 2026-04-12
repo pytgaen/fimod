@@ -417,7 +417,10 @@ fimod registry add mylib https://raw.githubusercontent.com/org/repo/refs/tags/st
 ```bash
 fimod mold list              # list molds in all registries
 fimod mold list examples     # list molds in a specific registry
+fimod mold show pick_fields  # show metadata for a mold
 ```
+
+Both `mold list` and `mold show` accept `--output-format json` for machine-readable output.
 
 For **local** registries, mold names and descriptions are discovered by scanning `.py` files.
 For **remote** registries (GitHub, GitLab, HTTP), a `catalog.toml` must be present at the root of the registry.
@@ -540,6 +543,9 @@ fimod s -i data.json -e 'data' --output-format json-compact
 # 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)
 NAME=$(fimod s -i data.json -e 'data["name"]' --output-format txt)
 echo "Hello $NAME"   # Hello Alice
+
+# 📑 Lines: one array element per line (shell-friendly lists)
+fimod s -i users.json -e '[u["email"] for u in data]' --output-format lines
 
 # 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)
 fimod shape -i https://example.com/file.bin --output-format raw -o file.bin

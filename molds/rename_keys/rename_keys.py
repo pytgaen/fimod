@@ -4,7 +4,7 @@ Rename keys via mapping 'old1:new1,old2:new2'.
 Usage:
   fimod s -i data.json -m @rename_keys --arg mapping=firstName:first_name,lastName:last_name
 """
-# fimod: arg=mapping  Comma-separated list of old_key:new_key pairs
+# fimod: arg=mapping  "Comma-separated list of old_key:new_key pairs"
 
 def transform(data, args, **_):
     try:

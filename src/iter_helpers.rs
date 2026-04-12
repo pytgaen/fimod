@@ -1,9 +1,9 @@
 use anyhow::{bail, Result};
+use indexmap::IndexMap;
 #[cfg(test)]
 use monty::DictPairs;
 use monty::MontyObject;
 use serde_json::Value;
-use std::collections::BTreeMap;
 
 use crate::convert::{json_into_monty, monty_to_json};
 
@@ -110,7 +110,7 @@ fn it_group_by(args: Vec<MontyObject>) -> Result<MontyObject> {
         _ => bail!("it_group_by() expects an array"),
     };
 
-    let mut groups: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
     for item in arr {
         let group_key = match item.get(&key) {
             Some(Value::String(s)) => s.clone(),
@@ -303,6 +303,20 @@ mod tests {
         let json = monty_to_json(result).unwrap();
         assert_eq!(json["eng"].as_array().unwrap().len(), 2);
         assert_eq!(json["sales"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_it_group_by_preserves_insertion_order() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Alice", "dept": "eng"},
+            {"name": "Bob", "dept": "sales"},
+            {"name": "Carol", "dept": "hr"},
+            {"name": "Dave", "dept": "eng"},
+        ]));
+        let result = dispatch("it_group_by", vec![data, s("dept")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        let keys: Vec<&String> = json.as_object().unwrap().keys().collect();
+        assert_eq!(keys, vec!["eng", "sales", "hr"]);
     }
 
     #[test]

@@ -1332,6 +1332,15 @@ pub enum MoldListFormat {
     Lines,
 }
 
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum MoldShowFormat {
+    /// Human-readable text (default)
+    #[default]
+    Text,
+    /// JSON object
+    Json,
+}
+
 /// List molds available in a registry (local scan or remote catalog.toml).
 /// Without a registry name, lists all configured registries.
 pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) -> Result<()> {
@@ -1637,7 +1646,11 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
 /// Show metadata and defaults for a named mold.
 ///
 /// `mold_ref` supports `registry/name` syntax to target a specific registry.
-pub fn show_mold(mold_ref: &str, registry_name: Option<&str>) -> Result<()> {
+pub fn show_mold(
+    mold_ref: &str,
+    registry_name: Option<&str>,
+    output_format: MoldShowFormat,
+) -> Result<()> {
     let cfg = load_config()?;
 
     // Parse "registry/name" or "@registry/name" syntax (strip leading @)
@@ -1657,24 +1670,85 @@ pub fn show_mold(mold_ref: &str, registry_name: Option<&str>) -> Result<()> {
         bail!("Mold '{mold_name}' not found in any configured registry.");
     }
 
-    // When a specific registry was requested (or only one match), show it directly
-    let explicit = resolved_registry.is_some();
-    if explicit || matches.len() == 1 {
-        print_mold_match(mold_name, &matches[0]);
-        return Ok(());
-    }
+    let m = &matches[0];
 
-    // Show the primary (default-first) match, then "See also" for the rest
-    print_mold_match(mold_name, &matches[0]);
-    let others: Vec<String> = matches[1..]
-        .iter()
-        .map(|m| format!("fimod mold show {}/{mold_name}", m.reg_name))
-        .collect();
-    if !others.is_empty() {
-        println!();
-        println!("  See also:       {}", others.join(", "));
+    match output_format {
+        MoldShowFormat::Json => {
+            let json = mold_match_to_json(mold_name, m);
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        MoldShowFormat::Text => {
+            // When a specific registry was requested (or only one match), show it directly
+            let explicit = resolved_registry.is_some();
+            print_mold_match(mold_name, m);
+            if !explicit && matches.len() > 1 {
+                let others: Vec<String> = matches[1..]
+                    .iter()
+                    .map(|m| format!("fimod mold show {}/{mold_name}", m.reg_name))
+                    .collect();
+                println!();
+                println!("  See also:       {}", others.join(", "));
+            }
+        }
     }
     Ok(())
+}
+
+fn mold_match_to_json(mold_name: &str, m: &MoldMatch) -> serde_json::Value {
+    match &m.detail {
+        MoldDetail::Local {
+            script_path,
+            defaults,
+        } => {
+            let description = defaults
+                .docs
+                .clone()
+                .or_else(|| effective_description(defaults));
+            let readme_path = script_path
+                .parent()
+                .map(|p| p.join("README.md"))
+                .filter(|p| p.exists())
+                .map(|p| p.display().to_string());
+            let args: Vec<serde_json::Value> = defaults.args.iter().map(|(name, desc)| {
+                serde_json::json!({ "name": name, "description": desc.as_deref().unwrap_or("") })
+            }).collect();
+            serde_json::json!({
+                "name": mold_name,
+                "registry": m.reg_name,
+                "description": description,
+                "source_path": script_path.display().to_string(),
+                "readme_path": readme_path,
+                "input_format": defaults.input_format,
+                "output_format": defaults.output_format,
+                "args": args,
+            })
+        }
+        MoldDetail::Remote {
+            registry_url,
+            entry,
+        } => {
+            let readme_path = entry
+                .readme
+                .as_ref()
+                .map(|r| format!("{}/{r}", registry_url.trim_end_matches('/')));
+            let description = entry.docs.clone().or_else(|| entry.description.clone());
+            let args: Vec<serde_json::Value> = entry
+                .args
+                .iter()
+                .map(|(name, desc)| serde_json::json!({ "name": name, "description": desc }))
+                .collect();
+            serde_json::json!({
+                "name": mold_name,
+                "registry": m.reg_name,
+                "description": description,
+                "source_path": null,
+                "readme_path": readme_path,
+                "input_format": entry.input_format,
+                "output_format": entry.output_format,
+                "args": args,
+            })
+        }
+    }
 }
 
 /// Set up the fimod example molds registry interactively.

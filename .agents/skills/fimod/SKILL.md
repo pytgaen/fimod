@@ -36,9 +36,10 @@ Check if a key exists and fail early (exit 1 if falsy):
 **5. Fetching from HTTP directly (Replaces `curl | jq`)**
 `fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["stargazers_count"]' --output-format txt`
 
-**6. Chaining expressions**
-Pass multiple `-e` flags to chain transformations (the output of the first feeds the second):
+**6. Chaining expressions and molds**
+Pass multiple `-e` and/or `-m` flags to chain transformations (the output of one step feeds the next). `-m` and `-e` can be mixed freely in any order:
 `fimod s -i users.json -e '[u for u in data if u["active"]]' -e 'it_sort_by(data, "name")'`
+`fimod s -i raw.json -m normalize.py -e 'data["results"]' -m enrich.py`
 
 **7. Passing arguments and environment variables**
 Inject variables safely without string interpolation:
@@ -145,9 +146,10 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 | Subcommand | Alias | Purpose |
 |------------|-------|---------|
 | `shape` | `s` | Transform data (read, apply mold/expression, output) |
-| `registry` | | Manage mold registries (`setup`, `add`, `list`, `show`, `remove`, `set-default`, `build-catalog`) |
-| `mold` | | Browse molds (`list`, `show`) |
-| `test` | | Run tests for a mold against `*.input.*` / `*.expected.*` file pairs |
+| `registry` | | Manage mold registries (`setup`, `add`, `list`, `show`, `remove`, `set-priority`, `build-catalog`, `cache clear`, `cache info`) |
+| `mold list` | | List molds available in registries |
+| `mold show` | | Show metadata and defaults for a mold |
+| `mold test` | | Run tests for a mold against `*.input.*` / `*.expected.*` file pairs |
 | `monty repl` | | Interactive Python REPL (embedded Monty engine) |
 
 ## CLI Flag Reference
@@ -157,14 +159,15 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 |--------|-------|-------------|
 | `--input` | `-i` | Input file path or URL (repeatable for batch/slurp) |
 | `--input-list` | `-I` | Read input paths from a file or stdin (`-`) |
-| `--mold` | `-m` | Path, URL, or `@name` of the transform script |
-| `--expression` | `-e` | Inline Python expression (repeatable for chaining; mutually exclusive with `-m`) |
+| `--mold` | `-m` | Path, URL, or `@name` of the transform script (repeatable, can be mixed with `-e`) |
+| `--expression` | `-e` | Inline Python expression (repeatable, can be mixed with `-m`) |
 | `--output` | `-o` | Output file path or directory |
 | `--url-filename` | `-O` | Use filename from URL (like `curl -O`) |
 | `--in-place` | | Modify input file in-place |
 | `--slurp` | `-s` | Read multiple JSON values into array / multi-file slurp |
 | `--no-input` | | Skip input — `data = None` |
 | `--check` | | No stdout; exit 0 if truthy, 1 if falsy |
+| `--no-cache` | | Bypass local cache for remote catalogs and molds (always fetch fresh) |
 | `--debug` | `-d` | Print pipeline diagnostics to stderr |
 
 ### Format Control
@@ -268,13 +271,13 @@ Note: `it_group_by`, `it_sort_by`, and `it_unique_by` take a **string field name
 - **`it_flatten(list)`**: Recursively flatten nested arrays `[[1, 2], [3]]` -> `[1, 2, 3]`.
 
 ### Regex (`re_*`)
-Patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex) (PCRE2 flavour: lookahead, lookbehind, atomic groups). Two replacement syntaxes: `re_sub` uses Python `\1`/`\g<name>`; `re_sub_fancy` uses `$1`/`${name}`.
+Patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex) (PCRE2 flavour: lookahead, lookbehind, atomic groups). Each function has a `_fancy` variant that uses fancy-regex replacement syntax (`$1`/`${name}`) instead of Python syntax (`\1`/`\g<name>`).
 - **`re_search(r"...", text)`**: Returns `{"match": str, "start": int, "end": int, "groups": [...], "named": {...}}` or `None`.
 - **`re_match(r"...", text)`**: Same as `re_search`, anchored to start of text.
 - **`re_findall(r"...", text)`**: No groups -> `[str, ...]`. 1 group -> `[group_val, ...]`. N groups -> `[[g1, g2], ...]`.
 - **`re_sub(r"...", r"\1", text [, count])`**: Python syntax (`\1`, `\g<name>`). Optional `count` (0=all).
-- **`re_sub_fancy(r"...", "$1", text [, count])`**: fancy-regex syntax (`$1`, `${name}`). Optional `count`.
 - **`re_split(r"...", text)`**: Captured groups are included in the result (Python behaviour).
+- **`re_*_fancy` variants**: `re_search_fancy`, `re_match_fancy`, `re_findall_fancy`, `re_sub_fancy`, `re_split_fancy` — same signatures but use fancy-regex syntax (`$1`/`${name}` for replacements).
 
 ### Hashing (`hs_*`)
 - **`hs_sha256(text)` / `hs_md5(text)` / `hs_sha1(text)`**: Returns lowercase hex digest.
@@ -285,8 +288,13 @@ Output diagnostic messages to stderr without affecting the data pipeline:
 - **`msg_info(text)`**: Print with `[INFO]` prefix. Always visible unless `--quiet`.
 - **`msg_warn(text)`**: Print with `[WARN]` prefix. Always visible unless `--quiet`.
 - **`msg_error(text)`**: Print with `[ERROR]` prefix. Always visible (even with `--quiet`).
-- **`msg_verbose(text)`**: Print with `[VERBOSE]` prefix. Visible with `--msg-level=verbose` or `trace`.
+- **`msg_verbose(text)`**: Print with `[VERBOSE]` prefix. Visible with `--msg-level=verbose` or `--msg-level=trace`.
 - **`msg_trace(text)`**: Print with `[TRACE]` prefix. Visible only with `--msg-level=trace`.
+
+### Jinja2 Templating (`tpl_*`)
+Render Jinja2 templates from within a mold. Powered by [MiniJinja](https://github.com/mitsuhiko/minijinja).
+- **`tpl_render_str(template, ctx, auto_escape=False)`**: Render a Jinja2 template string with the given context dict. Returns the rendered string.
+- **`tpl_render_from_mold(path, ctx, auto_escape=False)`**: Render a Jinja2 template file relative to the mold's directory. Path traversal outside the mold directory is denied. Only works with file-based or registry molds (not inline `-e`).
 
 ### Validation Gates (`gk_*`)
 Assert conditions and control pipeline failure. The mold continues executing after failure (lets you collect multiple errors):

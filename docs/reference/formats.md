@@ -96,23 +96,31 @@ fimod s -i notes.txt -e '{"length": len(data)}'
 
 ---
 
-## 📑 Lines (`--input-format lines`)
+## 📑 Lines
 
-Splits input into an array of strings, one per line. **Never auto-detected** — use `--input-format lines` explicitly.
+Line-oriented format: each line becomes an array element, and each array element becomes a line. **Never auto-detected** — always use `--input-format lines` or `--output-format lines` explicitly.
 
-- **Input**: `["line1", "line2", ...]`. Handles `\n` and `\r\n`. Trailing newline does not produce an empty element.
-- **Output**: each element on its own line. Objects/dicts serialized as compact JSON (NDJSON).
+- **Input**: Splits on `\n` / `\r\n` → `["line1", "line2", ...]`. Trailing newline does not produce an empty element.
+- **Output**: Each array element on its own line — strings are written raw, objects/numbers are serialized as compact JSON. A single string value is written as-is with a trailing newline.
 
 ```bash
-# 🔤 Uppercase each line
+# 🔤 Uppercase each line (input)
 fimod s -i data.txt --input-format lines -e '[l.upper() for l in data]'
 
-# 🔍 Filter lines
+# 🔍 Filter lines (input)
 fimod s -i app.log --input-format lines -e '[l for l in data if "ERROR" in l]'
 
-# 📦 JSON array → one item per line
+# 📦 JSON array → one item per line (output)
 fimod s -i names.json -e 'data' --output-format lines
+
+# 🐚 Emit shell-friendly output from any format (output)
+fimod s -i users.json -e '[u["email"] for u in data]' --output-format lines
 ```
+
+!!! tip "Lines vs TXT vs NDJSON"
+    - **`txt`**: entire file as a single string — use for free-form text.
+    - **`lines`**: one string per line — use for line-by-line processing or shell-friendly output.
+    - **`ndjson`**: one **JSON value** per line — use when lines contain structured data.
 
 ## 📥 Raw (`--output-format raw`)
 
@@ -200,3 +208,25 @@ fimod s -i config.yaml -e 'data' -o config.toml          # extension → TOML
 fimod s -i data.csv -e 'data' --output-format json        # explicit → JSON
 fimod s -i users.json -e 'data' --output-format lines     # explicit → lines
 ```
+
+### JSON → shell-friendly text
+
+A common need: extract values from JSON and feed them to shell tools. Use `--output-format lines` for lists, `--output-format txt` for single values:
+
+```bash
+# 📋 List all names, one per line — ready for xargs, while read, etc.
+fimod s -i users.json -e '[u["name"] for u in data]' --output-format lines
+# Alice
+# Bob
+# Charlie
+
+# 🐚 Capture a single value into a shell variable (no JSON quotes)
+VERSION=$(fimod s -i package.json -e 'data["version"]' --output-format txt)
+
+# 🔗 Pipe to other tools
+fimod s -i repos.json -e '[r["ssh_url"] for r in data]' --output-format lines | xargs -I{} git clone {}
+```
+
+!!! note "Why not `txt`?"
+    `txt` on an array produces a single compact JSON string (`["a","b","c"]`).
+    `lines` produces one element per line — much easier to chain with shell tools.

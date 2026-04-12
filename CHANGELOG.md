@@ -2,13 +2,38 @@
 
 All notable changes to fimod are documented here.
 
+## [0.3.1] — 2026-04-12
+
+### Bug Fixes
+
+- **iter:** `it_group_by` preserves insertion order (switched to `IndexMap`) — grouped output follows data order instead of alphabetical.
+- **mold:** `# fimod:` directives support quoted arg descriptions (`"..."` / `'...'`) so commas don't split entries.
+- **cli:** `--mold=` / `--expression=` long-form flags now recognized by the pre-parse pass.
+- **engine:** intercepted `OsCall` emits a `[debug]` message instead of failing silently.
+
+### Features
+
+- **mold:** `fimod mold show --output-format json` for machine-readable output.
+
+### Documentation
+
+- Expanded `formats.md` (lines vs txt vs NDJSON, shell-friendly recipes).
+- Updated `cli-reference.md` and `built-ins.md`.
+
+### Housekeeping
+
+- Added `indexmap` dependency.
+- Removed dead `parse_data` / `parse_file` from `pipeline.rs`.
+
 ## [0.3.0] — 2026-04-10
 
 ### Highlights
 
-- **🐚 Dynamic shell completions** — context-aware Tab completion for subcommands, flags, format names, `@mold` references, and registry source names.
-- **📌 Priority-based registry resolution** — registries searched in priority order (P0→P99). New `set-priority` command replaces `set-default`.
-- **🐍 Monty v0.0.11** — `json.loads()` ~2x faster than CPython (string cache), `json.dumps()` ~1.65x faster (lookup-table escaping).
+- 🔀 Migrate production molds to dedicated repo [fimod-powered](https://pytgaen.github.io/fimod-powered/) (`gh_latest`, `download`, `poetry_migrate`, `skylos_to_gitlab`). Use `fimod registry setup` to migrate
+- 👀 **fimod-powered** - New molds showcasing Jinja2 templating (MiniJinja engine): `html_report`, `dockerfile`
+- **📌 Priority-based registry resolution** - registries searched in priority order (P0→P99). New `set-priority` command replaces `set-default`.
+- **🐚 Dynamic shell completions** - context-aware Tab completion for subcommands, flags, format names, `@mold` references, and registry source names.
+- ⬆️ Update to **🐍 Monty v0.0.11**/cle
 
 ### Features
 
