@@ -785,10 +785,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#lines-input-format-lines" class="md-nav__link">
+  <a href="#lines" class="md-nav__link">
     <span class="md-ellipsis">
       
-        📑 Lines (--input-format lines)
+        📑 Lines
       
     </span>
   </a>
@@ -836,6 +836,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="🔀 Format conversion">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#json-shell-friendly-text" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON → shell-friendly text
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1364,10 +1381,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#lines-input-format-lines" class="md-nav__link">
+  <a href="#lines" class="md-nav__link">
     <span class="md-ellipsis">
       
-        📑 Lines (--input-format lines)
+        📑 Lines
       
     </span>
   </a>
@@ -1415,6 +1432,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="🔀 Format conversion">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#json-shell-friendly-text" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSON → shell-friendly text
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1542,21 +1576,32 @@
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>notes.txt<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;length&quot;: len(data)}&#39;</span>
 </code></pre></div>
 <hr />
-<h2 id="lines-input-format-lines">📑 Lines (<code>--input-format lines</code>)</h2>
-<p>Splits input into an array of strings, one per line. <strong>Never auto-detected</strong> — use <code>--input-format lines</code> explicitly.</p>
+<h2 id="lines">📑 Lines</h2>
+<p>Line-oriented format: each line becomes an array element, and each array element becomes a line. <strong>Never auto-detected</strong> — always use <code>--input-format lines</code> or <code>--output-format lines</code> explicitly.</p>
 <ul>
-<li><strong>Input</strong>: <code>["line1", "line2", ...]</code>. Handles <code>\n</code> and <code>\r\n</code>. Trailing newline does not produce an empty element.</li>
-<li><strong>Output</strong>: each element on its own line. Objects/dicts serialized as compact JSON (NDJSON).</li>
+<li><strong>Input</strong>: Splits on <code>\n</code> / <code>\r\n</code> → <code>["line1", "line2", ...]</code>. Trailing newline does not produce an empty element.</li>
+<li><strong>Output</strong>: Each array element on its own line — strings are written raw, objects/numbers are serialized as compact JSON. A single string value is written as-is with a trailing newline.</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># 🔤 Uppercase each line</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># 🔤 Uppercase each line (input)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.txt<span class="w"> </span>--input-format<span class="w"> </span>lines<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[l.upper() for l in data]&#39;</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># 🔍 Filter lines</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># 🔍 Filter lines (input)</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>app.log<span class="w"> </span>--input-format<span class="w"> </span>lines<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[l for l in data if &quot;ERROR&quot; in l]&#39;</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># 📦 JSON array → one item per line</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># 📦 JSON array → one item per line (output)</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>names.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># 🐚 Emit shell-friendly output from any format (output)</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
 </code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Lines vs TXT vs NDJSON</p>
+<ul>
+<li><strong><code>txt</code></strong>: entire file as a single string — use for free-form text.</li>
+<li><strong><code>lines</code></strong>: one string per line — use for line-by-line processing or shell-friendly output.</li>
+<li><strong><code>ndjson</code></strong>: one <strong>JSON value</strong> per line — use when lines contain structured data.</li>
+</ul>
+</div>
 <h2 id="raw-output-format-raw">📥 Raw (<code>--output-format raw</code>)</h2>
 <p>An <strong>output-only</strong> format for downloading binary streams or raw bytes. Bypasses the normal data serialization pipeline completely.</p>
 <ul>
@@ -1648,6 +1693,25 @@ or conditional logic on the response</strong>.</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w">        </span><span class="c1"># explicit → JSON</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines<span class="w">     </span><span class="c1"># explicit → lines</span>
 </code></pre></div>
+<h3 id="json-shell-friendly-text">JSON → shell-friendly text</h3>
+<p>A common need: extract values from JSON and feed them to shell tools. Use <code>--output-format lines</code> for lists, <code>--output-format txt</code> for single values:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># 📋 List all names, one per line — ready for xargs, while read, etc.</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;name&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># Alice</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Bob</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Charlie</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># 🐚 Capture a single value into a shell variable (no JSON quotes)</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="nv">VERSION</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>package.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;version&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># 🔗 Pipe to other tools</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>repos.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[r[&quot;ssh_url&quot;] for r in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span>-I<span class="o">{}</span><span class="w"> </span>git<span class="w"> </span>clone<span class="w"> </span><span class="o">{}</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Why not <code>txt</code>?</p>
+<p><code>txt</code> on an array produces a single compact JSON string (<code>["a","b","c"]</code>).
+<code>lines</code> produces one element per line — much easier to chain with shell tools.</p>
+</div>
 
 
 

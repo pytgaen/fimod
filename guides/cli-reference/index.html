@@ -2464,7 +2464,9 @@ Use <code>@name</code> or <code>@registry/name</code> with <code>-m</code> to re
 <h3 id="browsing-available-molds">Browsing available molds</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">              </span><span class="c1"># list molds in all registries</span>
 <a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w"> </span>examples<span class="w">     </span><span class="c1"># list molds in a specific registry</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>fimod<span class="w"> </span>mold<span class="w"> </span>show<span class="w"> </span>pick_fields<span class="w">  </span><span class="c1"># show metadata for a mold</span>
 </code></pre></div>
+<p>Both <code>mold list</code> and <code>mold show</code> accept <code>--output-format json</code> for machine-readable output.</p>
 <p>For <strong>local</strong> registries, mold names and descriptions are discovered by scanning <code>.py</code> files.
 For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.toml</code> must be present at the root of the registry.</p>
 <p>Maintainers generate it with:</p>
@@ -2574,8 +2576,11 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
 <a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
 <a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>
-<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
-<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
+<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="c1"># 📑 Lines: one array element per line (shell-friendly lists)</span>
+<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>
+<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
+<a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
 </code></pre></div>
 <hr />
 <h2 id="passing-variables-arg">📎 Passing variables (<code>--arg</code>)</h2>
