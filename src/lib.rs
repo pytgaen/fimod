@@ -14,6 +14,7 @@ pub mod msg;
 pub mod pipeline;
 pub mod regex;
 pub mod registry;
+pub mod serde_compat;
 pub mod template;
 pub mod test_runner;
 

@@ -6,6 +6,8 @@ use anyhow::{bail, Context, Result};
 use monty::{DictPairs, MontyObject};
 use serde_json::Value;
 
+use crate::serde_compat::NativeNumbers;
+
 /// Supported data formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataFormat {
@@ -155,11 +157,10 @@ impl DataFormat {
                     Ok(format!("{line}\n"))
                 }
             },
-            DataFormat::Yaml => {
-                serde_saphyr::to_string(value).context("Failed to serialize to YAML")
-            }
+            DataFormat::Yaml => serde_saphyr::to_string(&NativeNumbers(value))
+                .context("Failed to serialize to YAML"),
             DataFormat::Toml => {
-                toml::to_string_pretty(value).context("Failed to serialize to TOML")
+                toml::to_string_pretty(&NativeNumbers(value)).context("Failed to serialize to TOML")
             }
             DataFormat::Csv => {
                 bail!("Use serialize_csv() with CsvOptions for CSV format")

@@ -5,6 +5,7 @@ use minijinja::Environment;
 use monty::MontyObject;
 
 use crate::convert::monty_to_json;
+use crate::serde_compat::NativeNumbers;
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["tpl_render_str", "tpl_render_from_mold"];
@@ -50,7 +51,7 @@ fn parse_render_args(args: &[MontyObject], fn_name: &str) -> Result<(MontyObject
 /// Render a Jinja2 template string and return the rendered text.
 fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<MontyObject> {
     let ctx_json = monty_to_json(ctx)?;
-    let ctx_value = minijinja::Value::from_serialize(&ctx_json);
+    let ctx_value = minijinja::Value::from_serialize(NativeNumbers(&ctx_json));
 
     let mut env = Environment::new();
     env.set_trim_blocks(true);
