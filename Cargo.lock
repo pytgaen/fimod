@@ -1459,8 +1459,8 @@ dependencies = [
 
 [[package]]
 name = "monty"
-version = "0.0.11"
-source = "git+https://github.com/pydantic/monty?tag=v0.0.11#2e9df4b508e8a9ac80f3a6a26ed680242d1f460d"
+version = "0.0.14"
+source = "git+https://github.com/pydantic/monty?tag=v0.0.14#f2b05cd10bc8a6a2a97d5dc5b8c8770ce7f678eb"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1475,11 +1475,11 @@ dependencies = [
  "num-integer",
  "num-traits",
  "postcard",
- "pyo3-build-config",
  "ruff_python_ast",
  "ruff_python_parser",
  "ruff_text_size",
  "serde",
+ "serde_json",
  "smallvec",
  "speedate",
  "strum",
@@ -2157,9 +2157,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.10"
+version = "0.103.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df33b2b81ac578cabaf06b89b0631153a3f416b0a886e8a7a1707fb51abbd1ef"
+checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
 dependencies = [
  "ring",
  "rustls-pki-types",

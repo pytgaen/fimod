@@ -1,41 +1,65 @@
-Créer SECURITY.md
-Créer CODE_OF_CONDUCT.md
+# TOHL — TODO
 
-----
+Reprise demain. Spec actuelle : `notes/tohl-spec.md` (~335 lignes, v0.1 brouillon).
 
-Problème : résolution de chemin avec `-m ../path/.../a.py`
+## Prochaines étapes suggérées
 
-Quand on passe un chemin fichier direct à `-m`, fimod ne sait pas distinguer deux intentions :
+### 1. Valider le design sur du concret (avant de compléter la spec)
 
-1. Chemin vers un répertoire de mold — l'utilisateur donne le dossier, fimod cherche le script principal (`transform.py` / unique `.py`) selon les conventions habituelles.
-2. Chemin vers un fichier `.py` isolé — l'utilisateur pointe directement un script ; fimod doit vérifier s'il est le seul `.py` dans son répertoire parent (= structure de mold valide) pour pouvoir résoudre les assets associés (templates `.j2`, etc.).
+- [ ] Écrire **3 exemples de configs réelles** en TOHL :
+  - Une config Fimod (registry, catalog, etc.)
+  - Un équivalent `Cargo.toml`
+  - Une config d'app web (server, db, auth, logging)
+- [ ] Repérer ce qui coince : syntaxe manquante, ergonomie, ambiguïtés
 
-Enjeu principal : tant que ce cas n'est pas traité, un mold qui référence un template Jinja2 (`.j2`) situé à côté de lui via `tpl_render_from_mold` ne peut pas être chargé par chemin relatif externe.
+### 2. Prototyper un parser minimal (Rust)
 
+- [ ] Choisir entre `pest` (déclaratif, grammaire séparée) ou `nom` (combinators)
+- [ ] Cible : 200-300 lignes, parse les 7 extensions de la spec
+- [ ] Output : `serde_json::Value` (cohérent avec Fimod)
+- [ ] Tests sur les 3 exemples ci-dessus
 
-----
+### 3. Compléter la spec v1.0 (après prototype)
 
-Title: fimod mold show — support --path to inspect a mold by file path
+Trous identifiés à boucher :
 
-Description:
+- [ ] **Section "Exemples complets"** — un fichier TOHL réaliste de bout en bout
+- [ ] **Règles d'erreur formalisées** :
+  - `[.x]` en premier dans un fichier
+  - Conflit `vars` / annotation inline
+  - Alias non résolu (`port: z` mais `z` absent de `types`)
+  - `null` sur champ non-nullable (`port: int = null`)
+- [ ] **Interopérabilité** :
+  - TOHL → JSON (devenir du frontmatter, perte de types)
+  - TOHL → TOML strict (dégradation null/types)
+  - JSON → TOHL (types inférés ou `any` ?)
+- [ ] **Grammaire EBNF complète** (actuelle = informelle, il manque frontmatter-aliases, compact-section, sibling-shortcut)
+- [ ] **Versioning de la spec** — `version = 1` dans frontmatter : sémantique d'évolution
+- [ ] **Commentaires** — garder `#` TOML ? Positions autorisées ?
+- [ ] **Encoding** — UTF-8 obligatoire ? BOM ? Newlines `\n` vs `\r\n` ?
 
-Currently fimod mold show <name> only resolves molds installed in a registry. This makes it impossible for tools (e.g. the VS Code extension) to display detailed information about a workspace mold that is just a .py file in the user's project.
+## État de la discussion (pour reprise à froid)
 
-Proposed change:
+Décisions prises :
 
-Add a --path <file> option to fimod mold show that inspects a mold file directly on disk, without requiring it to be installed in any registry.
+- **Nom** : TOHL — *Typed Obvious Hackable Language*
+- **Extension fichier** : `.tohl`
+- **Superset strict de TOML 1.0** — jamais de breaking change
+- **7 extensions** : frontmatter, null, typage inline optionnel, inline tables typées, raccourci frère `[.x]`, alias (types/chemins/vars), mode compact
+- **Type `any`** comme opt-out de `vars`
+- **Mode compact** avec `[<d]` (enfant direct du dernier chemin absolu) — outil compress/decompress comme pivot
+- **Conflit `vars` vs annotation inline** = erreur
 
-```
-fimod mold show --path ./molds/upper.py --output-format json
-```
+Rejetés (explicitement) :
 
-The output should be identical in structure to the existing fimod mold show <name> --output-format json — same JSON fields (name, description, source_path, readme_path, input_format, output_format, args), derived by parsing the file at the given path.
+- Navigation multi-niveaux (`[..x]`, `[...x]`, `[/./.x]`) — coût cognitif > gain
+- Anchors/références (`&ref`, `*ref`)
+- Expressions/calcul (`port = base_port + 1`)
+- Imports entre fichiers
+- `:=` comme opt-out (remplacé par `: any`)
 
-When --path is used, registry can be null.
+## Questions ouvertes
 
-Motivation:
-
-The VS Code extension sidebar lists workspace molds (local .py files detected via glob). To open the detail webview with playground for these molds, the extension needs the same structured metadata that fimod mold show returns. Without --path, the extension would have to duplicate the mold parsing logic in TypeScript, which goes against the architecture principle of the extension being a pure UI layer over the CLI.
-
-
------
+- Fimod comme véhicule d'adoption ? (utiliser TOHL pour `catalog.toml`, config molds, etc.)
+- Parser Rust à extraire en crate séparée dès le départ ou laisser dans fimod ?
+- Besoin d'un site minimal (tohl-lang.org ?) pour la spec, ou GitHub README suffit au début ?

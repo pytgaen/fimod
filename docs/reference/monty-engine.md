@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.11) as its execution engine for mold scripts.
+Fimod uses Monty (v0.0.14) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -65,6 +65,7 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `math` | Supported — ~50 functions (floor, ceil, sqrt, log, sin, cos, factorial, gcd, lcm, comb…) + constants (pi, e, tau, inf, nan) |
 | `datetime` | Supported — `date`, `datetime`, `timedelta`, `timezone`; arithmetic, `.isoformat()`, `.strftime()`, `.today()`, `.now()`, `.utcnow()` |
 | `json` | Supported — `json.dumps()`, `json.loads()`. ~2x faster than CPython for loads, ~1.65x for dumps (v0.0.11 string cache + lookup-table escaping). Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template |
+| `zip(..., strict=True)` | Supported since v0.0.12 — raises `ValueError` on length mismatch |
 
 ## External Function Mechanism
 
@@ -191,7 +192,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.11 — fimod v0.3.0 (exit or Ctrl+D to quit)
+Monty REPL v0.0.14 — fimod v0.3.1 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

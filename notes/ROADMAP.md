@@ -42,6 +42,7 @@ Depends on: `df_*` helpers (slurp already implemented via `-i f1 -i f2 -s`).
 ## Power user
 
 - **Multi-document YAML** `[P2]` — support for `---` separators
+- **JSON5 input** `[P3]` — opt-in `--input-format json5` (and `.json5` extension) via the [`serde_json5`](https://crates.io/crates/serde_json5) crate (serde-idiomatic API, better perf than `json5`). Input-only; output stays strict JSON (valid JSON5 by construction). Keeps `serde_json` as the default strict/fast path. Value: configs with comments, trailing commas, unquoted keys — though YAML already covers most "human-edited" use cases.
 - **`--jobs N`** `[P2]` — parallelize batch processing (`-i *.json`) over N threads. Files are independent, so the gain is immediate. Implementation: `rayon` or `std::thread::spawn` + result channel. Watch out: stdout interleaving, partial error handling, and interaction with `--in-place` to be addressed.
 - **Multi-file output** `[P3]` — a mold that generates N files (jsonnet style)
 - **Large files streaming** `[P3]` — line-by-line processing without loading everything into memory. Limited to line-oriented formats (NDJSON, CSV, TXT/lines); tree formats (JSON, JSON5, YAML, TOML) require full loading by nature.

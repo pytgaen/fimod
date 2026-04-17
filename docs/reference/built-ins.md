@@ -95,6 +95,8 @@ Navigate and mutate nested structures using dot-separated paths.
 | `dp_get` | `dp_get(data, path)` | Value at path, or `None` if not found |
 | `dp_get` | `dp_get(data, path, default)` | Value at path, or `default` if not found |
 | `dp_set` | `dp_set(data, path, value)` | New deep copy of `data` with `value` at `path` |
+| `dp_has` | `dp_has(data, path)` | `True` if the path resolves, `False` otherwise |
+| `dp_delete` | `dp_delete(data, path)` | New deep copy with the key/index at `path` removed |
 
 ### Path syntax
 
@@ -104,7 +106,7 @@ Navigate and mutate nested structures using dot-separated paths.
 | Integer | array index | `"items.0"` (first), `"items.-1"` (last) |
 
 !!! tip
-    Missing intermediate keys or out-of-range indices return `None` for `dp_get`. `dp_set` creates missing intermediate keys automatically.
+    Missing intermediate keys or out-of-range indices return `None` for `dp_get`. `dp_set` creates missing intermediate keys automatically. `dp_delete` is a silent no-op when the path is missing; it shifts array elements (no null holes) and rejects empty paths.
 
 ---
 
@@ -118,15 +120,21 @@ Convenience functions for common list/dict operations not natively supported by 
 | `it_values` | `it_values(dict)` | List of values |
 | `it_flatten` | `it_flatten(array)` | Recursively flattened list |
 | `it_group_by` | `it_group_by(array, key)` | Dict of lists, grouped by field name (insertion order) |
-| `it_sort_by` | `it_sort_by(array, key)` | Sorted list by field name (stable sort) |
+| `it_sort_by` | `it_sort_by(array, key [, reverse])` | Sorted list by field name (stable sort); pass `True` for descending |
 | `it_unique` | `it_unique(array)` | Deduplicated list (first occurrence kept) |
 | `it_unique_by` | `it_unique_by(array, key)` | Deduplicated by field name (first occurrence kept) |
+| `it_count_by` | `it_count_by(array, key)` | Dict of counts, grouped by field name (insertion order) |
+| `it_min_by` | `it_min_by(array, key)` | Element with smallest field value, or `None` if empty |
+| `it_max_by` | `it_max_by(array, key)` | Element with largest field value, or `None` if empty |
 
 !!! warning "Field name, not lambda"
-    `it_group_by`, `it_sort_by`, and `it_unique_by` take a **field name string** — not a lambda.
+    `it_group_by`, `it_sort_by`, `it_unique_by`, `it_count_by`, `it_min_by`, and `it_max_by` take a **field name string** — not a lambda.
 
 !!! info "it_flatten is recursive"
     `[1, [2, [3, 4]]]` → `[1, 2, 3, 4]`
+
+!!! tip "Ties in min_by / max_by"
+    When multiple elements share the extremum, the **first** one is returned (stable).
 
 ---
 

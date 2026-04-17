@@ -63,3 +63,14 @@ After implementing or modifying a feature, always:
 2. Check if documentation needs updating (README.md, docs/built-ins.md, docs/cli-reference.md, docs/mold-scripting.md) and propose the changes.
 3. When updating ROADMAP.md, move completed items to the appropriate documentation files (built-ins.md, cli-reference.md, etc.) rather than just marking them as done in the roadmap.
 
+## Release
+
+Use the `/release-workflow` skill — it orchestrates the full flow step by step and enforces the invariants below.
+
+**Mandatory invariants:**
+
+- Feature/fix work goes through a PR on a dedicated branch. Never commit work directly on `main`.
+- `CHANGELOG.md` is updated ONLY in the `chore(release): X.Y.Z` commit — never in feature/fix commits.
+- The `chore(release): X.Y.Z` commit contains ONLY `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`. It is made directly on `main` (no PR).
+- Release commit subject is EXACTLY `chore(release): X.Y.Z` — never `fix:`, `feat:`, etc.
+- Tag `vX.Y.Z` is created on `main` right after the `chore(release)` commit, then both are pushed.

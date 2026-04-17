@@ -16,6 +16,9 @@ pub const EXTERNAL_FUNCTIONS: &[&str] = &[
     "it_sort_by",
     "it_unique",
     "it_unique_by",
+    "it_count_by",
+    "it_min_by",
+    "it_max_by",
 ];
 
 /// Dispatch an external function call to the appropriate iter_helpers handler.
@@ -28,6 +31,9 @@ pub fn dispatch(name: &str, args: Vec<MontyObject>) -> Result<MontyObject> {
         "it_sort_by" => it_sort_by(args),
         "it_unique" => it_unique(args),
         "it_unique_by" => it_unique_by(args),
+        "it_count_by" => it_count_by(args),
+        "it_min_by" => it_min_by(args),
+        "it_max_by" => it_max_by(args),
         _ => bail!("Unknown iter_helpers function: {name}"),
     }
 }
@@ -90,6 +96,17 @@ fn flatten_recursive(value: Value) -> Result<Value> {
     }
 }
 
+/// Stringify the value of `key` in `item` for use as a group/count bucket key.
+/// String values are used verbatim; other scalars go through Display; missing
+/// fields become the literal `"null"`.
+fn stringify_group_key(item: &Value, key: &str) -> String {
+    match item.get(key) {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => "null".to_string(),
+    }
+}
+
 /// it_group_by(array, key) → dict of lists, grouped by value of field
 fn it_group_by(args: Vec<MontyObject>) -> Result<MontyObject> {
     if args.len() != 2 {
@@ -112,11 +129,7 @@ fn it_group_by(args: Vec<MontyObject>) -> Result<MontyObject> {
 
     let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
     for item in arr {
-        let group_key = match item.get(&key) {
-            Some(Value::String(s)) => s.clone(),
-            Some(v) => v.to_string(),
-            None => "null".to_string(),
-        };
+        let group_key = stringify_group_key(&item, &key);
         groups.entry(group_key).or_default().push(item);
     }
 
@@ -127,11 +140,11 @@ fn it_group_by(args: Vec<MontyObject>) -> Result<MontyObject> {
     Ok(json_into_monty(Value::Object(map)))
 }
 
-/// it_sort_by(array, key) → sorted array (stable sort by field value)
+/// it_sort_by(array, key[, reverse]) → sorted array (stable sort by field value)
 fn it_sort_by(args: Vec<MontyObject>) -> Result<MontyObject> {
-    if args.len() != 2 {
+    if args.len() < 2 || args.len() > 3 {
         bail!(
-            "it_sort_by() takes 2 arguments (array, key), got {}",
+            "it_sort_by() takes 2-3 arguments (array, key[, reverse]), got {}",
             args.len()
         );
     }
@@ -140,6 +153,11 @@ fn it_sort_by(args: Vec<MontyObject>) -> Result<MontyObject> {
     let key = match iter.next().unwrap() {
         MontyObject::String(s) => s,
         other => bail!("it_sort_by() key must be a string, got {other:?}"),
+    };
+    let reverse = match iter.next() {
+        None => false,
+        Some(MontyObject::Bool(b)) => b,
+        Some(other) => bail!("it_sort_by() reverse must be a bool, got {other:?}"),
     };
 
     let mut arr = match monty_to_json(data_obj)? {
@@ -150,7 +168,12 @@ fn it_sort_by(args: Vec<MontyObject>) -> Result<MontyObject> {
     arr.sort_by(|a, b| {
         let va = a.get(&key).unwrap_or(&Value::Null);
         let vb = b.get(&key).unwrap_or(&Value::Null);
-        cmp_json_values(va, vb)
+        let ord = cmp_json_values(va, vb);
+        if reverse {
+            ord.reverse()
+        } else {
+            ord
+        }
     });
 
     Ok(json_into_monty(Value::Array(arr)))
@@ -244,6 +267,88 @@ fn it_unique_by(args: Vec<MontyObject>) -> Result<MontyObject> {
     }
 
     Ok(json_into_monty(Value::Array(result)))
+}
+
+/// it_count_by(array, key) → dict of counts, grouped by field value (insertion order)
+fn it_count_by(args: Vec<MontyObject>) -> Result<MontyObject> {
+    if args.len() != 2 {
+        bail!(
+            "it_count_by() takes 2 arguments (array, key), got {}",
+            args.len()
+        );
+    }
+    let mut iter = args.into_iter();
+    let data_obj = iter.next().unwrap();
+    let key = match iter.next().unwrap() {
+        MontyObject::String(s) => s,
+        other => bail!("it_count_by() key must be a string, got {other:?}"),
+    };
+
+    let arr = match monty_to_json(data_obj)? {
+        Value::Array(arr) => arr,
+        _ => bail!("it_count_by() expects an array"),
+    };
+
+    // serde_json::Map preserves insertion order (see `preserve_order` feature).
+    let mut counts: serde_json::Map<String, Value> = serde_json::Map::new();
+    for item in arr {
+        let group_key = stringify_group_key(&item, &key);
+        let current = counts.get(&group_key).and_then(Value::as_u64).unwrap_or(0);
+        counts.insert(group_key, Value::Number((current + 1).into()));
+    }
+    Ok(json_into_monty(Value::Object(counts)))
+}
+
+/// it_min_by(array, key) → element with smallest field value, or None if array is empty.
+/// On ties, returns the first element.
+fn it_min_by(args: Vec<MontyObject>) -> Result<MontyObject> {
+    extremum_by(args, "it_min_by", false)
+}
+
+/// it_max_by(array, key) → element with largest field value, or None if array is empty.
+/// On ties, returns the first element.
+fn it_max_by(args: Vec<MontyObject>) -> Result<MontyObject> {
+    extremum_by(args, "it_max_by", true)
+}
+
+fn extremum_by(args: Vec<MontyObject>, name: &str, take_max: bool) -> Result<MontyObject> {
+    if args.len() != 2 {
+        bail!(
+            "{name}() takes 2 arguments (array, key), got {}",
+            args.len()
+        );
+    }
+    let mut iter = args.into_iter();
+    let data_obj = iter.next().unwrap();
+    let key = match iter.next().unwrap() {
+        MontyObject::String(s) => s,
+        other => bail!("{name}() key must be a string, got {other:?}"),
+    };
+
+    let arr = match monty_to_json(data_obj)? {
+        Value::Array(arr) => arr,
+        _ => bail!("{name}() expects an array"),
+    };
+
+    if arr.is_empty() {
+        return Ok(MontyObject::None);
+    }
+
+    // Reverse the comparator for max so we still get the FIRST element on ties
+    // (std min_by returns first on ties; max_by returns last).
+    let best = arr
+        .into_iter()
+        .min_by(|a, b| {
+            let va = a.get(&key).unwrap_or(&Value::Null);
+            let vb = b.get(&key).unwrap_or(&Value::Null);
+            if take_max {
+                cmp_json_values(vb, va)
+            } else {
+                cmp_json_values(va, vb)
+            }
+        })
+        .unwrap();
+    Ok(json_into_monty(best))
 }
 
 #[cfg(test)]
@@ -355,5 +460,134 @@ mod tests {
         assert_eq!(arr.len(), 2);
         assert_eq!(arr[0]["name"], "Alice");
         assert_eq!(arr[1]["name"], "Bob");
+    }
+
+    #[test]
+    fn test_it_sort_by_reverse() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Charlie", "age": 30},
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 35},
+        ]));
+        let result = dispatch("it_sort_by", vec![data, s("age"), MontyObject::Bool(true)]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr[0]["name"], "Bob");
+        assert_eq!(arr[1]["name"], "Charlie");
+        assert_eq!(arr[2]["name"], "Alice");
+    }
+
+    #[test]
+    fn test_it_sort_by_reverse_false_matches_default() {
+        let data = serde_json::json!([
+            {"name": "Charlie", "age": 30},
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 35},
+        ]);
+        let r1 = dispatch("it_sort_by", vec![json_into_monty(data.clone()), s("age")]).unwrap();
+        let r2 = dispatch(
+            "it_sort_by",
+            vec![json_into_monty(data), s("age"), MontyObject::Bool(false)],
+        )
+        .unwrap();
+        assert_eq!(monty_to_json(r1).unwrap(), monty_to_json(r2).unwrap());
+    }
+
+    #[test]
+    fn test_it_count_by() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Alice", "dept": "eng"},
+            {"name": "Bob", "dept": "sales"},
+            {"name": "Carol", "dept": "eng"},
+            {"name": "Dave", "dept": "eng"},
+        ]));
+        let result = dispatch("it_count_by", vec![data, s("dept")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json["eng"], 3);
+        assert_eq!(json["sales"], 1);
+    }
+
+    #[test]
+    fn test_it_count_by_preserves_insertion_order() {
+        let data = json_into_monty(serde_json::json!([
+            {"dept": "eng"},
+            {"dept": "sales"},
+            {"dept": "hr"},
+            {"dept": "eng"},
+        ]));
+        let result = dispatch("it_count_by", vec![data, s("dept")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        let keys: Vec<&String> = json.as_object().unwrap().keys().collect();
+        assert_eq!(keys, vec!["eng", "sales", "hr"]);
+    }
+
+    #[test]
+    fn test_it_count_by_empty() {
+        let data = json_into_monty(serde_json::json!([]));
+        let result = dispatch("it_count_by", vec![data, s("dept")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json, serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_it_min_by() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Charlie", "age": 30},
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 35},
+        ]));
+        let result = dispatch("it_min_by", vec![data, s("age")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json["name"], "Alice");
+    }
+
+    #[test]
+    fn test_it_max_by() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Charlie", "age": 30},
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 35},
+        ]));
+        let result = dispatch("it_max_by", vec![data, s("age")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json["name"], "Bob");
+    }
+
+    #[test]
+    fn test_it_min_by_empty_returns_none() {
+        let data = json_into_monty(serde_json::json!([]));
+        let result = dispatch("it_min_by", vec![data, s("age")]).unwrap();
+        assert_eq!(result, MontyObject::None);
+    }
+
+    #[test]
+    fn test_it_max_by_empty_returns_none() {
+        let data = json_into_monty(serde_json::json!([]));
+        let result = dispatch("it_max_by", vec![data, s("age")]).unwrap();
+        assert_eq!(result, MontyObject::None);
+    }
+
+    #[test]
+    fn test_it_min_by_ties_return_first() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 25},
+            {"name": "Carol", "age": 30},
+        ]));
+        let result = dispatch("it_min_by", vec![data, s("age")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json["name"], "Alice");
+    }
+
+    #[test]
+    fn test_it_max_by_ties_return_first() {
+        let data = json_into_monty(serde_json::json!([
+            {"name": "Alice", "age": 25},
+            {"name": "Bob", "age": 35},
+            {"name": "Carol", "age": 35},
+        ]));
+        let result = dispatch("it_max_by", vec![data, s("age")]).unwrap();
+        let json = monty_to_json(result).unwrap();
+        assert_eq!(json["name"], "Bob");
     }
 }

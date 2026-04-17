@@ -103,6 +103,13 @@ fimod s -i data.json -m @json_schema_extract
 fimod s -i users.json -m @pick_fields --arg fields=name,email
 ```
 
+### `@filter_fields` — Keep or drop fields (with dotpaths)
+
+```bash
+fimod s -i api.json -m @filter_fields --arg mode=drop --arg fields=password,meta.debug
+fimod s -i api.json -m @filter_fields --arg mode=keep --arg fields=id,user.email
+```
+
 ### `@rename_keys` — Rename keys via mapping
 
 ```bash

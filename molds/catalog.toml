@@ -2,7 +2,7 @@
 description = "Hash specified fields with SHA-256 for anonymization"
 path = "anonymize_pii/anonymize_pii.py"
 readme = "anonymize_pii/README.md"
-hash = "71bf528758cd9b63dfdb80d342cc1186"
+hash = "b870cc869628b0f592dd892c0fe57619"
 
 [molds.anonymize_pii.args]
 fields = "Comma-separated list of fields to anonymize"
@@ -60,10 +60,10 @@ field = "Field name to deduplicate on"
 description = "Extract nested fields by dotpath into a flat object"
 path = "deep_pluck/deep_pluck.py"
 readme = "deep_pluck/README.md"
-hash = "0d271e5a24d750e9dfb517707d9d4198"
+hash = "e64546d2b08c4d2dd9933319e624199b"
 
 [molds.deep_pluck.args]
-paths = "Comma-separated dotpaths to extract (e.g. user.name"
+paths = "Comma-separated dotpaths to extract (e.g. user.name,user.email)"
 
 [molds.env_to_dotenv]
 description = "Transform JSON/YAML config to .env format"
@@ -71,6 +71,16 @@ path = "env_to_dotenv/env_to_dotenv.py"
 readme = "env_to_dotenv/README.md"
 output_format = "txt"
 hash = "35d5e3f80fd32115d972d1d5504f66f7"
+
+[molds.filter_fields]
+description = "Filter fields of an object or array of objects by keeping or dropping dotpaths"
+path = "filter_fields/filter_fields.py"
+readme = "filter_fields/README.md"
+hash = "7cc96404403881c97acbfe91562cde8f"
+
+[molds.filter_fields.args]
+fields = "Comma-separated list of dotpaths"
+mode = "keep or drop — whether to retain or remove the listed paths (default: keep)"
 
 [molds.flatten_nested]
 description = "Flatten a nested JSON object into dot-path keys"
@@ -84,6 +94,7 @@ path = "git_changelog/git_changelog.py"
 readme = "git_changelog/README.md"
 output_format = "txt"
 hash = "08ed192c7cbe0339e135c6f44cd85510"
+files = ["git_changelog/templates/changelog.md.j2"]
 
 [molds.git_changelog.args]
 title = "Changelog title (default: Changelog)"
@@ -129,7 +140,7 @@ hash = "53f4fca3d0fe567661c15dc444f60dd7"
 description = "Keep only specified fields from an object or array of objects"
 path = "pick_fields/pick_fields.py"
 readme = "pick_fields/README.md"
-hash = "e0b8957157bab5687d44c6aee24b6a32"
+hash = "1b0448b1bcd45b8eea2558418ddb0ce6"
 
 [molds.pick_fields.args]
 fields = "Comma-separated list of fields to keep"
@@ -138,7 +149,7 @@ fields = "Comma-separated list of fields to keep"
 description = "Rename keys via mapping 'old1:new1,old2:new2'"
 path = "rename_keys/rename_keys.py"
 readme = "rename_keys/README.md"
-hash = "196fd4d7b75fb322e49348f6c8b914f2"
+hash = "352cbf4bf05230c78c9889d280562f6e"
 
 [molds.rename_keys.args]
 mapping = "Comma-separated list of old_key:new_key pairs"
@@ -153,7 +164,7 @@ hash = "4e7bd3733d20edd0aa672c173de79e6f"
 description = "Split a delimiter-separated tags field into a list and deduplicate"
 path = "split_tags/split_tags.py"
 readme = "split_tags/README.md"
-hash = "56702dfba249513b311f0e4ce630a51e"
+hash = "b71a8ff831e3c1c024fee8a9478288f9"
 
 [molds.split_tags.args]
 field = "Field name containing the tags string"
@@ -163,7 +174,7 @@ sep = "Separator regex (default: comma/semicolon with optional space)"
 description = "Validate that required fields exist (exits 1 if missing)"
 path = "validate_fields/validate_fields.py"
 readme = "validate_fields/README.md"
-hash = "c7de293019a80ba80c66f6a04a6f6c78"
+hash = "8ef112cd99666e3267b9972478ffaa50"
 
 [molds.validate_fields.args]
 required = "Comma-separated list of dotpaths that must be present (or set FIMOD_REQUIRED_FIELDS env var)"
@@ -173,7 +184,7 @@ description = "Merge patch values into an existing YAML structure"
 path = "yaml_merge/yaml_merge.py"
 readme = "yaml_merge/README.md"
 output_format = "yaml"
-hash = "69ba0df5c3b5b741b8376502b669b740"
+hash = "8c97c552c9ce2fd79b849da743a83422"
 
 [molds.yaml_merge.args]
 set = "Comma-separated list of path=value assignments"

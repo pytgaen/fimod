@@ -2,6 +2,8 @@
 
 Keep only specified fields from an object or an array of objects. All other fields are dropped.
 
+> Need nested paths or **drop** semantics? See [`filter_fields`](../filter_fields/README.md).
+
 ## Usage
 
 ```bash
