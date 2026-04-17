@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.32">
+      <meta name="generator" content="zensical-0.0.33">
     
     
       
@@ -53,7 +53,7 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
         <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
       
     
@@ -1151,6 +1151,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#filter_fields-keep-or-drop-fields-with-dotpaths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @filter_fields — Keep or drop fields (with dotpaths)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rename_keys-rename-keys-via-mapping" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1625,6 +1636,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#filter_fields-keep-or-drop-fields-with-dotpaths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @filter_fields — Keep or drop fields (with dotpaths)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rename_keys-rename-keys-via-mapping" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1944,73 +1966,77 @@
 <h3 id="pick_fields-keep-only-specified-fields"><code>@pick_fields</code> — Keep only specified fields</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-m<span class="w"> </span>@pick_fields<span class="w"> </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>name,email
 </code></pre></div>
+<h3 id="filter_fields-keep-or-drop-fields-with-dotpaths"><code>@filter_fields</code> — Keep or drop fields (with dotpaths)</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>api.json<span class="w"> </span>-m<span class="w"> </span>@filter_fields<span class="w"> </span>--arg<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>drop<span class="w"> </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>password,meta.debug
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>api.json<span class="w"> </span>-m<span class="w"> </span>@filter_fields<span class="w"> </span>--arg<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>keep<span class="w"> </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>id,user.email
+</code></pre></div>
 <h3 id="rename_keys-rename-keys-via-mapping"><code>@rename_keys</code> — Rename keys via mapping</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@rename_keys<span class="w"> </span>--arg<span class="w"> </span><span class="nv">mapping</span><span class="o">=</span>firstName:first_name,lastName:last_name
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@rename_keys<span class="w"> </span>--arg<span class="w"> </span><span class="nv">mapping</span><span class="o">=</span>firstName:first_name,lastName:last_name
 </code></pre></div>
 <h3 id="dedup_by-deduplicate-records-by-a-field"><code>@dedup_by</code> — Deduplicate records by a field</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>contacts.json<span class="w"> </span>-m<span class="w"> </span>@dedup_by<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span>email
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>contacts.json<span class="w"> </span>-m<span class="w"> </span>@dedup_by<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span>email
 </code></pre></div>
 <h3 id="group_count-group-by-field-and-count"><code>@group_count</code> — Group by field and count</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>events.json<span class="w"> </span>-m<span class="w"> </span>@group_count<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span><span class="nb">type</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="c1"># → [{&quot;type&quot;: &quot;click&quot;, &quot;count&quot;: 42}, {&quot;type&quot;: &quot;view&quot;, &quot;count&quot;: 128}]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>events.json<span class="w"> </span>-m<span class="w"> </span>@group_count<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span><span class="nb">type</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># → [{&quot;type&quot;: &quot;click&quot;, &quot;count&quot;: 42}, {&quot;type&quot;: &quot;view&quot;, &quot;count&quot;: 128}]</span>
 </code></pre></div>
 <h3 id="split_tags-split-a-delimiter-separated-field-into-a-list"><code>@split_tags</code> — Split a delimiter-separated field into a list</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>articles.json<span class="w"> </span>-m<span class="w"> </span>@split_tags<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span>tags
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># &quot;rust,cli,tools&quot; → [&quot;rust&quot;, &quot;cli&quot;, &quot;tools&quot;]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>articles.json<span class="w"> </span>-m<span class="w"> </span>@split_tags<span class="w"> </span>--arg<span class="w"> </span><span class="nv">field</span><span class="o">=</span>tags
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># &quot;rust,cli,tools&quot; → [&quot;rust&quot;, &quot;cli&quot;, &quot;tools&quot;]</span>
 </code></pre></div>
 <h3 id="sort_json_keys-recursively-sort-json-keys"><code>@sort_json_keys</code> — Recursively sort JSON keys</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.json<span class="w"> </span>-m<span class="w"> </span>@sort_json_keys<span class="w"> </span>-o<span class="w"> </span>clean.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.json<span class="w"> </span>-m<span class="w"> </span>@sort_json_keys<span class="w"> </span>-o<span class="w"> </span>clean.json
 </code></pre></div>
 <hr />
 <h2 id="data-quality">🛡️ Data Quality</h2>
 <h3 id="anonymize_pii-hash-pii-fields"><code>@anonymize_pii</code> — Hash PII fields</h3>
 <p>Replaces the values of specified fields with their SHA-256 hash. Works on both arrays of objects and single objects.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-m<span class="w"> </span>@anonymize_pii<span class="w"> </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>email,phone<span class="w"> </span>-o<span class="w"> </span>users_anon.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-m<span class="w"> </span>@anonymize_pii<span class="w"> </span>--arg<span class="w"> </span><span class="nv">fields</span><span class="o">=</span>email,phone<span class="w"> </span>-o<span class="w"> </span>users_anon.json
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Before</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;phone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;555-0100&quot;</span><span class="p">}]</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1">// After</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a4c2e...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;phone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f91b3...&quot;</span><span class="p">}]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Before</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;phone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;555-0100&quot;</span><span class="p">}]</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1">// After</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a4c2e...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;phone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f91b3...&quot;</span><span class="p">}]</span>
 </code></pre></div>
 <p>The original <code>id</code> and any non-listed fields are preserved. Deterministic hashing means the same input always produces the same fingerprint — useful for consistent pseudonymisation across datasets.</p>
 <hr />
 <h2 id="csv">📊 CSV</h2>
 <h3 id="csv_stats-basic-statistics-on-numeric-columns"><code>@csv_stats</code> — Basic statistics on numeric columns</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-m<span class="w"> </span>@csv_stats
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="c1"># → {&quot;salary&quot;: {&quot;min&quot;: 30000, &quot;max&quot;: 120000, &quot;mean&quot;: 65000, &quot;count&quot;: 50}, ...}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-m<span class="w"> </span>@csv_stats
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="c1"># → {&quot;salary&quot;: {&quot;min&quot;: 30000, &quot;max&quot;: 120000, &quot;mean&quot;: 65000, &quot;count&quot;: 50}, ...}</span>
 </code></pre></div>
 <h3 id="csv_to_json_records-csv-to-json-array-of-objects"><code>@csv_to_json_records</code> — CSV to JSON array of objects</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-m<span class="w"> </span>@csv_to_json_records<span class="w"> </span>-o<span class="w"> </span>data.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-m<span class="w"> </span>@csv_to_json_records<span class="w"> </span>-o<span class="w"> </span>data.json
 </code></pre></div>
 <hr />
 <h2 id="text-markdown">📝 Text &amp; Markdown</h2>
 <h3 id="badge_md-generate-a-shieldsio-badge"><code>@badge_md</code> — Generate a shields.io badge</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>status.json<span class="w"> </span>-m<span class="w"> </span>@badge_md<span class="w"> </span>--arg<span class="w"> </span><span class="nv">label</span><span class="o">=</span>build<span class="w"> </span>--arg<span class="w"> </span><span class="nv">status</span><span class="o">=</span>passing<span class="w"> </span>--arg<span class="w"> </span><span class="nv">color</span><span class="o">=</span>green
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1"># → [![build](https://img.shields.io/badge/build-passing-green)]()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>status.json<span class="w"> </span>-m<span class="w"> </span>@badge_md<span class="w"> </span>--arg<span class="w"> </span><span class="nv">label</span><span class="o">=</span>build<span class="w"> </span>--arg<span class="w"> </span><span class="nv">status</span><span class="o">=</span>passing<span class="w"> </span>--arg<span class="w"> </span><span class="nv">color</span><span class="o">=</span>green
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="c1"># → [![build](https://img.shields.io/badge/build-passing-green)]()</span>
 </code></pre></div>
 <h3 id="git_changelog-markdown-changelog-from-structured-data"><code>@git_changelog</code> — Markdown changelog from structured data</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>commits.json<span class="w"> </span>-m<span class="w"> </span>@git_changelog<span class="w"> </span>-o<span class="w"> </span>CHANGELOG.md
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>commits.json<span class="w"> </span>-m<span class="w"> </span>@git_changelog<span class="w"> </span>-o<span class="w"> </span>CHANGELOG.md
 </code></pre></div>
 <h3 id="markdown_toc-extract-table-of-contents-from-markdown"><code>@markdown_toc</code> — Extract table of contents from Markdown</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>README.md<span class="w"> </span>-m<span class="w"> </span>@markdown_toc
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>README.md<span class="w"> </span>-m<span class="w"> </span>@markdown_toc
 </code></pre></div>
 <h3 id="log_parse-parse-log-lines-into-structured-records"><code>@log_parse</code> — Parse log lines into structured records</h3>
 <p>Extracts structured fields from log lines using regex capture groups.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>app.log<span class="w"> </span>-m<span class="w"> </span>@log_parse
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>app.log<span class="w"> </span>-m<span class="w"> </span>@log_parse
 </code></pre></div>
 <hr />
 <h2 id="bigquery">🗄️ BigQuery</h2>
 <h3 id="bq_insert-generate-insert-statement-from-bq-show"><code>@bq_insert</code> — Generate INSERT statement from <code>bq show</code></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>bq<span class="w"> </span>show<span class="w"> </span>--format<span class="o">=</span>json<span class="w"> </span>project:dataset.table<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-m<span class="w"> </span>@bq_insert
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>bq<span class="w"> </span>show<span class="w"> </span>--format<span class="o">=</span>json<span class="w"> </span>project:dataset.table<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-m<span class="w"> </span>@bq_insert
 </code></pre></div>
 <h3 id="bq_select-generate-select-statement-from-bq-show"><code>@bq_select</code> — Generate SELECT statement from <code>bq show</code></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>bq<span class="w"> </span>show<span class="w"> </span>--format<span class="o">=</span>json<span class="w"> </span>project:dataset.table<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-m<span class="w"> </span>@bq_select
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>bq<span class="w"> </span>show<span class="w"> </span>--format<span class="o">=</span>json<span class="w"> </span>project:dataset.table<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-m<span class="w"> </span>@bq_select
 </code></pre></div>
 <hr />
 <h2 id="fimod-powered-registry">🚀 fimod-powered registry</h2>
 <p>More production-ready molds are available in the <a href="https://github.com/pytgaen/fimod-powered">fimod-powered</a> registry:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>fimod-powered<span class="w"> </span>https://github.com/pytgaen/fimod-powered
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>fimod-powered<span class="w"> </span>https://github.com/pytgaen/fimod-powered
 </code></pre></div>
 <table>
 <thead>
@@ -2103,7 +2129,7 @@
       <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../assets/javascripts/bundle.91a19a9e.min.js"></script>
+      <script src="../assets/javascripts/bundle.63456bd9.min.js"></script>
       
     
   </body>
