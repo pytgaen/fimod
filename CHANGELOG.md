@@ -2,6 +2,39 @@
 
 All notable changes to fimod are documented here.
 
+## [0.4.0] — 2026-04-17
+
+### Highlights
+
+- ⬆️ **🐍 Monty v0.0.11 → v0.0.14** — natural JSON support in `MontyObject`, `ExternalExceptionData`, `u32` `CodeLoc` (fix panic on files >65k lines).
+- ✨ **New dotpath built-ins** — `dp_has`, `dp_delete` complete the dotpath toolkit.
+- ✨ **New iter built-ins** — `it_count_by`, `it_min_by`, `it_max_by`; `it_sort_by` gains a `reverse` flag.
+- 📦 **New `filter_fields` mold** — keep/drop fields by dotpath (with nested path support).
+
+### Features
+
+- **built-ins:** `dp_has(data, path)` tests path existence; `dp_delete(data, path)` removes key/index (silent no-op on missing, shifts array elements).
+- **built-ins:** `it_count_by(array, key)` returns counts per field value (insertion order).
+- **built-ins:** `it_min_by` / `it_max_by` return the element with smallest/largest field value (stable: first tie wins).
+- **built-ins:** `it_sort_by(array, key, reverse=True)` for descending order.
+- **mold:** `filter_fields` — keep or drop fields using dotpath patterns; handles nested paths and arrays.
+
+### Bug Fixes
+
+- **serde:** wrap `serde_json::Value` in `NativeNumbers` before handing it to non-serde_json serializers (TOML, YAML, minijinja). Monty v0.0.14 transitively enables serde_json's `arbitrary_precision` feature, which would otherwise cause numbers to be emitted as `{"$serde_json::private::Number": "..."}` instead of bare `i64`/`u64`/`f64`.
+
+### Documentation
+
+- Updated `built-ins.md` with new dotpath/iter functions.
+- Updated `monty-engine.md` version references.
+- Expanded `mold-gallery.md` with `filter_fields`.
+
+### Housekeeping
+
+- New `src/serde_compat.rs` with `NativeNumbers` newtype + tests.
+- Notes: `monty-v0.0.12.md`, `monty-v0.0.13.md`, `monty-v0.0.14.md`, `tohl-spec.md`.
+- Renamed `notes/monty-0.0.11.md` → `notes/monty-v0.0.11.md` for consistency.
+
 ## [0.3.1] — 2026-04-12
 
 ### Bug Fixes
