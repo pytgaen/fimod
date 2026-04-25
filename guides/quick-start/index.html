@@ -1212,7 +1212,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </code></pre></div>
 <p>Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
-After installing the binary, the script prompts you (in two steps) to install the <strong>community registries</strong> and the <strong>recommended sandbox policy</strong>.</p>
+The script installs the binary then prompts you to run <code>fimod registry setup</code> to configure the examples mold catalog.</p>
 <p><strong>Options</strong> (environment variables):</p>
 <table>
 <thead>
@@ -1225,7 +1225,7 @@ After installing the binary, the script prompts you (in two steps) to install th
 <tbody>
 <tr>
 <td><code>FIMOD_VARIANT</code></td>
-<td><em>standard</em></td>
+<td><em>(full)</em></td>
 <td><code>slim</code> to exclude HTTP input and remote mold loading</td>
 </tr>
 <tr>
@@ -1238,28 +1238,10 @@ After installing the binary, the script prompts you (in two steps) to install th
 <td>latest</td>
 <td>Pin a specific version (e.g. <code>v0.2.1</code>)</td>
 </tr>
-<tr>
-<td><code>FIMOD_SETUP_REGISTRY</code></td>
-<td><em>prompt</em></td>
-<td><code>yes</code> / <code>no</code> to skip the interactive prompt for community registries</td>
-</tr>
-<tr>
-<td><code>FIMOD_SETUP_SANDBOX</code></td>
-<td><em>prompt</em></td>
-<td><code>yes</code> / <code>no</code> to skip the interactive prompt for the sandbox policy</td>
-</tr>
-<tr>
-<td><code>FIMOD_SETUP_ALL</code></td>
-<td><em>prompt</em></td>
-<td><code>yes</code> / <code>no</code> shortcut applied to both when granulars are unset</td>
-</tr>
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Install the slim variant to a custom directory</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">FIMOD_VARIANT</span><span class="o">=</span>slim<span class="w"> </span><span class="nv">FIMOD_INSTALL</span><span class="o">=</span>~/.local/bin<span class="w"> </span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># CI-friendly — no prompts, install everything</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">FIMOD_SETUP_ALL</span><span class="o">=</span>yes<span class="w"> </span>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </code></pre></div>
 </div>
 <div class="tabbed-block">
@@ -1285,8 +1267,8 @@ After installing the binary, the script prompts you (in two steps) to install th
 <a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="nv">$env:PATH</span> <span class="p">=</span> <span class="s2">&quot;$BinDir;$env:PATH&quot;</span>
 <a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="p">}</span>
 <a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="c"># 🗂️ 4. Install community registries + recommended sandbox policy</span>
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">fimod</span> <span class="n">setup</span> <span class="n">all</span> <span class="n">defaults</span> <span class="p">-</span><span class="n">-yes</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="c"># 🗂️ 4. Set up the examples mold catalog</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="n">fimod</span> <span class="n">registry</span> <span class="n">setup</span>
 </code></pre></div>
 </details>
 <p><details>
@@ -1326,17 +1308,11 @@ After installing the binary, the script prompts you (in two steps) to install th
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>fimod<span class="w"> </span>--version
 </code></pre></div>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Installed via <code>cargo</code> or built from source?</p>
-<p>The shell installers set up registries and the sandbox policy for you. If you installed another way, run it manually:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--yes
-</code></pre></div></p>
-</div>
 <hr />
 <h2 id="first-try-hello-world">🎯 First Try (Hello World)</h2>
 <p>Let's test fimod with a simple inline expression. Create a sample JSON file or pipe it in:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;[{&quot;name&quot;: &quot;Alice&quot;}, {&quot;name&quot;: &quot;Bob&quot;}]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;len(data)&#39;</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># Output: 2</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;[{&quot;name&quot;: &quot;Alice&quot;}, {&quot;name&quot;: &quot;Bob&quot;}]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;len(data)&#39;</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># Output: 2</span>
 </code></pre></div>
 <hr />
 <h2 id="next-steps">�️ Next steps</h2>
