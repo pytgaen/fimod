@@ -11,7 +11,7 @@ use crate::mold::MoldSource;
 
 /// Prompt the user with a yes/no question. Returns `false` in non-interactive contexts.
 /// `default_yes` controls the default when the user presses Enter without typing.
-fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
+pub(crate) fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
     use std::io::{IsTerminal, Write};
     if !std::io::stdin().is_terminal() {
         return Ok(false);
@@ -32,13 +32,7 @@ fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
 // ── config path ───────────────────────────────────────────────────────────────
 
 fn config_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .context("HOME environment variable not set")?;
-    Ok(Path::new(&home)
-        .join(".config")
-        .join("fimod")
-        .join("sources.toml"))
+    Ok(crate::paths::config_dir()?.join("sources.toml"))
 }
 
 // ── data model ────────────────────────────────────────────────────────────────

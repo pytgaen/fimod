@@ -42,9 +42,9 @@ fimod s -i logs/*.json -m normalize.py -o cleaned/
 curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 ```
 
-The script downloads the right binary, installs it, then runs `fimod registry setup` to configure the examples mold catalog.
+The script downloads the right binary, installs it, then runs two interactive prompts: **community registries** (example molds) and **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). Answer `y`/`n` per block, or skip the prompts with env vars.
 
-> 💡 Options via env vars: `FIMOD_VARIANT=slim` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0`
+> 💡 Options via env vars: `FIMOD_VARIANT=slim` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
 
 ### Windows
 
@@ -73,8 +73,8 @@ if ($UserPath -notlike "*$BinDir*") {
     $env:PATH = "$BinDir;$env:PATH"
 }
 
-# 🗂️ 4. Set up the examples mold catalog
-fimod registry setup
+# 🗂️ 4. Install community registries + recommended sandbox policy
+fimod setup all defaults --yes
 ```
 
 </details>
@@ -386,16 +386,23 @@ fimod s -i https://example.com/archive.tar.gz --output-format raw -O
 
 Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls - proxy-aware out of the box (`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`). Smart format detection reads `Content-Type` headers automatically. Use `--input-format http` for full access to status codes and response headers.
 
-> Requires the `full` build variant (default). Use `FIMOD_VARIANT=slim` to exclude HTTP support.
+> Included in the default build variant. Use `FIMOD_VARIANT=slim` to exclude HTTP support.
 
 ## 🛡️ Security model
 
-Mold scripts are **pure functions** - they receive data and return a result. They cannot:
+Mold scripts run under a **zero-authorization sandbox** by default. All I/O stays in Rust — a mold cannot read/write files, reach the network, or inspect the host process. Every `fimod s` invocation also enforces hard limits (`max_duration = 2m`, `max_memory = 1GB`) and exits with code `137` on violation. Safe for remote and untrusted molds.
 
-- Read/write files, access the network, or call the OS
-- Import external libraries
+Opt in to the bits your molds need by writing `~/.config/fimod/sandbox.toml`:
 
-All I/O stays in Rust. You can safely run molds from remote URLs without sandboxing concerns.
+```toml
+[sandbox]
+allow_clock  = true              # enable datetime.now() / date.today()
+max_duration = "2m"
+max_memory   = "1GB"
+allow_env    = ["LANG", "TZ_*"]  # glob-matched os.getenv() keys
+```
+
+Bootstrap it with `fimod setup sandbox defaults --yes`, then tune. Override per-invocation with `--sandbox-file <path>`; force zero-authorization with `--sandbox-file=""`. See [Sandbox policy](docs/guides/cli-reference.md#sandbox-policy) for the full reference.
 
 ## ⚙️ How it works
 

@@ -177,6 +177,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         std::env::set_var(k, v);
     }
 
+    let policy = crate::sandbox::SandboxPolicy::zero_authorization();
     let opts = engine::MoldOptions {
         extra_args: &extra_args,
         env_value: &env_value,
@@ -184,6 +185,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         debug: false,
         msg_level: 1,
         mold_base_dir,
+        policy: &policy,
     };
     let execute_result = engine::execute_mold(script, convert::json_to_monty(&input_data), &opts);
 

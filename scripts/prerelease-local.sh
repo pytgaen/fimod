@@ -1,12 +1,12 @@
 #!/bin/bash
-# local-prerelease.sh — Build release binary + run e2e tests in a disposable container
+# prerelease-local.sh — Build release binary + run e2e tests in a disposable container
 #
 # Usage:
-#   ./scripts/local-prerelease.sh                  # full: build + test
-#   ./scripts/local-prerelease.sh --skip-build      # reuse last release binary
-#   ./scripts/local-prerelease.sh --keep            # don't destroy container after test
-#   ./scripts/local-prerelease.sh --runtime docker   # force docker (default: auto-detect)
-#   ./scripts/local-prerelease.sh --runtime incus    # force incus
+#   ./scripts/prerelease-local.sh                  # full: build + test
+#   ./scripts/prerelease-local.sh --skip-build      # reuse last release binary
+#   ./scripts/prerelease-local.sh --keep            # don't destroy container after test
+#   ./scripts/prerelease-local.sh --runtime docker   # force docker (default: auto-detect)
+#   ./scripts/prerelease-local.sh --runtime incus    # force incus
 #
 # Requires: docker or incus, cargo
 
@@ -200,6 +200,33 @@ step "Pushing binary and install.sh"
 container_push "$BINARY" "/usr/local/bin/fimod"
 container_exec chmod +x /usr/local/bin/fimod
 container_push "$FIMOD_DIR/install.sh" "/tmp/install.sh"
+
+# Version-spoof wrappers for dual-path tests (tests 8 & 9):
+#   The real binary is kept at /usr/local/bin/fimod.
+#   Each wrapper reports a spoofed version for --version and delegates
+#   everything else to /usr/local/bin/fimod (the actual binary).
+_SPOOF_050=$(mktemp)
+cat > "$_SPOOF_050" << 'SH'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "fimod 0.5.0"
+else
+  exec /usr/local/bin/fimod "$@"
+fi
+SH
+_SPOOF_030=$(mktemp)
+cat > "$_SPOOF_030" << 'SH'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "fimod 0.3.0"
+else
+  exec /usr/local/bin/fimod "$@"
+fi
+SH
+container_push "$_SPOOF_050" "/tmp/fimod-spoof-050.sh"
+container_push "$_SPOOF_030" "/tmp/fimod-spoof-030.sh"
+container_exec chmod +x /tmp/fimod-spoof-050.sh /tmp/fimod-spoof-030.sh
+rm -f "$_SPOOF_050" "$_SPOOF_030"
 ok "Files pushed"
 
 # ── Phase 4: Tests ───────────────────────────────────────────────────
@@ -411,6 +438,51 @@ assert_ok "install.sh completes without download" \
     container_exec_bash '
         export HOME=/tmp/test-install-sh
         fimod --version
+    '
+
+# ── Test 8: install.sh dual-path — new version (>= 0.5.0) ──────────
+
+step "Test 8: install.sh dual-path — fimod >= 0.5.0 path"
+container_exec_bash '
+    export HOME=/tmp/test-dual-new
+    mkdir -p $HOME /tmp/fimod-bin-050
+    cp /tmp/fimod-spoof-050.sh /tmp/fimod-bin-050/fimod
+    chmod +x /tmp/fimod-bin-050/fimod
+    FIMOD_INSTALL=/tmp/fimod-bin-050 FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_REGISTRY=yes FIMOD_SETUP_SANDBOX=yes sh /tmp/install.sh
+'
+assert_ok "registry configured via setup registry defaults (new path)" \
+    container_exec_bash '
+        export HOME=/tmp/test-dual-new
+        fimod registry list --output-format json | grep -q "examples"
+    '
+assert_ok "sandbox.toml written (new path)" \
+    container_exec_bash '
+        test -f /tmp/test-dual-new/.config/fimod/sandbox.toml
+    '
+
+# ── Test 9: install.sh dual-path — old version (< 0.5.0) ──────────
+
+step "Test 9: install.sh dual-path — fimod < 0.5.0 path"
+# FIMOD_SETUP_SANDBOX=yes is intentional: it exercises the branch that
+# prints "Requires fimod >= 0.5.0 — skipped" instead of silently passing.
+assert_output_contains \
+    "sandbox section explains version requirement (old path)" \
+    "Requires fimod >= 0.5.0" \
+    container_exec_bash '
+        export HOME=/tmp/test-dual-old
+        mkdir -p $HOME /tmp/fimod-bin-030
+        cp /tmp/fimod-spoof-030.sh /tmp/fimod-bin-030/fimod
+        chmod +x /tmp/fimod-bin-030/fimod
+        FIMOD_INSTALL=/tmp/fimod-bin-030 FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_REGISTRY=yes FIMOD_SETUP_SANDBOX=yes sh /tmp/install.sh
+    '
+assert_ok "registry configured via registry setup (old path)" \
+    container_exec_bash '
+        export HOME=/tmp/test-dual-old
+        fimod registry list --output-format json | grep -q "examples"
+    '
+assert_ok "sandbox.toml NOT written (old path)" \
+    container_exec_bash '
+        test ! -f /tmp/test-dual-old/.config/fimod/sandbox.toml
     '
 
 # ── Results ──────────────────────────────────────────────────────────

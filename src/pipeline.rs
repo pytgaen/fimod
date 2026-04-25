@@ -10,6 +10,7 @@ use serde_json::Value;
 use crate::engine::MoldResult;
 use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep};
+use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
 
 /// A single pipeline step reference — either a mold path/name or an inline expression.
@@ -100,6 +101,7 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
 ///
 /// `initial_data` is taken as an owned `MontyObject` so the caller can pass
 /// the result of `csv_to_monty` without an extra `json_to_monty` round-trip.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_chain(
     steps: &[MoldStep],
     initial_data: MontyObject,
@@ -108,6 +110,7 @@ pub fn execute_chain(
     headers_value: &Value,
     debug: bool,
     msg_level: u8,
+    policy: &SandboxPolicy,
 ) -> MoldResult {
     let mut data = initial_data;
     let mut last_exit = None;
@@ -124,6 +127,7 @@ pub fn execute_chain(
             debug,
             msg_level,
             mold_base_dir: step.base_dir.as_deref(),
+            policy,
         };
         let (result, exit_code, fmt_override, out_file) =
             engine::execute_mold(&step.script, data, &opts)?;
@@ -216,6 +220,7 @@ fn run_pipeline_core(
     debug: bool,
     msg_level: u8,
     http_opts: &HttpOptions,
+    policy: &SandboxPolicy,
 ) -> Result<PipelineResult> {
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
@@ -392,6 +397,7 @@ fn run_pipeline_core(
         &headers_value,
         debug,
         msg_level,
+        policy,
     )?;
 
     Ok(PipelineResult {
@@ -428,6 +434,7 @@ pub fn process_single_input(
     effective_output_format: Option<&str>,
     check: bool,
     http_opts: &HttpOptions,
+    policy: &SandboxPolicy,
 ) -> Result<()> {
     let result = run_pipeline_core(
         input_path,
@@ -441,6 +448,7 @@ pub fn process_single_input(
         debug,
         msg_level,
         http_opts,
+        policy,
     )?;
 
     // set_output_file() overrides the CLI -o path; otherwise fall back to CLI-provided path
@@ -780,6 +788,8 @@ pub struct PipelineConfig {
     pub msg_level: u8,
     /// Bypass the local cache for remote catalogs and molds.
     pub no_cache: bool,
+    /// Sandbox policy gating OS calls and enforcing limits. Defaults to zero authorization.
+    pub sandbox: SandboxPolicy,
 }
 
 impl Default for PipelineConfig {
@@ -801,6 +811,7 @@ impl Default for PipelineConfig {
             debug: false,
             msg_level: 1,
             no_cache: false,
+            sandbox: SandboxPolicy::zero_authorization(),
         }
     }
 }
@@ -843,5 +854,6 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         config.debug,
         config.msg_level,
         &config.http_opts,
+        &config.sandbox,
     )
 }

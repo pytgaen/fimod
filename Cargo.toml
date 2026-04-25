@@ -17,7 +17,7 @@ full = ["reqwest"]
 slim = []
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.14" }
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
@@ -37,6 +37,7 @@ hex = "0.4"
 mimalloc = "0.1"
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
 indexmap = "2.11.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.

@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.14) as its execution engine for mold scripts.
+Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -31,6 +31,7 @@ Fimod uses Monty (v0.0.14) as its execution engine for mold scripts.
 | Long integers | Arbitrary precision |
 | Augmented subscript | `data["count"] += 1`, `items[0] *= 2` |
 | Nested subscript assignment | `data[0][1] = x`, `matrix[i][j] = v` |
+| Chain assignment | `a = b = 1` assigns the same value to multiple targets |
 | Named keyword args | `str.split(sep=",")`, `max(items, key=...)` |
 | Set/frozenset operators | `s1 \| s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
@@ -48,7 +49,7 @@ Fimod uses Monty (v0.0.14) as its execution engine for mold scripts.
 
 ### Built-in Functions
 
-Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `sorted`, `reversed`, `sum`, `min`, `max` (with `key=` and `default=`), `abs`, `round`, `isinstance`, `getattr`, `type`, `id`, `repr`, `str`, `int`, `float`, `bool`, `list`, `dict`, `set`, `tuple`, `print`, `hash`, etc.
+Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `sorted`, `reversed`, `sum`, `min`, `max` (with `key=` and `default=`), `abs`, `round`, `isinstance`, `getattr`, `hasattr`, `setattr`, `type`, `id`, `repr`, `str`, `int`, `float`, `bool`, `list`, `dict`, `set`, `tuple`, `print`, `hash`, etc.
 
 **Not available**: `open`, `exec`, `eval`, `compile`, `__import__`, `input`.
 
@@ -154,7 +155,7 @@ Monty supports configurable limits through the `LimitTracker` trait:
 - **Recursion depth**: Prevent stack overflow
 - **Execution time/steps**: Prevent infinite loops
 
-Fimod currently uses `NoLimitTracker` (no limits enforced).
+Fimod uses `LimitedTracker` with hard defaults (`max_duration = 2m`, `max_memory = 1GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/sandbox.md) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
 
 ## Performance
 
@@ -192,7 +193,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.14 — fimod v0.3.1 (exit or Ctrl+D to quit)
+Monty REPL v0.0.17 — fimod v0.5.0 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

@@ -70,7 +70,7 @@ Fimod has a registry system for reusable scripts. The `@` prefix resolves molds 
 `fimod s -i users.csv -m @cleanup -o clean.json`
 
 Set up the examples registry first:
-`fimod registry setup`
+`fimod setup registry defaults --yes`
 
 **12. Download binaries (bypass transform pipeline)**
 `fimod s -i https://example.com/archive.tar.gz --output-format raw -O`
@@ -209,7 +209,7 @@ Supported: `json` · `json-compact` · `ndjson` · `yaml` · `toml` · `csv` · 
 
 ## Built-in Molds (Examples Registry)
 
-After running `fimod registry setup`, these molds are available with the `@` prefix:
+After running `fimod setup registry defaults`, these molds are available with the `@` prefix:
 
 ### HTTP & APIs
 | Mold | Description | Key args |

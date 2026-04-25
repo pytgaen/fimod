@@ -1,0 +1,152 @@
+name: Prerelease
+
+on:
+  push:
+    tags:
+      - "v*-rc.*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build x86_64-unknown-linux-musl (default)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "cargo-registry"
+          key: x86_64-unknown-linux-musl-prerelease
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build
+        run: cross build --release --target x86_64-unknown-linux-musl
+
+      - name: Package
+        id: pkg
+        run: |
+          ASSET="fimod-${GITHUB_REF_NAME}-x86_64-unknown-linux-musl.tar.gz"
+          tar czf "$ASSET" -C target/x86_64-unknown-linux-musl/release fimod
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          SUMS="fimod-${GITHUB_REF_NAME}-sha256sums.txt"
+          sha256sum "${{ steps.pkg.outputs.asset }}" > "$SUMS"
+          echo "sums=$SUMS" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: prerelease-binary
+          path: |
+            ${{ steps.pkg.outputs.asset }}
+            ${{ steps.sha.outputs.sums }}
+
+  github-release:
+    name: Publish GitHub Prerelease
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: prerelease-binary
+          path: artifacts/
+
+      - name: Generate VERSION file
+        run: echo "${GITHUB_REF_NAME}" > VERSION
+
+      - name: Create GitHub Prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            Prerelease ${{ github.ref_name }} — linux/x86_64-musl only, no UPX.
+
+            This is a pre-release for pipeline validation. Do not use in production.
+
+            Install:
+            ```
+            FIMOD_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+            ```
+          prerelease: true
+          draft: false
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.txt
+            VERSION
+
+  e2e-install:
+    name: E2E — public install + migration
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install via public install.sh
+        run: |
+          FIMOD_VERSION=${GITHUB_REF_NAME} FIMOD_INSTALL="$HOME/.local/bin" sh install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify version
+        run: |
+          INSTALLED=$("$HOME/.local/bin/fimod" --version | awk '{print $2}')
+          EXPECTED=$(echo "${GITHUB_REF_NAME}" | sed 's/^v//')
+          if [ "$INSTALLED" != "$EXPECTED" ]; then
+            echo "version mismatch: installed=$INSTALLED expected=$EXPECTED" >&2
+            exit 1
+          fi
+          echo "✓ fimod $INSTALLED"
+
+      - name: Registry setup (fresh HOME)
+        run: |
+          export HOME=$(mktemp -d)
+          fimod registry setup --yes
+          fimod registry list --output-format json | tee /tmp/registries.json
+          jq -e '.[] | select(.name == "fimod-powered")' /tmp/registries.json > /dev/null
+          jq -e '.[] | select(.name == "examples")' /tmp/registries.json > /dev/null
+          echo "✓ fresh setup creates fimod-powered + examples"
+
+      - name: Migrate legacy "official" registry
+        run: |
+          export HOME=$(mktemp -d)
+          mkdir -p "$HOME/.config/fimod"
+          cat > "$HOME/.config/fimod/sources.toml" <<'EOF'
+          [sources.official]
+          url = "https://github.com/pytgaen/fimod/tree/main/molds"
+          priority = 50
+          EOF
+          fimod registry setup --yes
+          fimod registry list --output-format json | tee /tmp/migrated.json
+          if jq -e '.[] | select(.name == "official")' /tmp/migrated.json > /dev/null 2>&1; then
+            echo "error: 'official' still present after migration" >&2
+            exit 1
+          fi
+          jq -e '.[] | select(.name == "examples")' /tmp/migrated.json > /dev/null
+          echo "✓ migration official → examples OK"
+
+      - name: Smoke test
+        run: |
+          OUT=$(echo '[{"a":1},{"a":2}]' | fimod shape -e 'data[0]' --output-format json)
+          EXPECTED='{"a":1}'
+          if [ "$OUT" != "$EXPECTED" ]; then
+            echo "smoke test failed: got '$OUT' expected '$EXPECTED'" >&2
+            exit 1
+          fi
+          echo "✓ smoke test OK"
