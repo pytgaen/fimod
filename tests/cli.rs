@@ -50,6 +50,8 @@ mod regex;
 mod registry;
 #[path = "cli/sandbox.rs"]
 mod sandbox;
+#[path = "cli/setup.rs"]
+mod setup;
 #[path = "cli/template.rs"]
 mod template;
 #[path = "cli/txt.rs"]

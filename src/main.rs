@@ -12,7 +12,7 @@ use fimod::pipeline::{
     HttpOptions, ScriptRef,
 };
 use fimod::MONTY_VERSION;
-use fimod::{convert, format, http, registry, test_runner};
+use fimod::{convert, format, http, registry, setup, test_runner};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
@@ -171,6 +171,10 @@ struct ShapeArgs {
     /// Bypass the local cache for remote catalogs and molds (always fetch fresh)
     #[arg(long = "no-cache")]
     no_cache: bool,
+
+    /// Sandbox policy file (TOML). Empty (`--sandbox-file=""`) forces zero authorization.
+    #[arg(long = "sandbox-file", value_name = "PATH")]
+    sandbox_file: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -193,11 +197,48 @@ enum Commands {
         #[command(subcommand)]
         action: MontyAction,
     },
+    /// Install recommended defaults for a fimod category
+    Setup {
+        #[command(subcommand)]
+        category: SetupCategory,
+    },
     /// Show how to enable shell completions
     Completions {
         /// Shell to generate instructions for
         #[arg(value_enum)]
         shell: CompletionShell,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SetupCategory {
+    /// Install community mold registries (examples, fimod-powered)
+    Registry {
+        #[command(subcommand)]
+        action: SetupDefaults,
+    },
+    /// Write recommended sandbox policy to ~/.config/fimod/sandbox.toml
+    Sandbox {
+        #[command(subcommand)]
+        action: SetupDefaults,
+    },
+    /// Run registry and sandbox setup in order (stops at the first failure)
+    All {
+        #[command(subcommand)]
+        action: SetupDefaults,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SetupDefaults {
+    /// Install the recommended defaults for this category
+    Defaults {
+        /// Skip all prompts (non-interactive / CI)
+        #[arg(short, long)]
+        yes: bool,
+        /// Overwrite existing configuration (sandbox.toml)
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -450,7 +491,18 @@ fn main() -> Result<()> {
     CompleteEnv::with_factory(Cli::command).complete();
 
     let cli = Cli::parse();
+    let result = dispatch(cli);
 
+    if let Err(ref e) = result {
+        if let Some(sandbox_err) = e.downcast_ref::<fimod::engine::SandboxLimitExceeded>() {
+            eprintln!("{sandbox_err}");
+            process::exit(fimod::engine::SANDBOX_EXPLODED_EXIT_CODE);
+        }
+    }
+    result
+}
+
+fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
         Some(Commands::Shape(shape)) => run_shape(*shape),
         Some(Commands::Registry { action }) => match action {
@@ -471,7 +523,10 @@ fn main() -> Result<()> {
             RegistryAction::BuildCatalog { path, registry } => {
                 registry::build_catalog(registry.as_deref(), path.as_deref())
             }
-            RegistryAction::Setup { yes } => registry::setup(yes),
+            RegistryAction::Setup { yes } => {
+                eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
+                setup::registry_defaults(yes)
+            }
             RegistryAction::Cache { action } => match action {
                 CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
                 CacheAction::Info => registry::cache_info(),
@@ -491,6 +546,17 @@ fn main() -> Result<()> {
         },
         Some(Commands::Monty { action }) => match action {
             MontyAction::Repl => run_monty_repl(),
+        },
+        Some(Commands::Setup { category }) => match category {
+            SetupCategory::Registry {
+                action: SetupDefaults::Defaults { yes, force: _ },
+            } => setup::registry_defaults(yes),
+            SetupCategory::Sandbox {
+                action: SetupDefaults::Defaults { yes, force },
+            } => setup::sandbox_defaults(yes, force),
+            SetupCategory::All {
+                action: SetupDefaults::Defaults { yes, force },
+            } => setup::all_defaults(yes, force),
         },
         Some(Commands::Completions { shell }) => {
             print_completion_instructions(shell);
@@ -596,6 +662,8 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             bail!("--input-list: no inputs found in '{source}'");
         }
     }
+
+    let policy = fimod::sandbox::SandboxPolicy::resolve(shape.sandbox_file.as_deref())?;
 
     let debug = shape.debug;
     let msg_level: u8 = if shape.quiet {
@@ -918,6 +986,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             &Value::Null,
             debug,
             msg_level,
+            &policy,
         )?;
 
         // set_output_file() overrides the CLI -o path for multi-file slurp output
@@ -987,6 +1056,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                 effective_output_format,
                 shape.check,
                 &http_opts,
+                &policy,
             )?;
         }
         return Ok(());
@@ -1028,5 +1098,6 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         effective_output_format,
         shape.check,
         &http_opts,
+        &policy,
     )
 }

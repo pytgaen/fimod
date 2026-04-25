@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use monty::{
-    MontyException, MontyObject, MontyRun, NameLookupResult, NoLimitTracker, PrintWriter,
-    PrintWriterCallback, RunProgress,
+    ExcType, LimitedTracker, MontyDate, MontyDateTime, MontyException, MontyObject, MontyRun,
+    NameLookupResult, OsFunction, PrintWriter, PrintWriterCallback, ResourceLimits, RunProgress,
 };
 use serde_json::Value;
 
@@ -21,7 +21,26 @@ use crate::hash;
 use crate::iter_helpers;
 use crate::msg;
 use crate::regex;
+use crate::sandbox::SandboxPolicy;
 use crate::template;
+
+/// Exit code used when the sandbox aborts execution (time or memory limit exceeded).
+/// 128 + 9 (SIGKILL-ish); mirrors OOM-killer convention and stands out from generic failures.
+pub const SANDBOX_EXPLODED_EXIT_CODE: i32 = 137;
+
+/// Error returned when a sandbox limit is exceeded. Carries the stderr message the CLI should print.
+#[derive(Debug)]
+pub struct SandboxLimitExceeded {
+    pub message: String,
+}
+
+impl std::fmt::Display for SandboxLimitExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for SandboxLimitExceeded {}
 
 /// Custom PrintWriterCallback that redirects Monty's print() output to stderr.
 /// Used in --debug mode so that Python print statements don't corrupt stdout.
@@ -47,6 +66,7 @@ pub struct MoldOptions<'a> {
     pub debug: bool,
     pub msg_level: u8,
     pub mold_base_dir: Option<&'a str>,
+    pub policy: &'a SandboxPolicy,
 }
 
 /// Internal runtime context — extends MoldOptions with mutable shared state
@@ -58,6 +78,7 @@ struct MoldContext<'a> {
     exit_code: Arc<Mutex<Option<i32>>>,
     format_override: Arc<Mutex<Option<String>>>,
     output_file: Arc<Mutex<Option<String>>>,
+    policy: &'a SandboxPolicy,
 }
 
 /// Check whether a name is a known external function exposed to molds.
@@ -161,6 +182,7 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         exit_code: Arc::new(Mutex::new(None)),
         format_override: Arc::new(Mutex::new(None)),
         output_file: Arc::new(Mutex::new(None)),
+        policy: opts.policy,
     };
 
     let result = run_loop(runner, inputs, &ctx)?;
@@ -173,17 +195,18 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
 
 fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -> Result<Value> {
     let mut sp = StderrPrint;
+    let tracker = LimitedTracker::new(build_limits(ctx.policy));
     let mut progress = runner
         .start(
             inputs,
-            NoLimitTracker,
+            tracker,
             if ctx.debug {
                 PrintWriter::Callback(&mut sp)
             } else {
                 PrintWriter::Stdout
             },
         )
-        .map_err(|e| anyhow::anyhow!("Python error in mold:\n{e}"))?;
+        .map_err(|e| translate_monty_error(e, ctx.policy))?;
 
     loop {
         match progress {
@@ -206,27 +229,28 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
                             PrintWriter::Stdout
                         },
                     )
-                    .map_err(|e| {
-                        anyhow::anyhow!(
-                            "Python error in mold (after calling '{function_name}'):\n{e}"
-                        )
-                    })?;
+                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::OsCall(call) => {
+                let result = dispatch_os_call(&call.function, &call.args, ctx.policy);
                 if ctx.debug {
-                    eprintln!("[debug] OsCall intercepted and denied (no filesystem access)");
+                    eprintln!(
+                        "[debug] OsCall {:?} -> {}",
+                        call.function,
+                        describe_os_result(&result)
+                    );
                 }
                 let mut sp2 = StderrPrint;
                 progress = call
                     .resume(
-                        MontyObject::None,
+                        result,
                         if ctx.debug {
                             PrintWriter::Callback(&mut sp2)
                         } else {
                             PrintWriter::Stdout
                         },
                     )
-                    .map_err(|e| anyhow::anyhow!("Python error in mold:\n{e}"))?;
+                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::NameLookup(lookup) => {
                 let name = lookup.name.clone();
@@ -248,11 +272,181 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
                             PrintWriter::Stdout
                         },
                     )
-                    .map_err(|e| anyhow::anyhow!("Python error in mold:\n{e}"))?;
+                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::ResolveFutures(_) => {
                 anyhow::bail!("Async futures are not supported in fimod molds");
             }
         }
+    }
+}
+
+/// Build `ResourceLimits` from a `SandboxPolicy`.
+fn build_limits(policy: &SandboxPolicy) -> ResourceLimits {
+    let mut limits = ResourceLimits::new();
+    if let Some(d) = policy.max_duration {
+        limits = limits.max_duration(d);
+    }
+    if let Some(m) = policy.max_memory {
+        limits = limits.max_memory(m);
+    }
+    limits
+}
+
+/// Resolve an `OsCall` result according to the policy.
+///
+/// Capability-deny defaults follow Python ergonomics:
+/// - Clock (`date.today`, `datetime.now`): explicit `PermissionError` with actionable hint when denied, because returning `None` would crash downstream `.isoformat()` calls.
+/// - `os.getenv(key)`: returns `None` silently when `key` is not in `allow_env` — mirrors the standard Python behavior for unset vars.
+/// - `os.environ`: returns an empty dict when denied (no raise).
+/// - `Path.*`: returns `None` (legacy behavior; proper filesystem gating lands with `[[mount]]`).
+fn dispatch_os_call(
+    function: &OsFunction,
+    args: &[MontyObject],
+    policy: &SandboxPolicy,
+) -> OsCallOutcome {
+    match function {
+        OsFunction::DateToday => {
+            if policy.allow_clock {
+                OsCallOutcome::Value(MontyObject::Date(current_date()))
+            } else {
+                OsCallOutcome::Error(permission_denied(clock_denied_message(function)))
+            }
+        }
+        OsFunction::DateTimeNow => {
+            if policy.allow_clock {
+                OsCallOutcome::Value(MontyObject::DateTime(current_datetime()))
+            } else {
+                OsCallOutcome::Error(permission_denied(clock_denied_message(function)))
+            }
+        }
+        OsFunction::Getenv => OsCallOutcome::Value(lookup_env(args, policy)),
+        OsFunction::GetEnviron => OsCallOutcome::Value(empty_environ()),
+        _ => OsCallOutcome::Value(MontyObject::None),
+    }
+}
+
+fn clock_denied_message(function: &OsFunction) -> String {
+    format!(
+        "{function}() denied by sandbox policy — add `allow_clock = true` to your sandbox.toml (or run `fimod setup sandbox defaults`)"
+    )
+}
+
+fn current_date() -> MontyDate {
+    use chrono::{Datelike, Local};
+    let now = Local::now().date_naive();
+    MontyDate {
+        year: now.year(),
+        month: now.month() as u8,
+        day: now.day() as u8,
+    }
+}
+
+/// Naive datetime (no tz) matches Python's `datetime.now()` without args.
+fn current_datetime() -> MontyDateTime {
+    use chrono::{Datelike, Local, Timelike};
+    let now = Local::now().naive_local();
+    MontyDateTime {
+        year: now.year(),
+        month: now.month() as u8,
+        day: now.day() as u8,
+        hour: now.hour() as u8,
+        minute: now.minute() as u8,
+        second: now.second() as u8,
+        microsecond: now.nanosecond() / 1_000,
+        offset_seconds: None,
+        timezone_name: None,
+    }
+}
+
+/// Result of dispatching an `OsCall` — either a return value or a Python exception.
+enum OsCallOutcome {
+    Value(MontyObject),
+    Error(MontyException),
+}
+
+impl From<OsCallOutcome> for monty::ExtFunctionResult {
+    fn from(outcome: OsCallOutcome) -> Self {
+        match outcome {
+            OsCallOutcome::Value(v) => monty::ExtFunctionResult::Return(v),
+            OsCallOutcome::Error(e) => monty::ExtFunctionResult::Error(e),
+        }
+    }
+}
+
+fn describe_os_result(outcome: &OsCallOutcome) -> String {
+    match outcome {
+        OsCallOutcome::Value(_) => "allowed".to_string(),
+        OsCallOutcome::Error(_) => "denied".to_string(),
+    }
+}
+
+fn permission_denied(msg: String) -> MontyException {
+    MontyException::new(ExcType::PermissionError, Some(msg))
+}
+
+fn lookup_env(args: &[MontyObject], policy: &SandboxPolicy) -> MontyObject {
+    let Some(MontyObject::String(key)) = args.first() else {
+        return MontyObject::None;
+    };
+    if !policy.env_allowed(key) {
+        return MontyObject::None;
+    }
+    match std::env::var(key) {
+        Ok(v) => MontyObject::String(v),
+        Err(_) => MontyObject::None,
+    }
+}
+
+fn empty_environ() -> MontyObject {
+    MontyObject::Dict(monty::DictPairs::from(
+        Vec::<(MontyObject, MontyObject)>::new(),
+    ))
+}
+
+/// Upgrades resource-limit exceptions (`TimeoutError`, `MemoryError`) into `SandboxLimitExceeded`
+/// so the CLI can exit with 137.
+fn translate_monty_error(err: MontyException, policy: &SandboxPolicy) -> anyhow::Error {
+    match err.exc_type() {
+        ExcType::TimeoutError => {
+            limit_exceeded("max_duration", policy.max_duration.map(format_duration))
+        }
+        ExcType::MemoryError => limit_exceeded("max_memory", policy.max_memory.map(format_bytes)),
+        _ => anyhow::anyhow!("Python error in mold:\n{err}"),
+    }
+}
+
+fn limit_exceeded(kind: &str, limit: Option<String>) -> anyhow::Error {
+    let limit = limit.unwrap_or_else(|| "n/a".to_string());
+    anyhow::Error::new(SandboxLimitExceeded {
+        message: format!("sandbox exploded: {kind} exceeded ({limit})"),
+    })
+}
+
+fn format_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs();
+    if secs >= 3600 && secs % 3600 == 0 {
+        format!("{}h", secs / 3600)
+    } else if secs >= 60 && secs % 60 == 0 {
+        format!("{}m", secs / 60)
+    } else if secs > 0 {
+        format!("{secs}s")
+    } else {
+        format!("{}ms", d.as_millis())
+    }
+}
+
+fn format_bytes(b: usize) -> String {
+    const KB: usize = 1_000;
+    const MB: usize = 1_000_000;
+    const GB: usize = 1_000_000_000;
+    if b >= GB && b % GB == 0 {
+        format!("{}GB", b / GB)
+    } else if b >= MB && b % MB == 0 {
+        format!("{}MB", b / MB)
+    } else if b >= KB && b % KB == 0 {
+        format!("{}KB", b / KB)
+    } else {
+        format!("{b}B")
     }
 }

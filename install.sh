@@ -5,12 +5,14 @@
 #   curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 #
 # Options (environment variables):
-#   FIMOD_VARIANT   standard (default) or full (includes HTTP mold loading)
+#   FIMOD_VARIANT   standard (default, includes HTTP mold loading) or slim (without HTTP)
 #   FIMOD_INSTALL   install directory (default: /usr/local/bin, falls back to ~/.local/bin)
 #   FIMOD_VERSION   specific version to install (default: latest)
 #   FIMOD_SOURCE    github (default) or gitlab
 #   FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
-#   FIMOD_SETUP_REGISTRY yes=auto-setup, no=skip, unset=interactive prompt
+#   FIMOD_SETUP_REGISTRY yes=auto-setup registries, no=skip, unset=fall through
+#   FIMOD_SETUP_SANDBOX  yes=auto-setup sandbox, no=skip, unset=fall through (fimod >= 0.5.0)
+#   FIMOD_SETUP_ALL      yes|no default for both when granulars are unset; unset=interactive prompt
 
 set -eu
 
@@ -124,8 +126,8 @@ echo "Installing fimod ${VERSION} (${VARIANT}) for ${OS}/${ARCH}..."
 
 # ── Build asset name ─────────────────────────────────────────────────
 
-if [ "$VARIANT" = "full" ]; then
-  PREFIX="fimod-full"
+if [ "$VARIANT" = "slim" ]; then
+  PREFIX="fimod-slim"
 else
   PREFIX="fimod"
 fi
@@ -233,40 +235,115 @@ fi
 
 echo ""
 
-# ── Registry setup ──────────────────────────────────────────────────
-# Migration "official" → "examples" is handled by `fimod registry setup`.
-# FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
-# FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
-# unset                      → interactive prompt (default)
+# ── Post-install setup (registry + sandbox) ─────────────────────────
+#
+# Two independent blocks: registry (community molds) and sandbox (policy file).
+# Each resolves its preference in order:
+#   1. FIMOD_SETUP_<CAT>=yes|no   (granular, wins over the rest)
+#   2. FIMOD_SETUP_ALL=yes|no     (default for both when granular unset)
+#   3. interactive TTY prompt
+#   4. otherwise skip with a hint
+#
+# The command path depends on the installed fimod version:
+#   >= 0.5.0  → `fimod setup registry defaults` and `fimod setup sandbox defaults`
+#   <  0.5.0  → only `fimod registry setup` (sandbox unavailable)
+
+INSTALLED_VERSION=$("${INSTALL_DIR}/${BIN_NAME}" --version 2>/dev/null \
+  | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
+  | head -n 1)
+: "${INSTALLED_VERSION:=0.0.0}"
+INSTALLED_NUM=$(echo "$INSTALLED_VERSION" \
+  | awk -F'[.-]' '{ printf "%d", ($1*10000)+($2*100)+$3 }')
+: "${INSTALLED_NUM:=0}"
+
+if [ "$INSTALLED_NUM" -ge 500 ]; then
+  REGISTRY_CMD_ARGS="setup registry defaults"
+  REGISTRY_HINT="fimod setup registry defaults"
+  SANDBOX_AVAILABLE=1
+else
+  REGISTRY_CMD_ARGS="registry setup"
+  REGISTRY_HINT="fimod registry setup"
+  SANDBOX_AVAILABLE=0
+fi
+
+resolve_pref() {
+  case "$1" in
+    yes|no) echo "$1"; return ;;
+  esac
+  case "${FIMOD_SETUP_ALL:-}" in
+    yes|no) echo "${FIMOD_SETUP_ALL}"; return ;;
+  esac
+  echo "ask"
+}
+
+REG_PREF=$(resolve_pref "${FIMOD_SETUP_REGISTRY:-}")
+SB_PREF=$(resolve_pref "${FIMOD_SETUP_SANDBOX:-}")
+
 echo "───────────────────────────────────────────────"
-case "${FIMOD_SETUP_REGISTRY:-}" in
+echo "Registry"
+case "$REG_PREF" in
   yes)
-    echo "  Setting up registry (FIMOD_SETUP_REGISTRY=yes)..."
-    "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
+    echo "  Installing community registries..."
+    # shellcheck disable=SC2086
+    "${INSTALL_DIR}/${BIN_NAME}" $REGISTRY_CMD_ARGS --yes
     ;;
   no)
-    echo "  Skipped registry setup (FIMOD_SETUP_REGISTRY=no)."
-    echo "  Run 'fimod registry setup' at any time."
+    echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
     ;;
-  *)
+  ask)
     if [ -t 0 ] || [ -e /dev/tty ]; then
-      echo "  Run 'fimod registry setup' to configure the example mold registry? [Y/n]"
+      echo "  Install community registries? [Y/n]"
       printf "  > "
       read -r REPLY </dev/tty
       case "$REPLY" in
         [nN]*)
-          echo ""
-          echo "  Skipped. Run 'fimod registry setup' at any time."
+          echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
           ;;
         *)
-          echo ""
-          echo "  Setting up registry..."
-          "${INSTALL_DIR}/${BIN_NAME}" registry setup --yes
+          # shellcheck disable=SC2086
+          "${INSTALL_DIR}/${BIN_NAME}" $REGISTRY_CMD_ARGS --yes
           ;;
       esac
     else
-      echo "  Run 'fimod registry setup' to configure the example mold registry."
+      echo "  Run '${REGISTRY_HINT}' to configure community registries."
     fi
     ;;
 esac
+
+echo ""
+echo "Sandbox"
+if [ "$SANDBOX_AVAILABLE" -eq 0 ]; then
+  if [ "$SB_PREF" = "yes" ]; then
+    echo "  Requires fimod >= 0.5.0 (installed ${INSTALLED_VERSION}) — skipped."
+  else
+    echo "  Requires fimod >= 0.5.0 (installed ${INSTALLED_VERSION})."
+  fi
+else
+  case "$SB_PREF" in
+    yes)
+      echo "  Installing recommended sandbox policy..."
+      "${INSTALL_DIR}/${BIN_NAME}" setup sandbox defaults --yes
+      ;;
+    no)
+      echo "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+      ;;
+    ask)
+      if [ -t 0 ] || [ -e /dev/tty ]; then
+        echo "  Install recommended sandbox policy? [Y/n]"
+        printf "  > "
+        read -r REPLY </dev/tty
+        case "$REPLY" in
+          [nN]*)
+            echo "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+            ;;
+          *)
+            "${INSTALL_DIR}/${BIN_NAME}" setup sandbox defaults --yes
+            ;;
+        esac
+      else
+        echo "  Run 'fimod setup sandbox defaults' to configure the sandbox policy."
+      fi
+      ;;
+  esac
+fi
 echo "───────────────────────────────────────────────"

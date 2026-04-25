@@ -1,6 +1,6 @@
 # Mold Gallery
 
-A curated selection of molds from the examples registry, showcasing what fimod can do out of the box. All of these are available immediately after running `fimod registry setup`.
+A curated selection of molds from the examples registry, showcasing what fimod can do out of the box. All of these are available immediately after running `fimod setup registry defaults`.
 
 ---
 

@@ -249,6 +249,37 @@ def transform(data, args, env, headers):
 
 Available: `gk_fail(msg)` · `gk_assert(cond, msg)` · `gk_warn(cond, msg)` — see [Built-ins Reference](../reference/built-ins.md#gatekeeper-functions-gk) for truthiness rules.
 
+### 🛡️ Sandbox-gated stdlib calls
+
+A few stdlib calls that read host state are gated by the [sandbox policy](cli-reference.md#sandbox-policy). They raise `PermissionError` when the policy denies them — catch it if you want a graceful fallback.
+
+| Call | Gate | Default |
+|------|------|---------|
+| `datetime.now()` | `allow_clock = true` | denied |
+| `date.today()` | `allow_clock = true` | denied |
+| `os.getenv(KEY)` | `allow_env` glob matches `KEY` | denied (empty list) |
+| `os.environ` | *(always)* | denied |
+| `pathlib.Path` I/O | *(always)* | denied |
+
+```python
+# Clock — requires allow_clock = true
+from datetime import datetime
+def transform(data, **_):
+    data["stamped_at"] = datetime.now().isoformat()
+    return data
+
+# Env — requires "LANG" to match an allow_env pattern
+import os
+def transform(data, **_):
+    try:
+        data["locale"] = os.getenv("LANG")
+    except PermissionError:
+        data["locale"] = None
+    return data
+```
+
+Bootstrap the canonical sandbox file with `fimod setup sandbox defaults --yes`, then edit it to grant the clock / env keys your molds need. For ad-hoc runs, pass `--sandbox-file <path>` to point at a specific policy, or `--sandbox-file=""` to force zero-authorization.
+
 ### 🔄 Environment substitution
 
 `env_subst(template, dict)` replaces `${VAR}` placeholders using a dict:

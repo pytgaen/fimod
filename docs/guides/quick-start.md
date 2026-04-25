@@ -9,19 +9,25 @@
     ```
 
     Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
-    The script installs the binary then prompts you to run `fimod registry setup` to configure the examples mold catalog.
+    After installing the binary, the script prompts you (in two steps) to install the **community registries** and the **recommended sandbox policy**.
 
     **Options** (environment variables):
 
     | Variable | Default | Description |
     |---|---|---|
-    | `FIMOD_VARIANT` | *(full)* | `slim` to exclude HTTP input and remote mold loading |
+    | `FIMOD_VARIANT` | *standard* | `slim` to exclude HTTP input and remote mold loading |
     | `FIMOD_INSTALL` | `/usr/local/bin` | Install directory (falls back to `~/.local/bin` if not writable) |
     | `FIMOD_VERSION` | latest | Pin a specific version (e.g. `v0.2.1`) |
+    | `FIMOD_SETUP_REGISTRY` | *prompt* | `yes` / `no` to skip the interactive prompt for community registries |
+    | `FIMOD_SETUP_SANDBOX` | *prompt* | `yes` / `no` to skip the interactive prompt for the sandbox policy |
+    | `FIMOD_SETUP_ALL` | *prompt* | `yes` / `no` shortcut applied to both when granulars are unset |
 
     ```bash
     # Install the slim variant to a custom directory
     FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+
+    # CI-friendly — no prompts, install everything
+    FIMOD_SETUP_ALL=yes curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
     ```
 
 === ":material-microsoft-windows: Windows"
@@ -51,8 +57,8 @@
         $env:PATH = "$BinDir;$env:PATH"
     }
 
-    # 🗂️ 4. Set up the examples mold catalog
-    fimod registry setup
+    # 🗂️ 4. Install community registries + recommended sandbox policy
+    fimod setup all defaults --yes
     ```
 
     </details>
@@ -105,6 +111,12 @@
 !!! tip "Check your install"
     ```bash
     fimod --version
+    ```
+
+!!! note "Installed via `cargo` or built from source?"
+    The shell installers set up registries and the sandbox policy for you. If you installed another way, run it manually:
+    ```bash
+    fimod setup all defaults --yes
     ```
 
 ---

@@ -10,7 +10,7 @@ The entire flow goes through: **Read → Parse → Convert → Execute mold → 
 
 The intermediate representation between formats is always `serde_json::Value`. Monty operates on `MontyObject` (Python dicts).
 
-In practice, the pipeline in `process_single_input()` is:
+The single source of truth is `run_pipeline_core()` in `pipeline.rs`. `process_single_input()` (CLI) and `run_pipeline()` (library API) both delegate to it. The sequence:
 
 1. **Read** — file, stdin, or HTTP URL
 2. **Format detection** — CLI arg > Content-Type (HTTP) > extension > fallback (JSON)
@@ -26,12 +26,15 @@ In practice, the pipeline in `process_single_input()` is:
 
 All parsing/serialization (serde) remains entirely in Rust. Monty only manipulates Python dicts. This is a deliberate security boundary: user scripts never have access to the filesystem or the network.
 
-### Global `args` dict (not individual variables)
+Concretely, `engine.rs` enforces this at the VM boundary: every `RunProgress::OsCall` yielded by Monty (`Path.*`, `os.getenv`, `os.environ`, `datetime.now`, `date.today`) is resumed with `MontyObject::None`. This is a blanket deny-all today — it keeps the security story simple but has ergonomic cost (`datetime.now()` silently returns `None`). See `notes/monty-default-sandboxing.md` for the 0.5.0 plan to make this configurable via `sandbox.toml`.
 
-`--arg name=value` injects a global `args` dict, not individual Python variables:
-- Explicit: `args["threshold"]` rather than a magic `threshold`
-- Does not change the `transform(data)` signature
-- Works with `-e` and `-m` without adaptation
+### `transform(data, args, env, headers)` with kwargs
+
+Molds define `transform(data, args, env, headers)`. fimod passes `args`, `env`, and `headers` as **keyword arguments**, so molds only declare what they actually use — `def transform(data, **_)`, `def transform(data, args, **_)`, or the full signature all work. Inline `-e` expressions are auto-wrapped into this form.
+
+- `args` dict ← `--arg name=value` (explicit `args["threshold"]`, no magic globals)
+- `env` dict ← `--env PATTERN` filtered environment (empty `{}` without `--env`)
+- `headers` list ← CSV column names (`None` for non-CSV)
 
 ### Mold chaining
 
@@ -67,8 +70,8 @@ Convention: 2-letter prefix to avoid collisions with Python builtins and make th
 | Prefix | Module | Functions |
 |--------|--------|-----------|
 | `re_` | `regex.rs` | `re_search`, `re_match`, `re_findall`, `re_sub`, `re_split` + `_fancy` variants |
-| `dp_` | `dotpath.rs` | `dp_get`, `dp_set` (nested dotpath access, negative indices, auto-create intermediates) |
-| `it_` | `iter_helpers.rs` | `it_keys`, `it_values`, `it_flatten`, `it_group_by`, `it_sort_by`, `it_unique`, `it_unique_by` |
+| `dp_` | `dotpath.rs` | `dp_get`, `dp_set`, `dp_has`, `dp_delete` (nested dotpath access, negative indices, auto-create intermediates) |
+| `it_` | `iter_helpers.rs` | `it_keys`, `it_values`, `it_flatten`, `it_group_by`, `it_sort_by`, `it_unique`, `it_unique_by`, `it_count_by`, `it_min_by`, `it_max_by` |
 | `hs_` | `hash.rs` | `hs_md5`, `hs_sha1`, `hs_sha256` (hex lowercase) |
 | `gk_` | `gatekeeper.rs` | `gk_fail`, `gk_assert`, `gk_warn` (validation gates with exit code control) |
 | `msg_` | `msg.rs` | `msg_print`, `msg_info`, `msg_warn`, `msg_error`, `msg_verbose`, `msg_trace` |
@@ -206,5 +209,5 @@ All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `rust-toolchain
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.11` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases.
+- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.14` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.

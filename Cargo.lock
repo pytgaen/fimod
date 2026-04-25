@@ -658,6 +658,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "chrono",
  "clap",
  "clap_complete",
  "csv",
@@ -1459,8 +1460,8 @@ dependencies = [
 
 [[package]]
 name = "monty"
-version = "0.0.14"
-source = "git+https://github.com/pydantic/monty?tag=v0.0.14#f2b05cd10bc8a6a2a97d5dc5b8c8770ce7f678eb"
+version = "0.0.17"
+source = "git+https://github.com/pydantic/monty?tag=v0.0.17#5c7cf2b62be8e4421a4828072d41ebe69328bbf2"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1477,6 +1478,7 @@ dependencies = [
  "postcard",
  "ruff_python_ast",
  "ruff_python_parser",
+ "ruff_python_stdlib",
  "ruff_text_size",
  "serde",
  "serde_json",
@@ -1600,7 +1602,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
 dependencies = [
  "phf_shared",
- "rand 0.8.5",
+ "rand 0.8.6",
 ]
 
 [[package]]
@@ -1897,9 +1899,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
 dependencies = [
  "libc",
  "rand_chacha 0.3.1",
@@ -2076,6 +2078,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ruff_python_stdlib"
+version = "0.0.0"
+source = "git+https://github.com/astral-sh/ruff.git?rev=6ded4bed1651e30b34dd04cdaa50c763036abb0d#6ded4bed1651e30b34dd04cdaa50c763036abb0d"
+dependencies = [
+ "bitflags",
+ "unicode-ident",
+]
+
+[[package]]
 name = "ruff_python_trivia"
 version = "0.0.0"
 source = "git+https://github.com/astral-sh/ruff.git?rev=6ded4bed1651e30b34dd04cdaa50c763036abb0d#6ded4bed1651e30b34dd04cdaa50c763036abb0d"
@@ -2157,9 +2168,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.12"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -2748,7 +2759,7 @@ dependencies = [
  "getopts",
  "log",
  "phf_codegen",
- "rand 0.8.5",
+ "rand 0.8.6",
 ]
 
 [[package]]

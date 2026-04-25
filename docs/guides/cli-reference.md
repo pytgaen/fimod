@@ -124,8 +124,8 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod/releases/latest \
 !!! info "`http` is input-only"
     Using `--output-format http` will produce an error. HTTP is only meaningful as an input format.
 
-!!! tip "Requires the `full` build variant"
-    HTTP input needs reqwest, which is only included in `FIMOD_VARIANT=full` or `cargo build --features full`.
+!!! tip "Requires the default build variant"
+    HTTP input needs reqwest, which is included in the default build. Use `FIMOD_VARIANT=slim` (or `cargo build --no-default-features`) if you want to opt out.
 
 ---
 
@@ -236,13 +236,37 @@ fi
 
 ---
 
+## ⚙️ Setup
+
+`fimod setup <category> defaults` installs the canonical configuration for a category. It's what the install scripts call after downloading the binary, but you can re-run it at any time.
+
+```bash
+fimod setup all defaults --yes          # 🚀 registry + sandbox in one go
+fimod setup registry defaults --yes     # community registries only
+fimod setup sandbox defaults --yes      # sandbox policy only
+```
+
+| Flag | Description |
+|------|-------------|
+| `--yes` | Non-interactive (required on CI / non-TTY). |
+| `--force` | Overwrite an existing `sandbox.toml` (ignored for registry). |
+
+What each target does:
+
+- **`registry`** — installs the community registries in `~/.config/fimod/sources.toml`. Idempotent; safe to re-run. Same effect as the legacy `fimod registry setup`.
+- **`sandbox`** — writes the recommended sandbox policy to `~/.config/fimod/sandbox.toml`. Refuses to overwrite without `--force`.
+- **`all`** — runs `registry` then `sandbox`, stopping at the first error.
+
+See [Sandbox policy](#sandbox-policy) for what the sandbox file controls and how it is resolved.
+
+---
+
 ## 🗂️ Mold registries
 
 Registries are named collections of molds (local directories or remote repos).
 Use `@name` or `@registry/name` with `-m` to reference a mold by name.
 
 ```bash
-fimod registry setup                                     # 🚀 First-run setup (example molds, P99)
 fimod registry add my ~/molds/                          # ➕ Add local registry
 fimod registry add corp https://github.com/org/molds    # ➕ Add GitHub registry
 fimod registry list                                      # 📋 List registries
@@ -261,7 +285,10 @@ Config stored in `~/.config/fimod/sources.toml`. Cache stored in `~/.cache/fimod
 
 ### `registry setup` — first-run onboarding
 
-`fimod registry setup` adds the fimod example molds registry (P99) if not already present. The install scripts call it automatically, but it is safe to run manually at any time (idempotent).
+!!! warning "Deprecated in 0.5.0 — removed in 0.10.0"
+    Use [`fimod setup registry defaults`](#setup) instead. The legacy form still works but prints a deprecation warning on stderr.
+
+`fimod registry setup` adds the fimod example molds registry (P99) if not already present. It remains operational for backward compatibility but delegates to the new setup path internally.
 
 ```bash
 fimod registry setup           # interactive — asks before adding
@@ -466,6 +493,71 @@ fimod s -i data.json -m @mold --no-cache  # bypass cache for this invocation
 ```
 
 Override the cache directory with `FIMOD_CACHE_DIR`. For direct-URL molds (not registry-based), cache TTL is controlled by `FIMOD_CACHE_TTL` (minutes, default `360`, `0` = infinite, negative = disabled).
+
+---
+
+## 🛡️ Sandbox policy
+
+Every `fimod s` invocation runs the mold under a sandbox that limits what it can do on the host. A policy controls three things:
+
+- **Clock access** — whether `datetime.now()` / `date.today()` resolve to real values or raise.
+- **Environment access** — which `os.getenv(KEY)` calls are allowed (glob-matched).
+- **Hard resource limits** — wall-clock duration and peak memory.
+
+### Resolution
+
+The policy is resolved in this order (first match wins):
+
+1. `--sandbox-file <path>` — CLI flag.
+2. `$FIMOD_SANDBOX_FILE` — environment variable.
+3. `~/.config/fimod/sandbox.toml` — per-user canonical config.
+4. *(none of the above)* — zero-authorization defaults.
+
+Special cases:
+
+- `--sandbox-file=""` (empty string) forces zero-authorization regardless of `$FIMOD_SANDBOX_FILE` or the canonical file. Portable across Linux/macOS/Windows.
+- If `$FIMOD_SANDBOX_FILE` points to a missing path, fimod errors out explicitly rather than falling back silently.
+
+Bootstrap the canonical file with [`fimod setup sandbox defaults --yes`](#setup).
+
+### Hard limits
+
+Apply **even with zero authorization**:
+
+| Limit | Default |
+|-------|---------|
+| `max_duration` | `2m` |
+| `max_memory` | `1GB` |
+
+On violation, fimod exits with code `137` and a stderr message like:
+
+```
+sandbox exploded: max_duration exceeded (2m)
+sandbox exploded: max_memory exceeded (1024 MB)
+```
+
+### `sandbox.toml` schema
+
+```toml
+[sandbox]
+allow_clock  = true              # allow datetime.now() / date.today()
+max_duration = "2m"              # "30s", "2m", "unlimited"
+max_memory   = "1GB"             # "500MB", "1GB", "unlimited"
+allow_env    = ["LANG", "TZ_*"]  # glob patterns: "*", "PREFIX_*", "EXACT"
+```
+
+`allow_env = []` (default) blocks every `os.getenv()` call. Patterns match the key name exactly, as a prefix (`TZ_*`), or anything (`*`).
+
+Denied calls raise `PermissionError` inside the mold — catch it if you want a graceful fallback:
+
+```python
+import os
+lang = None
+try:
+    lang = os.getenv("LANG")
+except PermissionError:
+    pass  # sandbox forbids env access
+```
 
 ---
 

@@ -6,12 +6,14 @@
 #   & "$env:TEMP\fimod-install.ps1"
 #
 # Options (environment variables):
-#   $env:FIMOD_VARIANT   standard (default) or full (includes HTTP mold loading)
+#   $env:FIMOD_VARIANT   standard (default, includes HTTP mold loading) or slim (without HTTP)
 #   $env:FIMOD_INSTALL   install directory (default: ~\.local\bin)
 #   $env:FIMOD_VERSION   specific version to install (default: latest)
 #   $env:FIMOD_SOURCE    github (default) or gitlab
 #   $env:FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
-#   $env:FIMOD_SETUP_REGISTRY yes=auto-setup, no=skip, unset=interactive prompt
+#   $env:FIMOD_SETUP_REGISTRY yes=auto-setup registries, no=skip, unset=fall through
+#   $env:FIMOD_SETUP_SANDBOX  yes=auto-setup sandbox, no=skip, unset=fall through (fimod >= 0.5.0)
+#   $env:FIMOD_SETUP_ALL      yes|no default for both when granulars are unset; unset=interactive prompt
 
 $ErrorActionPreference = "Stop"
 
@@ -107,8 +109,8 @@ Write-Host "Installing fimod $Version ($Variant) for $OsName/$Arch..."
 
 # -- Build asset name --------------------------------------------------
 
-if ($Variant -eq "full") {
-    $Prefix = "fimod-full"
+if ($Variant -eq "slim") {
+    $Prefix = "fimod-slim"
 } else {
     $Prefix = "fimod"
 }
@@ -220,28 +222,98 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 
 Write-Host ""
 
-# -- Registry setup ----------------------------------------------------
-# Migration "official" -> "examples" is handled by `fimod registry setup`.
-# FIMOD_SETUP_REGISTRY=yes  → auto-setup (CI-friendly, no prompt)
-# FIMOD_SETUP_REGISTRY=no   → skip setup (CI-friendly, no prompt)
-# unset                      → interactive prompt (default)
-Write-Host "-----------------------------------------------"
-$SetupRegistry = $env:FIMOD_SETUP_REGISTRY
-if ($SetupRegistry -eq "yes") {
-    Write-Host "  Setting up registry (FIMOD_SETUP_REGISTRY=yes)..."
-    & $TargetBin registry setup --yes
-} elseif ($SetupRegistry -eq "no") {
-    Write-Host "  Skipped registry setup (FIMOD_SETUP_REGISTRY=no)."
-    Write-Host "  Run 'fimod registry setup' at any time."
+# -- Post-install setup (registry + sandbox) ---------------------------
+#
+# Two independent blocks: registry (community molds) and sandbox (policy file).
+# Each resolves its preference in order:
+#   1. FIMOD_SETUP_<CAT>=yes|no   (granular, wins over the rest)
+#   2. FIMOD_SETUP_ALL=yes|no     (default for both when granular unset)
+#   3. interactive prompt
+#
+# The command path depends on the installed fimod version:
+#   >= 0.5.0  -> `fimod setup registry defaults` and `fimod setup sandbox defaults`
+#   <  0.5.0  -> only `fimod registry setup` (sandbox unavailable)
+
+$VersionOutput = ""
+try { $VersionOutput = (& $TargetBin --version) 2>$null } catch { $VersionOutput = "" }
+$VersionMatch = [regex]::Match($VersionOutput, '(\d+)\.(\d+)\.(\d+)')
+if ($VersionMatch.Success) {
+    $InstalledVersion = $VersionMatch.Value
+    $InstalledNum = ([int]$VersionMatch.Groups[1].Value * 10000) +
+                    ([int]$VersionMatch.Groups[2].Value * 100) +
+                    ([int]$VersionMatch.Groups[3].Value)
 } else {
-    Write-Host "  Run 'fimod registry setup' to configure the example mold registry? [Y/n]"
-    $Reply = Read-Host "  >"
-    Write-Host ""
-    if ($Reply -match '^[nN]') {
-        Write-Host "  Skipped. Run 'fimod registry setup' at any time."
+    $InstalledVersion = "0.0.0"
+    $InstalledNum = 0
+}
+
+if ($InstalledNum -ge 500) {
+    $RegistryCmdArgs = @("setup", "registry", "defaults")
+    $RegistryHint    = "fimod setup registry defaults"
+    $SandboxAvailable = $true
+} else {
+    $RegistryCmdArgs = @("registry", "setup")
+    $RegistryHint    = "fimod registry setup"
+    $SandboxAvailable = $false
+}
+
+function Resolve-SetupPref([string]$specific) {
+    if ($specific -eq "yes" -or $specific -eq "no") { return $specific }
+    $all = $env:FIMOD_SETUP_ALL
+    if ($all -eq "yes" -or $all -eq "no") { return $all }
+    return "ask"
+}
+
+$RegPref = Resolve-SetupPref $env:FIMOD_SETUP_REGISTRY
+$SbPref  = Resolve-SetupPref $env:FIMOD_SETUP_SANDBOX
+
+Write-Host "-----------------------------------------------"
+Write-Host "Registry"
+switch ($RegPref) {
+    "yes" {
+        Write-Host "  Installing community registries..."
+        & $TargetBin @RegistryCmdArgs --yes
+    }
+    "no" {
+        Write-Host "  Skipped. Run '$RegistryHint' at any time."
+    }
+    default {
+        Write-Host "  Install community registries? [Y/n]"
+        $Reply = Read-Host "  >"
+        if ($Reply -match '^[nN]') {
+            Write-Host "  Skipped. Run '$RegistryHint' at any time."
+        } else {
+            & $TargetBin @RegistryCmdArgs --yes
+        }
+    }
+}
+
+Write-Host ""
+Write-Host "Sandbox"
+if (-not $SandboxAvailable) {
+    if ($SbPref -eq "yes") {
+        Write-Host "  Requires fimod >= 0.5.0 (installed $InstalledVersion) - skipped."
     } else {
-        Write-Host "  Setting up registry..."
-        & $TargetBin registry setup --yes
+        Write-Host "  Requires fimod >= 0.5.0 (installed $InstalledVersion)."
+    }
+} else {
+    switch ($SbPref) {
+        "yes" {
+            Write-Host "  Installing recommended sandbox policy..."
+            & $TargetBin setup sandbox defaults --yes
+        }
+        "no" {
+            Write-Host "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+        }
+        default {
+            Write-Host "  Install recommended sandbox policy? [Y/n]"
+            $Reply = Read-Host "  >"
+            if ($Reply -match '^[nN]') {
+                Write-Host "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+            } else {
+                & $TargetBin setup sandbox defaults --yes
+            }
+        }
     }
 }
 Write-Host "-----------------------------------------------"
