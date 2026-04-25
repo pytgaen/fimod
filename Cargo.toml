@@ -23,20 +23,20 @@ clap_complete = { version = "4", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde-saphyr = "0.0.23"  # pure-Rust YAML (replaces deprecated serde_yaml)
+serde-saphyr = "0.0.25"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "0.8", features = ["indexmap"] }
 csv = "1.4"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
-fancy-regex = "0.17"
-rustyline = "14"
-md-5 = "0.10"
-sha1 = "0.10"
-sha2 = "0.10"
-digest = "0.10"
+fancy-regex = "0.18"
+rustyline = "18"
+md-5 = "0.11"
+sha1 = "0.11"
+sha2 = "0.11"
+digest = "0.11"
 hex = "0.4"
 mimalloc = "0.1"
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
-indexmap = "2.11.4"
+indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [profile.release]
