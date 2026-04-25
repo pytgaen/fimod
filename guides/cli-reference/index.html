@@ -714,6 +714,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚙️ Setup
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mold-registries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -813,6 +824,56 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         Cache management
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sandbox-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🛡️ Sandbox policy
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛡️ Sandbox policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Resolution
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hard-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hard limits
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandboxtoml-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>sandbox.toml</code> schema
       </span>
     </span>
   </a>
@@ -1670,6 +1731,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚙️ Setup
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mold-registries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1769,6 +1841,56 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         Cache management
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sandbox-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🛡️ Sandbox policy
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛡️ Sandbox policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Resolution
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hard-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Hard limits
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sandboxtoml-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>sandbox.toml</code> schema
       </span>
     </span>
   </a>
@@ -2161,8 +2283,8 @@
 <p>Using <code>--output-format http</code> will produce an error. HTTP is only meaningful as an input format.</p>
 </div>
 <div class="admonition tip">
-<p class="admonition-title">Requires the <code>full</code> build variant</p>
-<p>HTTP input needs reqwest, which is only included in <code>FIMOD_VARIANT=full</code> or <code>cargo build --features full</code>.</p>
+<p class="admonition-title">Requires the default build variant</p>
+<p>HTTP input needs reqwest, which is included in the default build. Use <code>FIMOD_VARIANT=slim</code> (or <code>cargo build --no-default-features</code>) if you want to opt out.</p>
 </div>
 <hr />
 <h2 id="slurp-mode-slurp-s">📥 Slurp mode (<code>--slurp</code> / <code>-s</code>)</h2>
@@ -2268,28 +2390,63 @@
 <p>When a mold calls <code>set_exit(code)</code>, that code takes priority over <code>--check</code> truthiness.</p>
 </div>
 <hr />
+<h2 id="setup">⚙️ Setup</h2>
+<p><code>fimod setup &lt;category&gt; defaults</code> installs the canonical configuration for a category. It's what the install scripts call after downloading the binary, but you can re-run it at any time.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">          </span><span class="c1"># 🚀 registry + sandbox in one go</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>registry<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># community registries only</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">      </span><span class="c1"># sandbox policy only</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--yes</code></td>
+<td>Non-interactive (required on CI / non-TTY).</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>Overwrite an existing <code>sandbox.toml</code> (ignored for registry).</td>
+</tr>
+</tbody>
+</table>
+<p>What each target does:</p>
+<ul>
+<li><strong><code>registry</code></strong> — installs the community registries in <code>~/.config/fimod/sources.toml</code>. Idempotent; safe to re-run. Same effect as the legacy <code>fimod registry setup</code>.</li>
+<li><strong><code>sandbox</code></strong> — writes the recommended sandbox policy to <code>~/.config/fimod/sandbox.toml</code>. Refuses to overwrite without <code>--force</code>.</li>
+<li><strong><code>all</code></strong> — runs <code>registry</code> then <code>sandbox</code>, stopping at the first error.</li>
+</ul>
+<p>See <a href="#sandbox-policy">Sandbox policy</a> for what the sandbox file controls and how it is resolved.</p>
+<hr />
 <h2 id="mold-registries">🗂️ Mold registries</h2>
 <p>Registries are named collections of molds (local directories or remote repos).
 Use <code>@name</code> or <code>@registry/name</code> with <code>-m</code> to reference a mold by name.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w">                                     </span><span class="c1"># 🚀 First-run setup (example molds, P99)</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/<span class="w">                          </span><span class="c1"># ➕ Add local registry</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>corp<span class="w"> </span>https://github.com/org/molds<span class="w">    </span><span class="c1"># ➕ Add GitHub registry</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>fimod<span class="w"> </span>registry<span class="w"> </span>list<span class="w">                                      </span><span class="c1"># 📋 List registries</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>show<span class="w"> </span>my<span class="w">                                   </span><span class="c1"># 🔍 Show details</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>fimod<span class="w"> </span>registry<span class="w"> </span>remove<span class="w"> </span>my<span class="w">                                 </span><span class="c1"># 🗑️ Remove</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>corp<span class="w"> </span><span class="m">0</span><span class="w">                       </span><span class="c1"># ⭐ Set P0 (highest priority)</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span><span class="m">1</span><span class="w">                  </span><span class="c1"># 📌 Set priority P1</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span>--clear<span class="w">            </span><span class="c1"># 📌 Clear priority</span>
-<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>./molds<span class="w">                     </span><span class="c1"># 📦 Generate catalog.toml from a directory</span>
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>--registry<span class="w"> </span>my<span class="w">               </span><span class="c1"># 📦 Generate catalog.toml for a registered registry</span>
-<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>info<span class="w">                                </span><span class="c1"># 📊 Show cache location and usage</span>
-<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w">                               </span><span class="c1"># 🧹 Clear all cached catalogs and molds</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/<span class="w">                          </span><span class="c1"># ➕ Add local registry</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>corp<span class="w"> </span>https://github.com/org/molds<span class="w">    </span><span class="c1"># ➕ Add GitHub registry</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>list<span class="w">                                      </span><span class="c1"># 📋 List registries</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>fimod<span class="w"> </span>registry<span class="w"> </span>show<span class="w"> </span>my<span class="w">                                   </span><span class="c1"># 🔍 Show details</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>remove<span class="w"> </span>my<span class="w">                                 </span><span class="c1"># 🗑️ Remove</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>corp<span class="w"> </span><span class="m">0</span><span class="w">                       </span><span class="c1"># ⭐ Set P0 (highest priority)</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span><span class="m">1</span><span class="w">                  </span><span class="c1"># 📌 Set priority P1</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span>--clear<span class="w">            </span><span class="c1"># 📌 Clear priority</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>./molds<span class="w">                     </span><span class="c1"># 📦 Generate catalog.toml from a directory</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>--registry<span class="w"> </span>my<span class="w">               </span><span class="c1"># 📦 Generate catalog.toml for a registered registry</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>info<span class="w">                                </span><span class="c1"># 📊 Show cache location and usage</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w">                               </span><span class="c1"># 🧹 Clear all cached catalogs and molds</span>
 </code></pre></div>
 <p>Config stored in <code>~/.config/fimod/sources.toml</code>. Cache stored in <code>~/.cache/fimod/</code>.</p>
 <h3 id="registry-setup-first-run-onboarding"><code>registry setup</code> — first-run onboarding</h3>
-<p><code>fimod registry setup</code> adds the fimod example molds registry (P99) if not already present. The install scripts call it automatically, but it is safe to run manually at any time (idempotent).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w">           </span><span class="c1"># interactive — asks before adding</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># non-interactive / CI — skips the prompt</span>
+<div class="admonition warning">
+<p class="admonition-title">Deprecated in 0.5.0 — removed in 0.10.0</p>
+<p>Use <a href="#setup"><code>fimod setup registry defaults</code></a> instead. The legacy form still works but prints a deprecation warning on stderr.</p>
+</div>
+<p><code>fimod registry setup</code> adds the fimod example molds registry (P99) if not already present. It remains operational for backward compatibility but delegates to the new setup path internally.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w">           </span><span class="c1"># interactive — asks before adding</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>setup<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># non-interactive / CI — skips the prompt</span>
 </code></pre></div>
 <p>Behaviour:</p>
 <ul>
@@ -2322,78 +2479,78 @@ Use <code>@name</code> or <code>@registry/name</code> with <code>-m</code> to re
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>list
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>corp<span class="w">        </span><span class="o">[</span>github<span class="o">]</span><span class="w">  </span>github.com/org/fimod-powered<span class="w">       </span>P0
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>mycompany<span class="w">   </span><span class="o">[</span>http<span class="o">]</span><span class="w">    </span>registry.corp.com/fimod<span class="w">             </span>P1
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>internal<span class="w">    </span><span class="o">[</span>local<span class="o">]</span><span class="w">   </span>/home/user/molds<span class="w">                    </span>P2
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>examples<span class="w">    </span><span class="o">[</span>github<span class="o">]</span><span class="w">  </span>github.com/pytgaen/fimod<span class="w">            </span>P99
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>list
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>corp<span class="w">        </span><span class="o">[</span>github<span class="o">]</span><span class="w">  </span>github.com/org/fimod-powered<span class="w">       </span>P0
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>mycompany<span class="w">   </span><span class="o">[</span>http<span class="o">]</span><span class="w">    </span>registry.corp.com/fimod<span class="w">             </span>P1
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span>internal<span class="w">    </span><span class="o">[</span>local<span class="o">]</span><span class="w">   </span>/home/user/molds<span class="w">                    </span>P2
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span>examples<span class="w">    </span><span class="o">[</span>github<span class="o">]</span><span class="w">  </span>github.com/pytgaen/fimod<span class="w">            </span>P99
 </code></pre></div>
 <p>With <code>@registry/mold</code> (explicit prefix), only that specific registry is searched.</p>
 <h4 id="set-priority-assign-a-priority-rank"><code>set-priority</code> — assign a priority rank</h4>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span><span class="m">1</span><span class="w">    </span><span class="c1"># Set mycompany to P1</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>internal<span class="w"> </span><span class="m">2</span><span class="w">     </span><span class="c1"># Set internal to P2</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span>--clear<span class="w">  </span><span class="c1"># Remove priority</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span><span class="m">1</span><span class="w">    </span><span class="c1"># Set mycompany to P1</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>internal<span class="w"> </span><span class="m">2</span><span class="w">     </span><span class="c1"># Set internal to P2</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>mycompany<span class="w"> </span>--clear<span class="w">  </span><span class="c1"># Remove priority</span>
 </code></pre></div>
 <p>When the requested rank is already taken, the behaviour depends on context:</p>
 <ul>
 <li>
 <p><strong>Swap (default)</strong> — if both registries already have a rank, they exchange positions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Before: mycompany=P1, internal=P2</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>internal<span class="w"> </span><span class="m">1</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="c1"># After:  internal=P1, mycompany=P2</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Before: mycompany=P1, internal=P2</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>internal<span class="w"> </span><span class="m">1</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># After:  internal=P1, mycompany=P2</span>
 </code></pre></div>
 </li>
 <li>
 <p><strong>Cascade</strong> — if the source had no prior rank (or <code>--cascade</code> is passed), existing entries shift down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Before: mycompany=P1, internal=P2</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>newreg<span class="w"> </span><span class="m">1</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># After:  newreg=P1, mycompany=P2, internal=P3</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Before: mycompany=P1, internal=P2</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>$<span class="w"> </span>fimod<span class="w"> </span>registry<span class="w"> </span>set-priority<span class="w"> </span>newreg<span class="w"> </span><span class="m">1</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="c1"># After:  newreg=P1, mycompany=P2, internal=P3</span>
 </code></pre></div>
 </li>
 </ul>
 <p>Use <code>--cascade</code> to force cascade behaviour even when both registries already have a rank.</p>
 <h4 id="sourcestoml-format"><code>sources.toml</code> format</h4>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">[priority]</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">corp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">mycompany</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">internal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">examples</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">99</span>
-<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
-<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="k">[sources.corp]</span>
-<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;github&quot;</span>
-<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/org/fimod-powered&quot;</span>
-<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>
-<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="k">[sources.mycompany]</span>
-<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http&quot;</span>
-<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://registry.corp.com/fimod&quot;</span>
-<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>
-<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a><span class="k">[sources.internal]</span>
-<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
-<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/home/user/molds&quot;</span>
-<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>
-<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="k">[sources.examples]</span>
-<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;github&quot;</span>
-<a id="__codelineno-16-21" name="__codelineno-16-21" href="#__codelineno-16-21"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/pytgaen/fimod/tree/main/molds&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">[priority]</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">corp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">mycompany</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="n">internal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="n">examples</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">99</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="k">[sources.corp]</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;github&quot;</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/org/fimod-powered&quot;</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="k">[sources.mycompany]</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http&quot;</span>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://registry.corp.com/fimod&quot;</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a><span class="k">[sources.internal]</span>
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;local&quot;</span>
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;/home/user/molds&quot;</span>
+<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>
+<a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a><span class="k">[sources.examples]</span>
+<a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;github&quot;</span>
+<a id="__codelineno-17-21" name="__codelineno-17-21" href="#__codelineno-17-21"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://github.com/pytgaen/fimod/tree/main/molds&quot;</span>
 </code></pre></div>
 <p>The <code>[priority]</code> section is optional. Without it, registries are searched in file order.</p>
 <h3 id="fimod_registry-ephemeral-registries-for-ci"><code>FIMOD_REGISTRY</code> — ephemeral registries for CI</h3>
 <p>In CI/CD or ephemeral environments, use the <code>FIMOD_REGISTRY</code> environment variable instead of <code>fimod registry add</code>. Comma-separated entries, optionally named:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Anonymous — resolves @mold</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span>./molds<span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Named — resolves @ci/mold and @mold</span>
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,staging=https://github.com/org/molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@ci/clean
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="c1"># Mixed anonymous + named</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,/opt/shared-molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Anonymous — resolves @mold</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span>./molds<span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Named — resolves @ci/mold and @mold</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,staging=https://github.com/org/molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@ci/clean
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="c1"># Mixed anonymous + named</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="nv">FIMOD_REGISTRY</span><span class="o">=</span><span class="s2">&quot;ci=./molds,/opt/shared-molds&quot;</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@clean
 </code></pre></div>
 <p><code>FIMOD_REGISTRY</code> takes priority over <code>sources.toml</code> (env overrides config, standard Unix convention). Named entries support <code>@name/mold</code> resolution.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Register a local collection once…</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
-<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># …then reference molds by name</span>
-<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@cleanup<span class="w">          </span><span class="c1"># searches all registries in priority order</span>
-<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@my/cleanup<span class="w">       </span><span class="c1"># explicit registry</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Register a local collection once…</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>my<span class="w"> </span>~/molds/
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1"># …then reference molds by name</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@cleanup<span class="w">          </span><span class="c1"># searches all registries in priority order</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>@my/cleanup<span class="w">       </span><span class="c1"># explicit registry</span>
 </code></pre></div>
 <p><strong>Authentication</strong> — tokens are resolved automatically, or overridden per-registry:</p>
 <table>
@@ -2452,49 +2609,111 @@ Use <code>@name</code> or <code>@registry/name</code> with <code>-m</code> to re
 </table>
 <p>For branches and semver tags, pass the standard <code>github.com/tree/…</code> URL — fimod converts it to a raw URL automatically, using <code>refs/heads/</code> for branches and <code>refs/tags/</code> for semver-looking refs.</p>
 <p>For <strong>non-semver tags</strong> (e.g. <code>stable</code>, <code>latest</code>), fimod cannot distinguish them from branch names based on the ref string alone. Pass the <code>raw.githubusercontent.com</code> URL with the full ref path instead:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Branch — standard github.com URL</span>
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/main/molds
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
-<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1"># Semver tag — standard github.com URL</span>
-<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/v1.2.0/molds
-<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
-<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="c1"># Non-semver tag — raw URL required</span>
-<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://raw.githubusercontent.com/org/repo/refs/tags/stable/molds
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Branch — standard github.com URL</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/main/molds
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="c1"># Semver tag — standard github.com URL</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://github.com/org/repo/tree/v1.2.0/molds
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="c1"># Non-semver tag — raw URL required</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>fimod<span class="w"> </span>registry<span class="w"> </span>add<span class="w"> </span>mylib<span class="w"> </span>https://raw.githubusercontent.com/org/repo/refs/tags/stable/molds
 </code></pre></div>
 <h3 id="browsing-available-molds">Browsing available molds</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">              </span><span class="c1"># list molds in all registries</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w"> </span>examples<span class="w">     </span><span class="c1"># list molds in a specific registry</span>
-<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>fimod<span class="w"> </span>mold<span class="w"> </span>show<span class="w"> </span>pick_fields<span class="w">  </span><span class="c1"># show metadata for a mold</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w">              </span><span class="c1"># list molds in all registries</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>fimod<span class="w"> </span>mold<span class="w"> </span>list<span class="w"> </span>examples<span class="w">     </span><span class="c1"># list molds in a specific registry</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>fimod<span class="w"> </span>mold<span class="w"> </span>show<span class="w"> </span>pick_fields<span class="w">  </span><span class="c1"># show metadata for a mold</span>
 </code></pre></div>
 <p>Both <code>mold list</code> and <code>mold show</code> accept <code>--output-format json</code> for machine-readable output.</p>
 <p>For <strong>local</strong> registries, mold names and descriptions are discovered by scanning <code>.py</code> files.
 For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.toml</code> must be present at the root of the registry.</p>
 <p>Maintainers generate it with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>./molds<span class="w">         </span><span class="c1"># scans directory and writes catalog.toml</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>--registry<span class="w"> </span>my<span class="w">   </span><span class="c1"># same, resolving path from a registered registry</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>./molds<span class="w">         </span><span class="c1"># scans directory and writes catalog.toml</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>build-catalog<span class="w"> </span>--registry<span class="w"> </span>my<span class="w">   </span><span class="c1"># same, resolving path from a registered registry</span>
 </code></pre></div>
 <p>The <code>catalog.toml</code> is a simple TOML file committed alongside the molds:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="k">[molds.normalize]</span>
-<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Normalise field names to snake_case&quot;</span>
-<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
-<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="k">[molds.filter_active]</span>
-<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Keep only active records&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">[molds.normalize]</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Normalise field names to snake_case&quot;</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="k">[molds.filter_active]</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Keep only active records&quot;</span>
 </code></pre></div>
 <p>Mold descriptions come from the module-level docstring at the top of each script:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="sd">&quot;&quot;&quot;Normalise field names to snake_case.&quot;&quot;&quot;</span>
-<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>    <span class="o">...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="sd">&quot;&quot;&quot;Normalise field names to snake_case.&quot;&quot;&quot;</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>    <span class="o">...</span>
 </code></pre></div>
 <h3 id="cache-management">Cache management</h3>
 <p>Remote catalogs and molds are cached locally in <code>~/.cache/fimod/</code> to avoid re-fetching on every invocation.</p>
 <p><strong>Catalog caching</strong> uses HTTP ETags: on subsequent requests, fimod sends <code>If-None-Match</code> and skips the download on <code>304 Not Modified</code>.</p>
 <p><strong>Mold caching</strong> uses content hashes from the catalog: <code>build-catalog</code> computes a hash per mold directory, and the client only re-downloads when the hash changes.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>info<span class="w">              </span><span class="c1"># show cache location and disk usage</span>
-<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w">             </span><span class="c1"># wipe all cached data</span>
-<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w"> </span>@name<span class="w">       </span><span class="c1"># wipe a specific mold (planned)</span>
-<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@mold<span class="w"> </span>--no-cache<span class="w">  </span><span class="c1"># bypass cache for this invocation</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>info<span class="w">              </span><span class="c1"># show cache location and disk usage</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w">             </span><span class="c1"># wipe all cached data</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>fimod<span class="w"> </span>registry<span class="w"> </span>cache<span class="w"> </span>clear<span class="w"> </span>@name<span class="w">       </span><span class="c1"># wipe a specific mold (planned)</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>@mold<span class="w"> </span>--no-cache<span class="w">  </span><span class="c1"># bypass cache for this invocation</span>
 </code></pre></div>
 <p>Override the cache directory with <code>FIMOD_CACHE_DIR</code>. For direct-URL molds (not registry-based), cache TTL is controlled by <code>FIMOD_CACHE_TTL</code> (minutes, default <code>360</code>, <code>0</code> = infinite, negative = disabled).</p>
+<hr />
+<h2 id="sandbox-policy">🛡️ Sandbox policy</h2>
+<p>Every <code>fimod s</code> invocation runs the mold under a sandbox that limits what it can do on the host. A policy controls three things:</p>
+<ul>
+<li><strong>Clock access</strong> — whether <code>datetime.now()</code> / <code>date.today()</code> resolve to real values or raise.</li>
+<li><strong>Environment access</strong> — which <code>os.getenv(KEY)</code> calls are allowed (glob-matched).</li>
+<li><strong>Hard resource limits</strong> — wall-clock duration and peak memory.</li>
+</ul>
+<h3 id="resolution">Resolution</h3>
+<p>The policy is resolved in this order (first match wins):</p>
+<ol>
+<li><code>--sandbox-file &lt;path&gt;</code> — CLI flag.</li>
+<li><code>$FIMOD_SANDBOX_FILE</code> — environment variable.</li>
+<li><code>~/.config/fimod/sandbox.toml</code> — per-user canonical config.</li>
+<li><em>(none of the above)</em> — zero-authorization defaults.</li>
+</ol>
+<p>Special cases:</p>
+<ul>
+<li><code>--sandbox-file=""</code> (empty string) forces zero-authorization regardless of <code>$FIMOD_SANDBOX_FILE</code> or the canonical file. Portable across Linux/macOS/Windows.</li>
+<li>If <code>$FIMOD_SANDBOX_FILE</code> points to a missing path, fimod errors out explicitly rather than falling back silently.</li>
+</ul>
+<p>Bootstrap the canonical file with <a href="#setup"><code>fimod setup sandbox defaults --yes</code></a>.</p>
+<h3 id="hard-limits">Hard limits</h3>
+<p>Apply <strong>even with zero authorization</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max_duration</code></td>
+<td><code>2m</code></td>
+</tr>
+<tr>
+<td><code>max_memory</code></td>
+<td><code>1GB</code></td>
+</tr>
+</tbody>
+</table>
+<p>On violation, fimod exits with code <code>137</code> and a stderr message like:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>sandbox exploded: max_duration exceeded (2m)
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>sandbox exploded: max_memory exceeded (1024 MB)
+</code></pre></div>
+<h3 id="sandboxtoml-schema"><code>sandbox.toml</code> schema</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="k">[sandbox]</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="n">allow_clock</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">              </span><span class="c1"># allow datetime.now() / date.today()</span>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">max_duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2m&quot;</span><span class="w">              </span><span class="c1"># &quot;30s&quot;, &quot;2m&quot;, &quot;unlimited&quot;</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="n">max_memory</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1GB&quot;</span><span class="w">             </span><span class="c1"># &quot;500MB&quot;, &quot;1GB&quot;, &quot;unlimited&quot;</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="n">allow_env</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;LANG&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;TZ_*&quot;</span><span class="p">]</span><span class="w">  </span><span class="c1"># glob patterns: &quot;*&quot;, &quot;PREFIX_*&quot;, &quot;EXACT&quot;</span>
+</code></pre></div>
+<p><code>allow_env = []</code> (default) blocks every <code>os.getenv()</code> call. Patterns match the key name exactly, as a prefix (<code>TZ_*</code>), or anything (<code>*</code>).</p>
+<p>Denied calls raise <code>PermissionError</code> inside the mold — catch it if you want a graceful fallback:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="n">lang</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a><span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>    <span class="n">lang</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;LANG&quot;</span><span class="p">)</span>
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="k">except</span> <span class="ne">PermissionError</span><span class="p">:</span>
+<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>    <span class="k">pass</span>  <span class="c1"># sandbox forbids env access</span>
+</code></pre></div>
 <hr />
 <h2 id="csv-options">📊 CSV options</h2>
 <table>
@@ -2527,8 +2746,8 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="c1"># 🔀 CSV → TSV</span>
-<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>csv<span class="w"> </span>--csv-output-delimiter<span class="w"> </span><span class="s1">&#39;\t&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="c1"># 🔀 CSV → TSV</span>
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>csv<span class="w"> </span>--csv-output-delimiter<span class="w"> </span><span class="s1">&#39;\t&#39;</span>
 </code></pre></div>
 <div class="admonition info">
 <p class="admonition-title">Column order is preserved</p>
@@ -2541,26 +2760,26 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p>Best for one-liners:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
-<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: data[&quot;first&quot;].upper()}&#39;</span>
-<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;re_findall(r&quot;\d+&quot;, data[&quot;text&quot;])&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: data[&quot;first&quot;].upper()}&#39;</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;re_findall(r&quot;\d+&quot;, data[&quot;text&quot;])&#39;</span>
 </code></pre></div>
 <p>Multi-statement? Write <code>def transform</code> inside <code>-e</code>.</p>
 </div>
 <div class="tabbed-block">
 <p>For reusable transforms:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># cleanup.py</span>
-<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
-<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
-<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
-<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>    <span class="k">return</span> <span class="n">data</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># cleanup.py</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>    <span class="k">return</span> <span class="n">data</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>clean.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>clean.json
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <p>Load from a URL:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>https://example.com/transforms/normalize.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>https://example.com/transforms/normalize.py
 </code></pre></div>
 </div>
 </div>
@@ -2568,41 +2787,41 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <hr />
 <h2 id="special-output-formats">🎛️ Special output formats</h2>
 <p>Sometimes you need to control the output format for chaining with other tools, without changing the file extension:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># 📦 Compact JSON: one-line JSON for piping</span>
-<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json-compact
-<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="c1"># {&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30}</span>
-<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>
-<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="c1"># 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)</span>
-<a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
-<a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
-<a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>
-<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="c1"># 📑 Lines: one array element per line (shell-friendly lists)</span>
-<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
-<a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>
-<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
-<a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># 📦 Compact JSON: one-line JSON for piping</span>
+<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json-compact
+<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="c1"># {&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30}</span>
+<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>
+<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="c1"># 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)</span>
+<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
+<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
+<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>
+<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a><span class="c1"># 📑 Lines: one array element per line (shell-friendly lists)</span>
+<a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a>
+<a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
+<a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
 </code></pre></div>
 <hr />
 <h2 id="passing-variables-arg">📎 Passing variables (<code>--arg</code>)</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;</span>
-<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="s1">  [u for u in data if u[&quot;age&quot;] &gt; int(args[&quot;threshold&quot;])]</span>
-<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="s1">&#39;</span>
-<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>
-<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="c1"># Or via mold:</span>
-<a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;</span>
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="s1">  [u for u in data if u[&quot;age&quot;] &gt; int(args[&quot;threshold&quot;])]</span>
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="s1">&#39;</span>
+<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>
+<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="c1"># Or via mold:</span>
+<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
 </code></pre></div>
 <p>Access via <code>args["key"]</code> in the <code>transform(data, args, env, headers)</code> function.</p>
 <hr />
 <h2 id="format-conversion">🔀 Format conversion</h2>
 <p>Pass-through expression for pure format conversion:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>config.toml
-<a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json
-<a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>config.toml
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
 </code></pre></div>
 <hr />
 <h2 id="debug-mode-debug-d">🐛 Debug mode (<code>--debug</code> / <code>-d</code>)</h2>
 <p>Prints pipeline diagnostics to <strong>stderr</strong> (stdout stays clean for piping):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--debug
+<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--debug
 </code></pre></div>
 <p>Output includes: input/output format, mold source, full script, input data, output data.</p>
 <div class="admonition tip">
@@ -2612,35 +2831,35 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <hr />
 <h2 id="message-verbosity-quiet-msg-level">📢 Message verbosity (<code>--quiet</code> / <code>--msg-level</code>)</h2>
 <p>Control which <code>msg_*</code> functions in mold scripts produce output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--quiet<span class="w">              </span><span class="c1"># errors only</span>
-<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>verbose<span class="w">  </span><span class="c1"># + msg_verbose()</span>
-<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>trace<span class="w">    </span><span class="c1"># + msg_trace()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--quiet<span class="w">              </span><span class="c1"># errors only</span>
+<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>verbose<span class="w">  </span><span class="c1"># + msg_verbose()</span>
+<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>trace<span class="w">    </span><span class="c1"># + msg_trace()</span>
 </code></pre></div>
 <p><code>--quiet</code> and <code>--msg-level</code> are mutually exclusive. See <a href="../../reference/built-ins/#-message-functions-msg_">built-ins reference</a> for the full visibility table.</p>
 <hr />
 <h2 id="in-place-editing-in-place">✏️ In-place editing (<code>--in-place</code>)</h2>
 <p>Modify the input file directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;host&quot;: data[&quot;host&quot;], &quot;port&quot;: data[&quot;port&quot;]}&#39;</span><span class="w"> </span>--in-place
+<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;host&quot;: data[&quot;host&quot;], &quot;port&quot;: data[&quot;port&quot;]}&#39;</span><span class="w"> </span>--in-place
 </code></pre></div>
 <p>Requires <code>-i</code>. Incompatible with <code>-o</code>.</p>
 <hr />
 <h2 id="stdin-stdout">🔌 Stdin / stdout</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="c1"># 📥 Read from stdin</span>
-<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>cat<span class="w"> </span>data.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;count&quot;: len(data)}&#39;</span>
-<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>
-<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="c1"># 🔗 Pipe chain</span>
-<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>https://jsonplaceholder.typicode.com/todos<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[d for d in data if d[&quot;completed&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1"># 📥 Read from stdin</span>
+<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>cat<span class="w"> </span>data.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;count&quot;: len(data)}&#39;</span>
+<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>
+<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="c1"># 🔗 Pipe chain</span>
+<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>https://jsonplaceholder.typicode.com/todos<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[d for d in data if d[&quot;completed&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </code></pre></div>
 <hr />
 <h2 id="monty-repl-fimod-monty-repl">🐍 Monty REPL (<code>fimod monty repl</code>)</h2>
 <p>Start an interactive Python REPL powered by the embedded Monty engine — no system Python needed.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl
-<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a><span class="c1"># Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)</span>
-<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a><span class="c1"># &gt;&gt;&gt; 2 + 2</span>
-<a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a><span class="c1"># 4</span>
-<a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a><span class="c1"># &gt;&gt;&gt; [x ** 2 for x in range(5)]</span>
-<a id="__codelineno-37-6" name="__codelineno-37-6" href="#__codelineno-37-6"></a><span class="c1"># [0, 1, 4, 9, 16]</span>
-<a id="__codelineno-37-7" name="__codelineno-37-7" href="#__codelineno-37-7"></a><span class="c1"># &gt;&gt;&gt; exit</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl
+<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a><span class="c1"># Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)</span>
+<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a><span class="c1"># &gt;&gt;&gt; 2 + 2</span>
+<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="c1"># 4</span>
+<a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a><span class="c1"># &gt;&gt;&gt; [x ** 2 for x in range(5)]</span>
+<a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a><span class="c1"># [0, 1, 4, 9, 16]</span>
+<a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a><span class="c1"># &gt;&gt;&gt; exit</span>
 </code></pre></div>
 <p>Features:</p>
 <ul>
@@ -2659,23 +2878,23 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <div class="tabbed-set tabbed-alternate" data-tabs="2:5"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><input id="__tabbed_2_4" name="__tabbed_2" type="radio" /><input id="__tabbed_2_5" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Bash</label><label for="__tabbed_2_2">Zsh</label><label for="__tabbed_2_3">Fish</label><label for="__tabbed_2_4">Elvish</label><label for="__tabbed_2_5">PowerShell</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;source &lt;(COMPLETE=bash fimod)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;source &lt;(COMPLETE=bash fimod)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;source &lt;(COMPLETE=zsh fimod)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.zshrc
+<div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;source &lt;(COMPLETE=zsh fimod)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.zshrc
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;COMPLETE=fish fimod | source&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.config/fish/completions/fimod.fish
+<div class="highlight"><pre><span></span><code><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;COMPLETE=fish fimod | source&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.config/fish/completions/fimod.fish
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval (E:COMPLETE=elvish fimod | slurp)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.elvish/rc.elv
+<div class="highlight"><pre><span></span><code><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval (E:COMPLETE=elvish fimod | slurp)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.elvish/rc.elv
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="nb">echo </span><span class="s1">&#39;$env:COMPLETE = &quot;powershell&quot;; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE&#39;</span> <span class="p">&gt;&gt;</span> <span class="nv">$PROFILE</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a><span class="nb">echo </span><span class="s1">&#39;$env:COMPLETE = &quot;powershell&quot;; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE&#39;</span> <span class="p">&gt;&gt;</span> <span class="nv">$PROFILE</span>
 </code></pre></div>
 </div>
 </div>

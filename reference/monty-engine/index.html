@@ -1472,7 +1472,7 @@
 
 <h1 id="monty-engine-capabilities-security-model">Monty Engine — Capabilities &amp; Security Model</h1>
 <p>Monty is a Python interpreter written in Rust from scratch by Pydantic. It is <strong>not</strong> CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.</p>
-<p>Fimod uses Monty (v0.0.14) as its execution engine for mold scripts.</p>
+<p>Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.</p>
 <p><strong>Source</strong>: <a href="https://github.com/pydantic/monty">pydantic/monty</a> — <a href="https://pydantic.dev/articles/pydantic-monty">blog post</a></p>
 <h2 id="python-language-support">Python Language Support</h2>
 <h3 id="supported">Supported</h3>
@@ -1561,6 +1561,10 @@
 <td><code>data[0][1] = x</code>, <code>matrix[i][j] = v</code></td>
 </tr>
 <tr>
+<td>Chain assignment</td>
+<td><code>a = b = 1</code> assigns the same value to multiple targets</td>
+</tr>
+<tr>
 <td>Named keyword args</td>
 <td><code>str.split(sep=",")</code>, <code>max(items, key=...)</code></td>
 </tr>
@@ -1610,7 +1614,7 @@
 </tbody>
 </table>
 <h3 id="built-in-functions">Built-in Functions</h3>
-<p>Standard Python builtins: <code>len</code>, <code>range</code>, <code>enumerate</code>, <code>zip</code>, <code>map</code>, <code>filter</code>, <code>sorted</code>, <code>reversed</code>, <code>sum</code>, <code>min</code>, <code>max</code> (with <code>key=</code> and <code>default=</code>), <code>abs</code>, <code>round</code>, <code>isinstance</code>, <code>getattr</code>, <code>type</code>, <code>id</code>, <code>repr</code>, <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>, <code>list</code>, <code>dict</code>, <code>set</code>, <code>tuple</code>, <code>print</code>, <code>hash</code>, etc.</p>
+<p>Standard Python builtins: <code>len</code>, <code>range</code>, <code>enumerate</code>, <code>zip</code>, <code>map</code>, <code>filter</code>, <code>sorted</code>, <code>reversed</code>, <code>sum</code>, <code>min</code>, <code>max</code> (with <code>key=</code> and <code>default=</code>), <code>abs</code>, <code>round</code>, <code>isinstance</code>, <code>getattr</code>, <code>hasattr</code>, <code>setattr</code>, <code>type</code>, <code>id</code>, <code>repr</code>, <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>, <code>list</code>, <code>dict</code>, <code>set</code>, <code>tuple</code>, <code>print</code>, <code>hash</code>, etc.</p>
 <p><strong>Not available</strong>: <code>open</code>, <code>exec</code>, <code>eval</code>, <code>compile</code>, <code>__import__</code>, <code>input</code>.</p>
 <h3 id="standard-library-modules">Standard Library Modules</h3>
 <table>
@@ -1767,7 +1771,7 @@
 - <strong>Memory</strong>: Cap total allocation
 - <strong>Recursion depth</strong>: Prevent stack overflow
 - <strong>Execution time/steps</strong>: Prevent infinite loops</p>
-<p>Fimod currently uses <code>NoLimitTracker</code> (no limits enforced).</p>
+<p>Fimod uses <code>LimitedTracker</code> with hard defaults (<code>max_duration = 2m</code>, <code>max_memory = 1GB</code>). These defaults apply even without a <code>sandbox.toml</code>. See the <a href="../../guides/sandbox/">Sandbox</a> section for configuring limits via <code>~/.config/fimod/sandbox.toml</code> or <code>--sandbox-file</code>.</p>
 <h2 id="performance">Performance</h2>
 <table>
 <thead>
@@ -1824,7 +1828,7 @@
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p>The <code>fimod monty repl</code> command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$ fimod monty repl
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.14 — fimod v0.3.1 (exit or Ctrl+D to quit)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.17 — fimod v0.5.0 (exit or Ctrl+D to quit)
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>&gt;&gt;&gt; data = {&quot;name&quot;: &quot;Alice&quot;, &quot;age&quot;: 30}
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&gt;&gt;&gt; data[&quot;name&quot;].upper()
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>&#39;ALICE&#39;
