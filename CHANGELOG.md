@@ -2,6 +2,28 @@
 
 All notable changes to fimod are documented here.
 
+## [0.5.0] — 2026-04-25
+
+### Highlights
+
+- 🔒 Sandbox isolation layer — `sandbox.toml` with allow/deny rules, clock control, hard limits (2 min / 1 GB), exit code 137. Four-level config resolution: `--sandbox-file` > env > `~/.config/fimod/sandbox.toml` > zero-auth.
+- ⚙️ New `fimod setup` subcommand — `setup registry defaults`, `setup sandbox defaults`, `setup all defaults` replace `fimod registry setup` (deprecated, removed in 0.10.0).
+- 📦 Installer dual-path — `install.sh` and `install.ps1` detect the version and route to new commands for ≥ 0.5.0, legacy API for < 0.5.0.
+- ⬆️ Monty v0.0.14 → v0.0.17 — `hasattr`, `setattr`, chain assignment.
+
+### Features
+
+- **sandbox:** add sandbox isolation layer (`sandbox.toml`, allow/deny rules, clock control)
+- **setup:** new `fimod setup` subcommand with `setup registry defaults` and `setup sandbox defaults`
+- **install:** dual-path `install.sh` — routes to new setup commands for ≥ 0.5.0, legacy for < 0.5.0
+- **paths:** centralize `config_dir()` in paths module shared by registry, sandbox, setup
+
+### Housekeeping
+
+- Upgrade Monty v0.0.14 → v0.0.17 (`hasattr`, `setattr`, chain assignment)
+- Bump `rustls-webpki` from 0.103.12 to 0.103.13
+- Bump `rand` from 0.8.5 to 0.8.6
+
 ## [0.4.0] — 2026-04-17
 
 ### Highlights
