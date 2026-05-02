@@ -20,7 +20,7 @@ fn test_cookbook_csv_to_nested_json() {
     let mold = setup_mold(
         &dir,
         "nest.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     result = {}
     for row in data:
         user_id = row["id"]
@@ -66,7 +66,7 @@ fn test_cookbook_mask_email() {
     let mold = setup_mold(
         &dir,
         "mask.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     for user in data:
         if "email" in user:
             parts = user["email"].split("@")
@@ -107,7 +107,7 @@ fn test_cookbook_regex_extract_urls() {
     let mold = setup_mold(
         &dir,
         "urls.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     urls = re_findall(r"https?://[^\s]+", data["text"])
     return {"urls": urls, "count": len(urls)}
 "#,
@@ -144,7 +144,7 @@ fn test_cookbook_regex_parse_kv() {
     let mold = setup_mold(
         &dir,
         "parse_kv.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     result = {}
     for line in data["text"].strip().split("\n"):
         m = re_search(r"^(\w+)=(.+)$", line)
@@ -194,7 +194,7 @@ fn test_cookbook_args_reusable_filter() {
     let mold = setup_mold(
         &dir,
         "filter_by_field.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     field = args["field"]
     value = args["value"]
     return [row for row in data if row.get(field) == value]
@@ -235,7 +235,7 @@ fn test_cookbook_no_input_gen_users() {
     let mold = setup_mold(
         &dir,
         "gen_users.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     n = int(args["count"])
     prefix = args.get("prefix", "user")
     return [{"id": i, "name": prefix + str(i), "active": True} for i in range(1, n + 1)]
@@ -282,7 +282,7 @@ fn test_cookbook_headers_numeric_cols_sum() {
     let mold = setup_mold(
         &dir,
         "sum_amounts.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     numeric_cols = [h for h in headers if h.endswith("_amount")]
     for row in data:
         total = 0

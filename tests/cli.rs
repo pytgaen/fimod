@@ -42,6 +42,8 @@ mod multi_slurp;
 mod ndjson;
 #[path = "cli/output_file.rs"]
 mod output_file;
+#[path = "cli/pipeline.rs"]
+mod pipeline;
 #[path = "cli/readme.rs"]
 mod readme;
 #[path = "cli/regex.rs"]

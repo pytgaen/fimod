@@ -243,7 +243,7 @@ Lookup tables and complete specifications.
     - **[Monty](https://github.com/pydantic/monty)** is an early-stage Rust implementation of Python by Pydantic. Its API is unstable and may introduce breaking changes.
     - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
     - Versioning follows [Semantic Versioning](https://semver.org/) — breaking changes bump the major version.
-    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to complement Monty's limited stdlib. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re).
+    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to complement Monty's limited stdlib. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re_).
 
 !!! note "Regex: Fimod built-ins vs Monty's `re` module"
     Fimod was originally built on Monty v0.0.6, which had no regex support.

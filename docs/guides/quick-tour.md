@@ -390,4 +390,4 @@ echo '[{"hash":"e813bcb","msg":"feat: add templating","date":"2026-03-29"},
 - feat: add registry cache (48637d1)
 ```
 
-Full Jinja2 syntax is available: loops, conditions, filters (`upper`, `join`, `tojson`, `default`, …), macros, and template inheritance. See [Built-ins Reference](../reference/built-ins.md#template-functions-tpl) for the full API.
+Full Jinja2 syntax is available: loops, conditions, filters (`upper`, `join`, `tojson`, `default`, …), macros, and template inheritance. See [Built-ins Reference](../reference/built-ins.md#template-functions-tpl_) for the full API.

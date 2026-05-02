@@ -76,7 +76,7 @@ fn test_readme_aggregation() {
     let mold = setup_mold(
         &dir,
         "agg.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     depts = {}
     for e in data:
         d = e["department"]
@@ -120,7 +120,7 @@ fn test_readme_csv_normalize() {
     let mold = setup_mold(
         &dir,
         "normalize.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     seen = {}
     result = []
     for row in data:
@@ -170,7 +170,7 @@ fn test_readme_log_counting() {
             "-i", &input,
             "--input-format", "lines",
             "--output-format", "json",
-            "-e", "def transform(data, args, env, headers):\n    levels = {}\n    for line in data:\n        for level in [\"ERROR\", \"WARN\", \"INFO\", \"DEBUG\"]:\n            if level in line:\n                levels[level] = levels.get(level, 0) + 1\n    return levels",
+            "-e", "def transform(data, args, env, headers, **_):\n    levels = {}\n    for line in data:\n        for level in [\"ERROR\", \"WARN\", \"INFO\", \"DEBUG\"]:\n            if level in line:\n                levels[level] = levels.get(level, 0) + 1\n    return levels",
         ])
         .assert()
         .success()

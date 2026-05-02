@@ -10,7 +10,7 @@ If you teach your AI assistant how to use Fimod, it will stop trying to write fr
 
 We provide a standard **Agent Skill** documentation to teach any AI about Fimod. This replaces writing custom prompts.
 
-**👉 [Read the Fimod Agent Skill](../../.agents/skills/fimod/SKILL.md)**
+**👉 [Read the Fimod Agent Skill](https://github.com/pytgaen/fimod/blob/main/.agents/skills/fimod/SKILL.md)**
 
 ### How to use it:
 

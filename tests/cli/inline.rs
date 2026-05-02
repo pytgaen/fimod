@@ -23,7 +23,7 @@ fn test_inline_expression_with_def_transform() {
         .arg("shape")
         .args([
             "-i", &input,
-            "-e", "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hi {data['name']}\"\n    return data",
+            "-e", "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hi {data['name']}\"\n    return data",
         ])
         .assert()
         .success()

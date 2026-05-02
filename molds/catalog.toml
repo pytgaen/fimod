@@ -7,6 +7,15 @@ hash = "b870cc869628b0f592dd892c0fe57619"
 [molds.anonymize_pii.args]
 fields = "Comma-separated list of fields to anonymize"
 
+[molds.auto_anonymize]
+description = "Append @anonymize_pii downstream when the CSV input contains sensitive columns"
+path = "auto_anonymize/auto_anonymize.py"
+readme = "auto_anonymize/README.md"
+hash = "d749888a8a4e4ca997045d824e2933d9"
+
+[molds.auto_anonymize.args]
+detect = "Comma-separated columns to look for in the header (default: email)"
+
 [molds.badge_md]
 description = "Generate a shields.io badge in Markdown"
 path = "badge_md/badge_md.py"
@@ -30,6 +39,25 @@ description = "Generate a SELECT statement from a BigQuery table (bq show --form
 path = "bq_select/bq_select.py"
 readme = "bq_select/README.md"
 hash = "dfbf11712d8763ec984029aa90b2612c"
+
+[molds.checkpoint]
+description = "Fail with exit 1 if data is empty at this point in the pipeline"
+path = "checkpoint/checkpoint.py"
+readme = "checkpoint/README.md"
+hash = "2dc99a37f36c71faa4d53bc7e509f91c"
+
+[molds.checkpoint.args]
+exit_code = "Exit code on failure (default: 1)"
+label = "Description shown in the error message (default: checkpoint)"
+
+[molds.compact_if_big]
+description = "Switch the pipeline output to compact JSON when the data exceeds a given size threshold. Default threshold is 1000 items; override with --arg max=N"
+path = "compact_if_big/compact_if_big.py"
+readme = "compact_if_big/README.md"
+hash = "7472d959d2c057460e345fb9aac45574"
+
+[molds.compact_if_big.args]
+max = "Threshold above which output_format switches to json-compact (default: 1000)"
 
 [molds.csv_stats]
 description = "Compute basic statistics on numeric CSV columns"
@@ -154,6 +182,16 @@ hash = "352cbf4bf05230c78c9889d280562f6e"
 [molds.rename_keys.args]
 mapping = "Comma-separated list of old_key:new_key pairs"
 
+[molds.sample_if_large]
+description = "Inject a sampling step immediately after this one if the list exceeds `max` items"
+path = "sample_if_large/sample_if_large.py"
+readme = "sample_if_large/README.md"
+hash = "56668c8bc65b44dca309e61355e88afc"
+
+[molds.sample_if_large.args]
+max = "Maximum number of items before sampling kicks in (required)"
+strategy = "head keeps the first N items (default), tail keeps the last N"
+
 [molds.sort_json_keys]
 description = "Recursively sort the keys of a JSON structure"
 path = "sort_json_keys/sort_json_keys.py"
@@ -178,6 +216,17 @@ hash = "8ef112cd99666e3267b9972478ffaa50"
 
 [molds.validate_fields.args]
 required = "Comma-separated list of dotpaths that must be present (or set FIMOD_REQUIRED_FIELDS env var)"
+
+[molds.with_threshold]
+description = "Compute a percentile threshold from a numeric column and inject a downstream filter step keeping rows on the requested side of that threshold"
+path = "with_threshold/with_threshold.py"
+readme = "with_threshold/README.md"
+hash = "ddad0348e95383c5192b393e9d6aca73"
+
+[molds.with_threshold.args]
+col = "Numeric column name to compute the threshold on (required)"
+op = "Comparison operator: >, >=, <, <=, ==, != (default: >)"
+pct = "Percentile in 1-99 (default: 95)"
 
 [molds.yaml_merge]
 description = "Merge patch values into an existing YAML structure"

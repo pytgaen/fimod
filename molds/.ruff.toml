@@ -1,0 +1,66 @@
+# fimod molds: ruff config
+#
+# Molds run inside fimod's Monty engine, which injects a set of names into the
+# global scope at runtime (built-in functions and the `Step` constructor).
+# These are not Python imports — declaring them here silences false-positive
+# `F821 undefined name` warnings without disabling the check entirely.
+
+[lint]
+builtins = [
+    # Pipeline injection
+    "Step",
+    # Dotpath
+    "dp_get",
+    "dp_set",
+    "dp_has",
+    "dp_delete",
+    # Environment
+    "env_subst",
+    # Exit control
+    "set_exit",
+    # Format control
+    "set_input_format",
+    "set_output_format",
+    "set_output_file",
+    "cast_input_format",
+    # Gatekeeper
+    "gk_fail",
+    "gk_assert",
+    "gk_warn",
+    # Hashing
+    "hs_md5",
+    "hs_sha1",
+    "hs_sha256",
+    # Iteration helpers
+    "it_keys",
+    "it_values",
+    "it_flatten",
+    "it_group_by",
+    "it_sort_by",
+    "it_unique",
+    "it_unique_by",
+    "it_count_by",
+    "it_min_by",
+    "it_max_by",
+    # Messaging
+    "msg_print",
+    "msg_info",
+    "msg_warn",
+    "msg_error",
+    "msg_verbose",
+    "msg_trace",
+    # Regex
+    "re_search",
+    "re_match",
+    "re_findall",
+    "re_sub",
+    "re_split",
+    "re_search_fancy",
+    "re_match_fancy",
+    "re_findall_fancy",
+    "re_sub_fancy",
+    "re_split_fancy",
+    # Template
+    "tpl_render_str",
+    "tpl_render_from_mold",
+]

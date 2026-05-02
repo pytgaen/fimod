@@ -14,7 +14,7 @@ fn test_batch_two_files_output_dir() {
         &dir,
         "upper.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["name"] = data["name"].upper()
     return data
 "#,

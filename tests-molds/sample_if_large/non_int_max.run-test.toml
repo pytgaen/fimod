@@ -1,0 +1,5 @@
+input_file = "head.input.json"
+exit_code = 1
+
+[args]
+max = "abc"

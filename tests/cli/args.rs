@@ -180,7 +180,7 @@ fn test_arg_single() {
 
     // Pass threshold as --arg, use it via args dict
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     limit = int(args["threshold"])
     return [u for u in data if u["age"] > limit]
 "#;
@@ -201,7 +201,7 @@ fn test_arg_multiple() {
     let input = setup_input(&dir, "data.json", r#"{"name": "world"}"#);
 
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"message": f"{args['prefix']} {data['name']}{args['suffix']}"}
 "#;
     let mold = setup_mold(&dir, "greet.py", script);
@@ -287,10 +287,10 @@ fn test_debug_shows_script() {
         .success()
         .stderr(predicate::str::contains("[debug] script:"))
         .stderr(predicate::str::contains(
-            "def transform(data, args, env, headers):",
+            "def transform(data, args, env, headers, **_):",
         ))
         .stderr(predicate::str::contains(
-            "transform(data, args, env, headers)",
+            "transform(data, args=args, env=env, headers=headers, pipeline=pipeline)",
         ));
 }
 
@@ -323,7 +323,7 @@ fn test_debug_shows_mold_file_source() {
     let mold = setup_mold(
         &dir,
         "id.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -707,7 +707,7 @@ fn test_fimod_defaults_output_format() {
     let mold = setup_mold(
         &dir,
         "to_yaml.py",
-        "# fimod: output-format=yaml\ndef transform(data, args, env, headers):\n    return data\n",
+        "# fimod: output-format=yaml\ndef transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -725,7 +725,7 @@ fn test_fimod_defaults_compact() {
     let mold = setup_mold(
         &dir,
         "compact.py",
-        "# fimod: output-format=json-compact\ndef transform(data, args, env, headers):\n    return data\n",
+        "# fimod: output-format=json-compact\ndef transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     let output = assert_cmd::cargo_bin_cmd!("fimod")
@@ -748,7 +748,7 @@ fn test_fimod_defaults_cli_overrides_mold() {
     let mold = setup_mold(
         &dir,
         "to_yaml.py",
-        "# fimod: output-format=yaml\ndef transform(data, args, env, headers):\n    return data\n",
+        "# fimod: output-format=yaml\ndef transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     // CLI --output-format json should override mold's yaml
@@ -767,7 +767,7 @@ fn test_fimod_defaults_csv_delimiter() {
     let mold = setup_mold(
         &dir,
         "semi.py",
-        "# fimod: input-format=csv, csv-delimiter=;\ndef transform(data, args, env, headers):\n    return data\n",
+        "# fimod: input-format=csv, csv-delimiter=;\ndef transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -803,7 +803,7 @@ fn test_fimod_defaults_raw_output() {
     let mold = setup_mold(
         &dir,
         "raw.py",
-        "# fimod: output-format=txt\ndef transform(data, args, env, headers):\n    return data[\"name\"]\n",
+        "# fimod: output-format=txt\ndef transform(data, args, env, headers, **_):\n    return data[\"name\"]\n",
     );
 
     let output = assert_cmd::cargo_bin_cmd!("fimod")
@@ -852,7 +852,7 @@ fn test_raw_mode_binary_rejects_mold() {
     let mold = setup_mold(
         &dir,
         "id.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")

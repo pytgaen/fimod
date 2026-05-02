@@ -697,7 +697,7 @@ fimod s -i data.json -m transform.py --msg-level=verbose  # + msg_verbose()
 fimod s -i data.json -m transform.py --msg-level=trace    # + msg_trace()
 ```
 
-`--quiet` and `--msg-level` are mutually exclusive. See [built-ins reference](../reference/built-ins.md#-message-functions-msg_) for the full visibility table.
+`--quiet` and `--msg-level` are mutually exclusive. See [built-ins reference](../reference/built-ins.md#message-functions-msg_) for the full visibility table.
 
 ---
 

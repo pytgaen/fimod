@@ -1,4 +1,4 @@
-def transform(data):
+def transform(data, **_):
     """
     Map/Transform objects to a new structure.
     Equivalent to: jq 'map({user: .name, contact: .email})'

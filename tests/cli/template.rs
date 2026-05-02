@@ -78,7 +78,7 @@ fn test_tpl_render_from_mold() {
     std::fs::write(
         mold_dir.join("my_mold.py"),
         r#""""My test mold."""
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return tpl_render_from_mold("templates/hello.j2", data)
 "#,
     )
@@ -99,4 +99,69 @@ def transform(data, args, env, headers):
         .assert()
         .success()
         .stdout(predicate::str::contains("Hello fimod!"));
+}
+
+#[test]
+fn test_mold_dir_single_py_fallback() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold_dir = dir.path().join("my_report");
+    std::fs::create_dir_all(&mold_dir).unwrap();
+
+    std::fs::write(mold_dir.join("hello.j2"), "Hello {{ name }}!").unwrap();
+
+    // Script not named after the directory nor __main__.py
+    std::fs::write(
+        mold_dir.join("render.py"),
+        r#""""My report mold."""
+def transform(data, args, env, headers, **_):
+    return tpl_render_from_mold("hello.j2", data)
+"#,
+    )
+    .unwrap();
+
+    let input = setup_input(&dir, "data.json", r#"{"name": "fimod"}"#);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-m",
+            mold_dir.to_str().unwrap(),
+            "--output-format",
+            "txt",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello fimod!"));
+}
+
+#[test]
+fn test_mold_dir_ambiguous_py_error() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold_dir = dir.path().join("ambiguous");
+    std::fs::create_dir_all(&mold_dir).unwrap();
+
+    std::fs::write(
+        mold_dir.join("render.py"),
+        "def transform(data, **_): return data",
+    )
+    .unwrap();
+    std::fs::write(
+        mold_dir.join("helper.py"),
+        "def transform(data, **_): return data",
+    )
+    .unwrap();
+
+    let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", mold_dir.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("ambiguous mold directory"))
+        .stderr(predicate::str::contains(
+            "pass the script path directly with -m",
+        ));
 }

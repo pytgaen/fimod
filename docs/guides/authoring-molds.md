@@ -197,7 +197,7 @@ def transform(data, args, env, headers):
     return [{"name": row["name"], "score": int(row["score"])} for row in data]
 ```
 
-Users can still override with explicit CLI flags. See [Mold Defaults](../reference/mold-defaults.md).
+Users can still override with explicit CLI flags. Use `!=` instead of `=` to lock a directive so the CLI cannot override it. See [Mold Defaults](../reference/mold-defaults.md).
 
 The module-level docstring (`"""..."""`) is used by `fimod mold list` to describe the mold in registries.
 

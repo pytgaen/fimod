@@ -33,7 +33,7 @@ Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 | Nested subscript assignment | `data[0][1] = x`, `matrix[i][j] = v` |
 | Chain assignment | `a = b = 1` assigns the same value to multiple targets |
 | Named keyword args | `str.split(sep=",")`, `max(items, key=...)` |
-| Set/frozenset operators | `s1 \| s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
+| Set/frozenset operators | `s1 | s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
 
 ### Not Yet Supported
@@ -43,7 +43,7 @@ Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 | Classes | Coming soon |
 | Match statements | Coming soon |
 | Context managers (`with`) | Coming soon |
-| Dict merge operator | `a \| b` not supported — use `{**a, **b}` or `a.update(b)` |
+| Dict merge operator | `a | b` not supported — use `{**a, **b}` or `a.update(b)` |
 | Third-party packages | Will probably never be supported |
 | Full standard library | Only selected modules |
 
@@ -155,7 +155,7 @@ Monty supports configurable limits through the `LimitTracker` trait:
 - **Recursion depth**: Prevent stack overflow
 - **Execution time/steps**: Prevent infinite loops
 
-Fimod uses `LimitedTracker` with hard defaults (`max_duration = 2m`, `max_memory = 1GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/sandbox.md) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
+Fimod uses `LimitedTracker` with hard defaults (`max_duration = 2m`, `max_memory = 1GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
 
 ## Performance
 
@@ -179,12 +179,12 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 5. **You can use `import math`** — `math.floor`, `math.sqrt`, `math.factorial`, `math.pi`, etc.
 6. **You can use `import datetime`** — `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`. Datetime objects returned in the output are automatically serialized as ISO 8601 strings
 7. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
-8. **You only need to declare the parameters you use** — `def transform(data, args, **_):` is valid; fimod passes `args`, `env`, and `headers` as keyword arguments
+8. **You only need to declare the parameters you use** — `def transform(data, args, **_):` is valid; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments
 9. **You cannot read files** — `Path(...)` calls return `None` in fimod
 10. **You cannot access env vars via os** — `os.getenv(...)` returns `None`; use the `env` parameter with `--env PATTERN` instead
 11. **You cannot import pip packages** — no `requests`, `pandas`, etc.
 12. **You cannot define classes** — use dicts and functions instead
-13. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, data out via `return`
+13. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
 14. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
 
 ## Interactive REPL

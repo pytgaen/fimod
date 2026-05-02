@@ -1,4 +1,4 @@
-def transform(data):
+def transform(data, **_):
     """
     Filter a list of objects.
     Equivalent to: jq 'map(select(.age > 30 and .role == "admin"))'

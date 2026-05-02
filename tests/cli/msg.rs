@@ -6,7 +6,7 @@ fn test_msg_print() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"name": "alice"}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_print("hello stderr")
     return data
 "#;
@@ -26,7 +26,7 @@ fn test_msg_info() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_info("starting")
     return data
 "#;
@@ -46,7 +46,7 @@ fn test_msg_warn() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_warn("caution")
     return data
 "#;
@@ -66,7 +66,7 @@ fn test_msg_error() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_error("something broke")
     return data
 "#;
@@ -86,7 +86,7 @@ fn test_msg_multiple_in_mold_file() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"val": 42}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_info("processing record")
     msg_warn("value is high")
     return data
@@ -110,7 +110,7 @@ fn test_msg_stdout_not_polluted() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"ok": true}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_print("noise")
     msg_info("info")
     msg_warn("warn")

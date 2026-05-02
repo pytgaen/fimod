@@ -186,6 +186,19 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         msg_level: 1,
         mold_base_dir,
         policy: &policy,
+        current_step_idx: 0,
+        total_steps: 1,
+        remaining_steps: vec![],
+        input_path: None,
+        output_path: None,
+        in_place: false,
+        slurp: false,
+        no_input: false,
+        input_format: None,
+        output_format: None,
+        output_file_override: None,
+        format_override_init: None,
+        step_args: None,
     };
     let execute_result = engine::execute_mold(script, convert::json_to_monty(&input_data), &opts);
 
@@ -194,7 +207,10 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         std::env::remove_var(k);
     }
 
-    let (result, exit_code, fmt_override, _out_file) = execute_result?;
+    let exec = execute_result?;
+    let result = exec.value;
+    let exit_code = exec.exit_code;
+    let fmt_override = exec.format_override;
 
     let actual_exit = exit_code.unwrap_or(0);
     if actual_exit != case.meta.exit_code {

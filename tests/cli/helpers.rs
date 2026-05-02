@@ -2,14 +2,14 @@ use assert_fs::prelude::*;
 
 /// Helper: create a mold script that adds a greeting field
 pub const GREET_MOLD: &str = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["greeting"] = f"Hello {data['name']}"
     return data
 "#;
 
 /// Helper: create a mold for CSV arrays (adds greeting to each row)
 pub const CSV_GREET_MOLD: &str = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         row["greeting"] = f"Hello {row['name']}"
     return data
@@ -17,7 +17,7 @@ def transform(data, args, env, headers):
 
 /// Helper: create a mold that uppercases content (TXT now passes raw string)
 pub const UPPER_MOLD: &str = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return data.strip().upper()
 "#;
 

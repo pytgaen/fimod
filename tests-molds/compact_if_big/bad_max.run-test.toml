@@ -1,0 +1,5 @@
+input_file = "big.input.json"
+exit_code = 1
+
+[args]
+max = "abc"
