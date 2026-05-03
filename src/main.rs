@@ -277,8 +277,12 @@ enum MoldAction {
     },
     /// Show metadata and defaults for a mold
     Show {
-        /// Mold name (use @registry/name to disambiguate)
-        name: String,
+        /// Mold name (use @registry/name to disambiguate); derived from filename when --path is used
+        #[arg(required_unless_present = "path")]
+        name: Option<String>,
+        /// Inspect a mold file directly by path, without registry lookup
+        #[arg(long, value_name = "FILE", conflicts_with = "registry")]
+        path: Option<std::path::PathBuf>,
         /// Registry to search (searches all registries if not specified)
         #[arg(short, long, add = ArgValueCompleter::new(complete_sources))]
         registry: Option<String>,
@@ -539,9 +543,13 @@ fn dispatch(cli: Cli) -> Result<()> {
             } => registry::list_molds(registry.as_deref(), output_format),
             MoldAction::Show {
                 name,
+                path,
                 registry,
                 output_format,
-            } => registry::show_mold(&name, registry.as_deref(), output_format),
+            } => match path {
+                Some(p) => registry::show_mold_by_path(&p, name.as_deref(), output_format),
+                None => registry::show_mold(&name.unwrap(), registry.as_deref(), output_format),
+            },
             MoldAction::Test { mold, tests_dir } => test_runner::run(&mold, &tests_dir),
         },
         Some(Commands::Monty { action }) => match action {
@@ -881,17 +889,37 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         }
     }
 
-    // Effective input format (CLI > first mold defaults)
-    let effective_input_format = shape
-        .input_format
-        .as_deref()
-        .or(first_defaults.input_format.as_deref());
+    // Effective input format (CLI > first mold defaults, unless directive is forced)
+    let effective_input_format = if first_defaults.forced.contains("input-format") {
+        if debug {
+            eprintln!(
+                "[debug] mold forces input-format={}",
+                first_defaults.input_format.as_deref().unwrap_or("?")
+            );
+        }
+        first_defaults.input_format.as_deref()
+    } else {
+        shape
+            .input_format
+            .as_deref()
+            .or(first_defaults.input_format.as_deref())
+    };
 
-    // Effective output format (CLI > last mold defaults)
-    let effective_output_format = shape
-        .output_format
-        .as_deref()
-        .or(last_defaults.output_format.as_deref());
+    // Effective output format (CLI > last mold defaults, unless directive is forced)
+    let effective_output_format = if last_defaults.forced.contains("output-format") {
+        if debug {
+            eprintln!(
+                "[debug] mold forces output-format={}",
+                last_defaults.output_format.as_deref().unwrap_or("?")
+            );
+        }
+        last_defaults.output_format.as_deref()
+    } else {
+        shape
+            .output_format
+            .as_deref()
+            .or(last_defaults.output_format.as_deref())
+    };
 
     // Build HTTP options
     let http_opts = HttpOptions {
@@ -978,16 +1006,30 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         }
 
         let data = convert::json_into_monty(combined);
-        let (result, opt_exit_code, fmt_override, output_file_override) = execute_chain(
+        let slurp_context = serde_json::json!({
+            "input": null,
+            "output": shape.output,
+            "input_format": effective_input_format,
+            "output_format": effective_output_format,
+            "in_place": false,
+            "slurp": true,
+            "no_input": false,
+        });
+        let slurp_exec = execute_chain(
             &scripts,
             data,
             &extra_args,
             &env_value,
             &Value::Null,
+            &slurp_context,
             debug,
             msg_level,
             &policy,
         )?;
+        let result = slurp_exec.value;
+        let opt_exit_code = slurp_exec.exit_code;
+        let fmt_override = slurp_exec.format_override;
+        let output_file_override = slurp_exec.output_file;
 
         // set_output_file() overrides the CLI -o path for multi-file slurp output
         let actual_output = output_file_override.as_deref().or(shape.output.as_deref());
@@ -1054,6 +1096,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                 msg_level,
                 Some(per_file_output.as_str()),
                 effective_output_format,
+                shape.in_place,
                 shape.check,
                 &http_opts,
                 &policy,
@@ -1096,6 +1139,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         msg_level,
         output_path,
         effective_output_format,
+        shape.in_place,
         shape.check,
         &http_opts,
         &policy,

@@ -63,7 +63,7 @@ fn test_chain_two_molds() {
         &dir,
         "upper.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["name"] = data["name"].upper()
     return data
 "#,
@@ -74,7 +74,7 @@ def transform(data, args, env, headers):
         &dir,
         "greet.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["greeting"] = f"Hello {data['name']}"
     return data
 "#,
@@ -96,7 +96,7 @@ fn test_chain_expression_then_mold() {
     let mold = setup_mold(
         &dir,
         "greet.py",
-        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
     );
 
     // -e passes data through, then -m adds greeting
@@ -143,7 +143,7 @@ fn test_chain_long_form_equals() {
     let mold = setup_mold(
         &dir,
         "greet.py",
-        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -167,7 +167,7 @@ fn test_chain_expr_mold_expr_ordering() {
     let mold = setup_mold(
         &dir,
         "greet.py",
-        "def transform(data, args, env, headers):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")

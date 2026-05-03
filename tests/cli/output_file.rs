@@ -15,7 +15,7 @@ fn test_set_output_file_redirects_to_file() {
         "m.py",
         &format!(
             r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_file("{}")
     return data
 "#,
@@ -49,7 +49,7 @@ fn test_set_output_file_overrides_dash_o() {
         "m.py",
         &format!(
             r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_file("{}")
     return data
 "#,
@@ -85,7 +85,7 @@ fn test_set_output_file_with_explicit_path() {
         "m.py",
         &format!(
             r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_file("{}")
     set_input_format("yaml")
     return data
@@ -118,7 +118,7 @@ fn test_set_output_file_from_arg() {
         &dir,
         "m.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     filename = args.get("out", "default.json")
     set_output_file(filename)
     return data
@@ -154,7 +154,7 @@ fn test_set_output_file_empty_path_error() {
         &dir,
         "m.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_file("")
     return data
 "#,
@@ -179,7 +179,7 @@ fn test_set_output_format_raw_without_http_input_errors() {
         &dir,
         "m.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_format("raw")
     set_output_file("out.bin")
     return data
@@ -205,7 +205,7 @@ fn test_set_output_format_raw_in_intermediate_step_errors() {
         &dir,
         "step1.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_format("raw")
     return data
 "#,
@@ -214,7 +214,7 @@ def transform(data, args, env, headers):
         &dir,
         "step2.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return data
 "#,
     );
@@ -242,7 +242,7 @@ fn test_set_output_file_in_multi_slurp() {
         "m.py",
         &format!(
             r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_output_file("{}")
     return {{"total": sum(d["x"] for d in data)}}
 "#,

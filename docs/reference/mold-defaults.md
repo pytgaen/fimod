@@ -27,15 +27,16 @@ Running this with just `fimod s -i data.csv -m script.py` automatically uses `;`
 | `csv-header=<cols>` | value | Explicit column names (comma-separated) |
 | `csv-no-input-header` | flag | Input has no header row |
 | `csv-no-output-header` | flag | Don't write header in output |
-| `raw-mode=<mode>` | value | Raw output mode: `no-quote` (strings without JSON quotes) or `binary` (raw bytes) |
-| `description=<text>` | value | One-line description shown by `fimod mold list` |
+| `no-follow` | flag | Don't follow HTTP redirects |
+| `arg=<name> [desc]` | value | Document an `--arg` parameter (name + optional description) |
+| `env=<VAR> [desc]` | value | Document an `--env` variable (name + optional description) |
 
 ---
 
 ## 📏 Priority and parsing rules
 
-!!! success "CLI always wins"
-    Explicit CLI arguments always override mold defaults.
+!!! success "CLI wins by default"
+    Explicit CLI arguments always override mold defaults declared with `=`.
 
 - Directives are read from the **top of the file** — scanning stops at the first non-comment, non-blank line
 - Multiple key-value pairs can appear on the **same `# fimod:` line**, comma-separated
@@ -44,23 +45,59 @@ Running this with just `fimod s -i data.csv -m script.py` automatically uses `;`
 
 ---
 
+## 🔒 Forced directives (`!=`)
+
+Use `!=` instead of `=` to declare a directive as **forced** — the CLI cannot override it.
+
+```python
+# fimod: output-format!=yaml
+def transform(data, **_):
+    return data
+```
+
+```bash
+# The mold forces YAML regardless of what the caller passes
+fimod s -i data.json -m strict.py --output-format json
+# → output is YAML, not JSON
+```
+
+This is useful for molds that produce a format incompatible with others (e.g., a mold that always emits YAML for a downstream tool).
+
+!!! tip "Debug info"
+    Run with `--debug` to see which directives are forced:
+    ```
+    [debug] mold forces output-format=yaml
+    ```
+
+Forced and default directives can be mixed on the same mold:
+
+```python
+# fimod: input-format!=csv, output-format=json
+```
+
+Here `input-format` is locked to `csv`; `output-format` is a suggestion that the CLI can override.
+
+---
+
 ## 💡 Complete example
 
 ```python
-# fimod: input-format=csv
+# fimod: input-format!=csv
 # fimod: output-format=json
 # fimod: csv-delimiter=;
 # fimod: csv-no-input-header
-# fimod: output-format=json-compact
 def transform(data, args, env, headers):
     # data = [{"col0": ..., "col1": ...}, ...]
     return [{"name": row["col0"], "value": int(row["col1"])} for row in data]
 ```
 
 ```bash
-# ✅ Use defaults
+# ✅ Use defaults — input-format is locked to csv
 fimod s -i data.csv -m script.py
 
-# 🔀 Override output format at call time
+# 🔀 Override output format at call time (allowed — it's a default, not forced)
 fimod s -i data.csv -m script.py --output-format yaml
+
+# ⚠️  --input-format is ignored — the mold forces csv
+fimod s -i data.csv -m script.py --input-format json
 ```

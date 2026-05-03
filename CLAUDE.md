@@ -6,15 +6,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fimod is a Rust CLI that transforms structured data files by executing Python "mold" scripts via [Monty](https://github.com/pydantic/monty) (Pydantic's embedded Python engine). No system Python installation required.
 
+## CLI usage — always prefix verbose commands with `rtk`
+
+This project follows the `rtk-cli-optimizer` skill convention. All verbose CLI
+calls (`cargo`, `git`, `gh`, `grep`, `find`, `ls`, `tree`, `diff`, etc.) MUST be
+prefixed with `rtk` to compress output before it reaches the model context
+(60-90% token savings). Reference: `~/.claude/skills/rtk-cli-optimizer/SKILL.md`.
+
+- Chains (`&& / || / ;`): prefix **each** command (`rtk cargo build && rtk cargo test`).
+- Pipes (`|`): prefix only the **left side** (`rtk git log | head -20`).
+- Never prefix: editors (`vim`, `less`, REPL), or commands where exact output is
+  required for diagnosis. If `rtk` filtered output is too condensed, read the tee
+  file printed on failure (`~/.local/share/rtk/tee/`) before falling back to
+  `rtk run <cmd>` (raw passthrough).
+
 ## Build & Test Commands
 
 ```bash
-cargo build                    # Debug build
-cargo test                     # All tests (unit + integration)
-cargo test --lib               # Unit tests only
-cargo test --test cli           # Integration tests only
-cargo test <test_name>          # Single test by name
-cargo build --release           # Optimized release binary
+rtk cargo build                    # Debug build
+rtk cargo test                     # All tests (unit + integration)
+rtk cargo test --lib               # Unit tests only
+rtk cargo test --test cli          # Integration tests only
+rtk cargo test <test_name>         # Single test by name
+rtk cargo build --release          # Optimized release binary
 ```
 
 Task runner (`task`) is also available — see `Taskfile.yml` for `task test`, `task build:release`, `task doc:serve`, etc.
@@ -47,9 +61,9 @@ The intermediate representation between formats is always `serde_json::Value`. M
 Integration tests: `tests/cli/<module>.rs` files, referenced by `tests/cli.rs`. Unit tests: embedded in `format.rs`. Mold fixture tests: `tests-molds/` (see `mold-tests` skill for fixture format details).
 
 ```bash
-cargo test --test cli http          # Run CLI tests matching "http"
-cargo test --lib format             # Run unit tests in format.rs matching "format"
-cargo test --test molds_test        # All mold fixture tests
+rtk cargo test --test cli http      # Run CLI tests matching "http"
+rtk cargo test --lib format         # Run unit tests in format.rs matching "format"
+rtk cargo test --test molds_test    # All mold fixture tests
 ```
 
 ## Code Style
@@ -59,7 +73,7 @@ cargo test --test molds_test        # All mold fixture tests
 ## Workflow
 
 After implementing or modifying a feature, always:
-1. Run `cargo clippy` and `cargo test` before considering the task complete.
+1. Run `rtk cargo clippy` and `rtk cargo test` before considering the task complete.
 2. Check if documentation needs updating (README.md, docs/built-ins.md, docs/cli-reference.md, docs/mold-scripting.md) and propose the changes.
 3. When updating ROADMAP.md, move completed items to the appropriate documentation files (built-ins.md, cli-reference.md, etc.) rather than just marking them as done in the roadmap.
 

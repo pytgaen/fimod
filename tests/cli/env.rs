@@ -75,7 +75,7 @@ fn test_env_in_mold_file() {
     let mold = setup_mold(
         &dir,
         "greet.py",
-        r#"def transform(data, args, env, headers):
+        r#"def transform(data, args, env, headers, **_):
     prefix = env.get("GREETING_PREFIX", "Hello")
     return {"msg": f"{prefix} {data['name']}"}
 "#,

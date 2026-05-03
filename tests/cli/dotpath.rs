@@ -121,7 +121,7 @@ fn test_dp_set_no_mutation() {
 
     // dp_set returns a copy; verify original is unchanged in mold
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     modified = dp_set(data, "a.b", 999)
     return {"original_b": dp_get(data, "a.b"), "modified_b": dp_get(modified, "a.b")}
 "#;

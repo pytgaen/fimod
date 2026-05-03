@@ -253,7 +253,7 @@ fn test_mold_fixtures() {
 #[test]
 fn test_monty_dict_update() {
     let expr =
-        "def transform(data, args, env, headers):\n    data.update({\"b\": 2})\n    return data";
+        "def transform(data, args, env, headers, **_):\n    data.update({\"b\": 2})\n    return data";
     assert_cmd::cargo_bin_cmd!("fimod")
         .arg("shape")
         .args(["-i", "tests/data/monty/dict_a.json", "-e", expr])

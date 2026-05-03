@@ -74,7 +74,7 @@ fn test_set_exit_custom_code() {
     let input = setup_input(&dir, "data.json", r#"{"status": "error"}"#);
 
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_exit(42)
     return data
 "#;
@@ -94,7 +94,7 @@ fn test_set_exit_priority_over_check() {
 
     // set_exit(5) should override --check (which would give 0 for truthy)
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     set_exit(5)
     return data
 "#;

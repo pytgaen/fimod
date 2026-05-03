@@ -6,7 +6,7 @@ fn test_gk_fail_exits_1() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_fail("blocked by gatekeeper")
     return data
 "#;
@@ -25,7 +25,7 @@ fn test_gk_fail_still_returns_data() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_fail("problem")
     return data
 "#;
@@ -44,7 +44,7 @@ fn test_gk_assert_passing() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"version": "v2"}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_assert(data.get("version"), "missing version")
     return data
 "#;
@@ -63,7 +63,7 @@ fn test_gk_assert_failing_none() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"name": "alice"}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_assert(data.get("version"), "missing version field")
     return data
 "#;
@@ -82,7 +82,7 @@ fn test_gk_assert_failing_false() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"coverage": 50}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_assert(data["coverage"] >= 80, "coverage below 80%")
     return data
 "#;
@@ -101,7 +101,7 @@ fn test_gk_assert_multiple_first_fails() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"a": 1}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_assert(data.get("x"), "missing x")
     gk_assert(data.get("a"), "missing a")
     return data
@@ -122,7 +122,7 @@ fn test_gk_warn_falsy_emits_warning() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"items": []}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_warn(len(data.get("items", [])) > 0, "items list is empty")
     return data
 "#;
@@ -141,7 +141,7 @@ fn test_gk_warn_truthy_silent() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"items": [1, 2]}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     gk_warn(len(data["items"]) > 0, "items list is empty")
     return data
 "#;
@@ -163,7 +163,7 @@ fn test_gk_combined_with_msg() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"coverage": 50, "version": "v2"}"#);
 
-    let mold = r#"def transform(data, args, env, headers):
+    let mold = r#"def transform(data, args, env, headers, **_):
     msg_info("validating record")
     gk_assert(data.get("version"), "missing version")
     gk_assert(data["coverage"] >= 80, "coverage too low")

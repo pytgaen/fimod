@@ -8,7 +8,7 @@ fn test_lines_input() {
     let mold = setup_mold(
         &dir,
         "identity.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")

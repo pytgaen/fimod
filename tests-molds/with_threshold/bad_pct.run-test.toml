@@ -1,0 +1,6 @@
+input_file = "p80_filter.input.json"
+exit_code = 1
+
+[args]
+col = "duration_ms"
+pct = "abc"

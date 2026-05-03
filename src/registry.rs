@@ -1462,7 +1462,7 @@ enum MoldDetail {
 }
 
 struct MoldMatch {
-    reg_name: String,
+    reg_name: Option<String>,
     prio_label: String,
     detail: MoldDetail,
 }
@@ -1490,7 +1490,7 @@ fn collect_mold_matches(
                     .with_context(|| format!("Cannot read {script_path:?}"))?;
                 let defaults = crate::mold::parse_mold_defaults(&script);
                 matches.push(MoldMatch {
-                    reg_name: reg_name.to_string(),
+                    reg_name: Some(reg_name.to_string()),
                     prio_label: label,
                     detail: MoldDetail::Local {
                         script_path,
@@ -1506,7 +1506,7 @@ fn collect_mold_matches(
                     continue;
                 };
                 matches.push(MoldMatch {
-                    reg_name: reg_name.to_string(),
+                    reg_name: Some(reg_name.to_string()),
                     prio_label: label,
                     detail: MoldDetail::Remote {
                         registry_url: source.url.clone().unwrap_or_default(),
@@ -1526,7 +1526,10 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
     } else {
         format!(" {}", m.prio_label)
     };
-    println!("{mold_name}  [{}]{marker}", m.reg_name);
+    match &m.reg_name {
+        Some(name) => println!("{mold_name}  [{name}]{marker}"),
+        None => println!("{mold_name}"),
+    }
     match &m.detail {
         MoldDetail::Local {
             script_path,
@@ -1678,11 +1681,68 @@ pub fn show_mold(
             if !explicit && matches.len() > 1 {
                 let others: Vec<String> = matches[1..]
                     .iter()
-                    .map(|m| format!("fimod mold show {}/{mold_name}", m.reg_name))
+                    .map(|m| {
+                        format!(
+                            "fimod mold show {}/{mold_name}",
+                            m.reg_name.as_deref().unwrap_or("")
+                        )
+                    })
                     .collect();
                 println!();
                 println!("  See also:       {}", others.join(", "));
             }
+        }
+    }
+    Ok(())
+}
+
+pub fn show_mold_by_path(
+    path: &Path,
+    name_override: Option<&str>,
+    output_format: MoldShowFormat,
+) -> Result<()> {
+    let script_path = path
+        .canonicalize()
+        .with_context(|| format!("Cannot resolve path: {}", path.display()))?;
+
+    let script = fs::read_to_string(&script_path)
+        .with_context(|| format!("Cannot read {}", script_path.display()))?;
+
+    let defaults = crate::mold::parse_mold_defaults(&script);
+
+    let mold_name = name_override.map(str::to_string).unwrap_or_else(|| {
+        let stem = script_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if stem == "__main__" {
+            script_path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or(stem)
+                .to_string()
+        } else {
+            stem.to_string()
+        }
+    });
+
+    let m = MoldMatch {
+        reg_name: None,
+        prio_label: String::new(),
+        detail: MoldDetail::Local {
+            script_path,
+            defaults,
+        },
+    };
+
+    match output_format {
+        MoldShowFormat::Json => {
+            let json = mold_match_to_json(&mold_name, &m);
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        MoldShowFormat::Text => {
+            print_mold_match(&mold_name, &m);
         }
     }
     Ok(())

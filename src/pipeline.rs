@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
@@ -7,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use monty::MontyObject;
 use serde_json::Value;
 
-use crate::engine::MoldResult;
+use crate::engine::{MoldExecResult, MoldResult, PendingOp};
 use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep};
 use crate::sandbox::SandboxPolicy;
@@ -62,6 +63,7 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
                     script,
                     defaults: mold::MoldDefaults::default(),
                     base_dir,
+                    runtime_args: None,
                 });
             }
             ScriptRef::Mold(m) => {
@@ -80,6 +82,7 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
                     script,
                     defaults,
                     base_dir,
+                    runtime_args: None,
                 });
             }
         }
@@ -87,20 +90,11 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
     Ok(steps)
 }
 
-/// Execute a chain of mold scripts sequentially.
+/// Execute a chain of mold scripts sequentially, with dynamic step insertion.
 ///
 /// The output of each step becomes the input of the next.
-/// `extra_args` (the `args` dict) is passed to every step.
-/// `env_value` is the filtered environment dict (always passed).
-/// `csv_headers` are passed as `headers` to every step (None if not CSV).
-///
-/// Returns `(result, optional_exit_code, optional_format_override)`.
-/// The format override is from the last step's `set_input_format()` / `set_output_format()` call (if any).
-/// Between steps, if `set_input_format()` was called, the result is serialized
-/// and re-parsed with the requested format.
-///
-/// `initial_data` is taken as an owned `MontyObject` so the caller can pass
-/// the result of `csv_to_monty` without an extra `json_to_monty` round-trip.
+/// Molds can inject new steps via `pipeline.insert_next()` / `pipeline.append()`,
+/// and mutate future steps via `pipeline.step(i)['key'] = value`.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_chain(
     steps: &[MoldStep],
@@ -108,47 +102,173 @@ pub fn execute_chain(
     extra_args: &[(String, String)],
     env_value: &Value,
     headers_value: &Value,
+    context_base: &Value,
     debug: bool,
     msg_level: u8,
     policy: &SandboxPolicy,
 ) -> MoldResult {
+    let mut steps: Vec<MoldStep> = steps.to_vec();
     let mut data = initial_data;
     let mut last_exit = None;
-    let is_last_step = |i: usize| i == steps.len() - 1;
+    // Pending mutations keyed by absolute step index → {field → value}.
+    let mut mutations: HashMap<usize, HashMap<String, Value>> = HashMap::new();
 
-    for (i, step) in steps.iter().enumerate() {
+    // Extract static pipeline metadata from context_base.
+    let input_path = context_base.get("input").and_then(Value::as_str);
+    let output_path = context_base.get("output").and_then(Value::as_str);
+    let in_place = context_base
+        .get("in_place")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let slurp = context_base
+        .get("slurp")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let no_input = context_base
+        .get("no_input")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let base_input_format = context_base.get("input_format").and_then(Value::as_str);
+    let base_output_format = context_base.get("output_format").and_then(Value::as_str);
+
+    let mut i = 0;
+    while i < steps.len() {
+        let step_script = steps[i].script.clone();
+        let step_display = steps[i].display.clone();
+        let step_base_dir = steps[i].base_dir.clone();
+        // Pending `set('args', ...)` mutation overrides the static spec for this step.
+        let step_runtime_args = mutations
+            .get(&i)
+            .and_then(|m| m.get("args"))
+            .cloned()
+            .or_else(|| steps[i].runtime_args.clone());
+
         if debug {
-            eprintln!("[debug] mold: {}", step.display);
+            eprintln!("[debug] mold: {step_display}");
         }
+
+        // Apply pending format mutations for this step.
+        let step_input_format = mutations
+            .get(&i)
+            .and_then(|m| m.get("input_format"))
+            .and_then(Value::as_str)
+            .or(base_input_format);
+        let step_output_format_mutation = mutations
+            .get(&i)
+            .and_then(|m| m.get("output_format"))
+            .and_then(Value::as_str)
+            .map(String::from);
+        let step_output_format = step_output_format_mutation
+            .as_deref()
+            .or(base_output_format);
+        let step_output_file_override = mutations
+            .get(&i)
+            .and_then(|m| m.get("output_file"))
+            .and_then(Value::as_str)
+            .map(String::from);
+
+        // Build remaining_steps specs so pipeline.step(j) works for j > i.
+        // Pending `set('args', ...)` mutations targeting future steps are overlaid
+        // here so that a later `step(j).get('args')` reflects the mutation.
+        let remaining_steps: Vec<Value> = steps[i + 1..]
+            .iter()
+            .enumerate()
+            .map(|(offset, step)| {
+                let abs_idx = i + 1 + offset;
+                let mut spec = step_to_remaining_spec(step);
+                if let Some(args_mut) = mutations.get(&abs_idx).and_then(|m| m.get("args")) {
+                    if let Some(obj) = spec.as_object_mut() {
+                        obj.insert("args".into(), args_mut.clone());
+                    }
+                }
+                spec
+            })
+            .collect();
+
         let opts = engine::MoldOptions {
             extra_args,
             env_value,
             headers_value,
             debug,
             msg_level,
-            mold_base_dir: step.base_dir.as_deref(),
+            mold_base_dir: step_base_dir.as_deref(),
             policy,
+            current_step_idx: i,
+            total_steps: steps.len(),
+            remaining_steps,
+            input_path,
+            output_path,
+            in_place,
+            slurp,
+            no_input,
+            input_format: step_input_format,
+            output_format: step_output_format,
+            output_file_override: step_output_file_override,
+            format_override_init: step_output_format_mutation.clone(),
+            step_args: step_runtime_args,
         };
-        let (result, exit_code, fmt_override, out_file) =
-            engine::execute_mold(&step.script, data, &opts)?;
+        let exec = engine::execute_mold(&step_script, data, &opts)?;
 
-        if let Some(c) = exit_code {
+        // Accumulate pending mutations from this execution.
+        for m in exec.pending_mutations {
+            mutations
+                .entry(m.step_idx)
+                .or_default()
+                .insert(m.key, m.value);
+        }
+
+        // Apply pending exit mutations for THIS step (from prior steps' mutations).
+        if let Some(step_mutations) = mutations.remove(&i) {
+            for (key, val) in step_mutations {
+                if key == "exit" {
+                    if let Some(code) = val.as_i64() {
+                        last_exit = Some(code as i32);
+                    }
+                }
+            }
+        }
+
+        // Inject new steps requested by this mold.
+        let mut insert_at = i + 1;
+        for ps in exec.pending_steps {
+            let new_step = resolve_pending(ps.spec)?;
+            match ps.op {
+                PendingOp::InsertNext => {
+                    steps.insert(insert_at, new_step);
+                    insert_at += 1;
+                }
+                PendingOp::Append => {
+                    steps.push(new_step);
+                }
+            }
+        }
+
+        let result = exec.value;
+        let fmt_override = exec.format_override;
+        let out_file = exec.output_file;
+
+        if let Some(c) = exec.exit_code {
             last_exit = Some(c);
         }
 
-        // Handle set_input_format() between chain steps
+        let is_last = i == steps.len() - 1;
+
         if let Some(ref fmt_name) = fmt_override {
-            if is_last_step(i) {
-                // Last step: pass format override and output_file to the caller
-                return Ok((result, last_exit, fmt_override, out_file));
+            if is_last {
+                return Ok(MoldExecResult {
+                    value: result,
+                    exit_code: last_exit,
+                    format_override: fmt_override,
+                    output_file: out_file,
+                    pending_steps: vec![],
+                    pending_mutations: vec![],
+                });
             }
-            // "raw" cannot be used in an intermediate chain step
             if fmt_name == "raw" {
                 bail!(
                     "set_output_format(\"raw\") can only be used in the final step of a mold chain"
                 );
             }
-            // Intermediate step: re-parse the result with the requested format
             if debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
@@ -165,14 +285,67 @@ pub fn execute_chain(
                 target_fmt.parse(&as_string)?
             };
             data = convert::json_into_monty(reparsed);
-        } else if is_last_step(i) {
-            return Ok((result, last_exit, None, out_file));
+        } else if is_last {
+            return Ok(MoldExecResult {
+                value: result,
+                exit_code: last_exit,
+                format_override: None,
+                output_file: out_file,
+                pending_steps: vec![],
+                pending_mutations: vec![],
+            });
         } else {
-            // Intermediate step without set_input_format: convert result back to MontyObject
             data = convert::json_into_monty(result);
         }
+
+        i += 1;
     }
-    Ok((Value::Null, last_exit, None, None))
+    Ok(MoldExecResult {
+        value: Value::Null,
+        exit_code: last_exit,
+        format_override: None,
+        output_file: None,
+        pending_steps: vec![],
+        pending_mutations: vec![],
+    })
+}
+
+/// Serialize a MoldStep into a minimal spec Value for `pipeline.step(i)`.
+fn step_to_remaining_spec(step: &MoldStep) -> Value {
+    let mut map = serde_json::Map::new();
+    if let Some(ref fmt) = step.defaults.input_format {
+        map.insert("input_format".into(), Value::String(fmt.clone()));
+    }
+    if let Some(ref fmt) = step.defaults.output_format {
+        map.insert("output_format".into(), Value::String(fmt.clone()));
+    }
+    if let Some(ref args) = step.runtime_args {
+        map.insert("args".into(), args.clone());
+    }
+    Value::Object(map)
+}
+
+/// Resolve a pending step spec (from `insert_next`/`append`) into a `MoldStep`.
+fn resolve_pending(spec: Value) -> Result<MoldStep> {
+    let script_ref = if let Some(m) = spec.get("mold").and_then(Value::as_str) {
+        ScriptRef::Mold(m.to_string())
+    } else if let Some(e) = spec.get("expr").and_then(Value::as_str) {
+        ScriptRef::Expr(e.to_string())
+    } else {
+        bail!("pending step spec must contain 'mold' or 'expr'");
+    };
+    let mut steps = build_scripts(&[script_ref], false)?;
+    let mut step = steps.remove(0);
+    if let Some(fmt) = spec.get("input_format").and_then(Value::as_str) {
+        step.defaults.input_format = Some(fmt.to_string());
+    }
+    if let Some(fmt) = spec.get("output_format").and_then(Value::as_str) {
+        step.defaults.output_format = Some(fmt.to_string());
+    }
+    if let Some(args) = spec.get("args").filter(|v| v.is_object()) {
+        step.runtime_args = Some(args.clone());
+    }
+    Ok(step)
 }
 
 /// HTTP options passed through the pipeline.
@@ -217,6 +390,7 @@ fn run_pipeline_core(
     scripts: &[MoldStep],
     extra_args: &[(String, String)],
     env_value: &Value,
+    context_base: &Value,
     debug: bool,
     msg_level: u8,
     http_opts: &HttpOptions,
@@ -389,22 +563,23 @@ fn run_pipeline_core(
     };
 
     // Execute the mold chain
-    let (value, exit_code, format_override, output_file_override) = execute_chain(
+    let exec = execute_chain(
         scripts,
         data,
         extra_args,
         env_value,
         &headers_value,
+        context_base,
         debug,
         msg_level,
         policy,
     )?;
 
     Ok(PipelineResult {
-        value,
-        exit_code,
-        format_override,
-        output_file_override,
+        value: exec.value,
+        exit_code: exec.exit_code,
+        format_override: exec.format_override,
+        output_file_override: exec.output_file,
         input_format: in_fmt,
         http_raw_bytes,
     })
@@ -432,10 +607,20 @@ pub fn process_single_input(
     msg_level: u8,
     output_path: Option<&str>,
     effective_output_format: Option<&str>,
+    in_place: bool,
     check: bool,
     http_opts: &HttpOptions,
     policy: &SandboxPolicy,
 ) -> Result<()> {
+    let context_base = serde_json::json!({
+        "input": input_path,
+        "output": output_path,
+        "input_format": effective_input_format,
+        "output_format": effective_output_format,
+        "in_place": in_place,
+        "slurp": slurp,
+        "no_input": no_input,
+    });
     let result = run_pipeline_core(
         input_path,
         no_input,
@@ -445,6 +630,7 @@ pub fn process_single_input(
         scripts,
         extra_args,
         env_value,
+        &context_base,
         debug,
         msg_level,
         http_opts,
@@ -842,6 +1028,16 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         .as_deref()
         .or(first_defaults.input_format.as_deref());
 
+    let context_base = serde_json::json!({
+        "input": input_path,
+        "output": null,
+        "input_format": effective_input_format,
+        "output_format": config.output_format,
+        "in_place": false,
+        "slurp": config.slurp,
+        "no_input": config.no_input,
+    });
+
     run_pipeline_core(
         input_path,
         config.no_input,
@@ -851,6 +1047,7 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         &scripts,
         &config.args,
         &env_value,
+        &context_base,
         config.debug,
         config.msg_level,
         &config.http_opts,

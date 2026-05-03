@@ -16,7 +16,7 @@ def transform(data, args, **_):
     return [item for item in data if item["age"] > int(args["min_age"])]
 
 # Full signature — all parameters
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, pipeline):
     # process data
     return data
 ```
@@ -217,7 +217,7 @@ All Jinja2 features are available: loops, conditions, filters (`upper`, `join`, 
 !!! tip
     Combine with `--output-format txt` (or `# fimod: output-format=txt` in mold defaults) so the rendered text is written as-is, without JSON quoting.
 
-Available: `tpl_render_str(template, ctx)` · `tpl_render_from_mold(path, ctx)` — see [Built-ins Reference](../reference/built-ins.md#template-functions-tpl) for `auto_escape` option and the [Quick Tour](quick-tour.md#data-text-jinja2-templating) for more examples.
+Available: `tpl_render_str(template, ctx)` · `tpl_render_from_mold(path, ctx)` — see [Built-ins Reference](../reference/built-ins.md#template-functions-tpl_) for `auto_escape` option and the [Quick Tour](quick-tour.md#datatext-jinja2-templating) for more examples.
 
 ### 📢 Message logging (`msg_*`)
 
@@ -247,7 +247,7 @@ def transform(data, args, env, headers):
     return data
 ```
 
-Available: `gk_fail(msg)` · `gk_assert(cond, msg)` · `gk_warn(cond, msg)` — see [Built-ins Reference](../reference/built-ins.md#gatekeeper-functions-gk) for truthiness rules.
+Available: `gk_fail(msg)` · `gk_assert(cond, msg)` · `gk_warn(cond, msg)` — see [Built-ins Reference](../reference/built-ins.md#gatekeeper-functions-gk_) for truthiness rules.
 
 ### 🛡️ Sandbox-gated stdlib calls
 
@@ -330,6 +330,122 @@ def transform(data, args, env, headers):
 
 ---
 
+## 🔗 The `pipeline` parameter
+
+`pipeline` gives a mold live access to the step chain it is running inside. Declare it only when you need it:
+
+```python
+def transform(data, pipeline, **_):
+    return pipeline.length()   # number of steps in the chain
+```
+
+### Introspection
+
+`pipeline.current_step()` returns the current step as a handle. Fields are read via `step.get('key')` — direct attribute access (`step.index`) and indexing (`step['index']`) are **not** supported (single API surface).
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `'index'` | `int` | 0-based position in the chain |
+| `'input_format'` | `str | None` | Effective input format |
+| `'output_format'` | `str | None` | Output format override |
+| `'input'` | `str | None` | Input file path |
+| `'output'` | `str | None` | Output file path |
+| `'in_place'` | `bool` | `--in-place` flag |
+| `'slurp'` | `bool` | `--slurp` flag |
+| `'no_input'` | `bool` | `--no-input` flag |
+| `'args'` | `dict` | Merged args (CLI ∪ `Step.create.args`, spec wins) for the current step; spec args (or `{}`) for a future step |
+
+```python
+def transform(data, pipeline, **_):
+    step = pipeline.current_step()
+    return {
+        "step":  step.get('index'),
+        "total": pipeline.length(),
+        "fmt":   step.get('output_format'),
+    }
+```
+
+`pipeline.step(i)` accesses any step by absolute index — current or future, never past:
+
+```bash
+# Middle step of a 3-step chain reads its own index
+fimod s -i data.json -e data -e "pipeline.current_step().get('index')" -e data
+# → 1
+```
+
+Unknown keys raise `Step.get('<key>'): unknown field`.
+
+### Mutating the current step
+
+Use `step.set(key, value)` to mutate a step. Writable keys:
+
+| Key | Value type | Effect | Where |
+|-----|-----------|--------|-------|
+| `'exit'` | `int` | Set process exit code | current or future |
+| `'output_format'` | `str` | Override output serialization format | current or future |
+| `'input_format'` | `str` | Force re-parse before the next step | current or future |
+| `'output_file'` | `str` | Override output file path | current or future |
+| `'args'` | `dict` | Replace the entire args block (CLI `--arg` merge still applied at exec) | **future only** |
+
+```python
+def transform(data, pipeline, **_):
+    if not data.get("valid"):
+        pipeline.current_step().set('exit', 1)
+    return data
+```
+
+Works on future steps too — the mutation is queued and applied just before the target step runs:
+
+```python
+pipeline.step(2).set('output_format', 'yaml')
+pipeline.step(2).set('args', {'threshold': 100})
+```
+
+!!! note "Global functions still available"
+    `set_exit()`, `set_output_format()`, `set_output_file()` remain available as global functions.
+
+### Injecting steps dynamically
+
+Add new steps to the running chain with `Step.create(expr=...)` (inline expression) or `Step.create(mold=...)` (mold reference):
+
+```python
+def transform(data, pipeline, **_):
+    # Insert a step immediately after this one
+    pipeline.insert_next(Step.create(expr="data[:100]"))
+    pipeline.insert_next(Step.create(mold="@my-registry/sort"))
+
+    # Append at the end of the chain
+    pipeline.append(Step.create(expr="len(data)"))
+    return data
+```
+
+`Step.create()` arguments:
+
+| Arg | Required | Description |
+|-----|----------|-------------|
+| `expr=` | one of | Inline expression (like `-e`) |
+| `mold=` | one of | Mold reference (like `-m`) |
+| `input_format=` | no | Force input format for the injected step |
+| `output_format=` | no | Set output format for the injected step |
+| `args=` | no | Per-step args dict propagated to the injected mold (heterogeneous types: bool, int, nested dicts). Merged with CLI `--arg` at exec time — spec values win on conflict. |
+
+```python
+pipeline.append(Step.create(
+    mold="@my-registry/normalize",
+    args={"strict": True, "limits": {"rows": 1000}},
+))
+```
+
+!!! note "Snapshot semantics for `pipeline.length()` and `pipeline.step(i)`"
+    Both are computed at the start of each step. A step injected by step `i`
+    via `insert_next` / `append` is **only visible from step `i+1` onwards** —
+    inside the same mold run, `pipeline.length()` and `pipeline.step(j)` still
+    reflect the chain as it was when the current step started. Plan injections
+    accordingly: you cannot read or mutate a step you've just appended in the
+    same `transform()` call.
+
+---
+
 ## ⚙️ Mold defaults
 
 Scripts can embed default CLI options via `# fimod:` directives at the very top of the file:
@@ -341,8 +457,9 @@ def transform(data, args, env, headers):
     return [{"name": row["name"], "age": int(row["age"])} for row in data]
 ```
 
-!!! tip "CLI always wins"
-    Explicit CLI arguments always override mold defaults.
+!!! tip "CLI wins by default — `!=` locks a directive"
+    Explicit CLI arguments override mold defaults declared with `=`.
+    Use `!=` to force a value the caller cannot override (e.g. `output-format!=yaml`).
 
 See [Mold Defaults](../reference/mold-defaults.md) for all supported directives.
 
@@ -378,7 +495,7 @@ When no `--arg` is passed, `args` is an empty dict `{}`.
 - [x] `isinstance()`, `len()`, `int()`, `str()`, `float()`, `bool()`
 - [x] f-strings (`f"Hello {name}"`, `f"{x:.2f}"`, `f"{x!r}"`)
 - [x] Nested functions, multiple return values (tuples)
-- [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`)
+- [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`, `Step.create(...)`)
 
 ## ❌ Monty limitations
 

@@ -1,9 +1,11 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
 /// A compiled mold step ready for execution.
+#[derive(Clone)]
 pub struct MoldStep {
     pub display: String,
     pub script: String,
@@ -11,6 +13,11 @@ pub struct MoldStep {
     /// Base directory for resolving relative paths (e.g., template files).
     /// `None` for inline expressions.
     pub base_dir: Option<String>,
+    /// Per-step args provided via `Step.create(args={...})` from a prior step's
+    /// `pipeline.insert_next` / `pipeline.append`. Merged with CLI `--arg`
+    /// (step values win on key conflict). `None` for steps not injected with
+    /// explicit args (they receive only CLI args, current behaviour).
+    pub runtime_args: Option<serde_json::Value>,
 }
 
 /// Where the mold script comes from.
@@ -49,6 +56,7 @@ impl std::fmt::Display for MoldSource {
 /// Lookup order:
 /// 1. `<dir>/<dirname>.py` (convention: script named after the mold directory)
 /// 2. `<dir>/__main__.py`  (Python package convention)
+/// 3. The single `.py` file present in `<dir>` (unambiguous fallback)
 fn resolve_directory_mold(dir: &Path) -> Result<String> {
     let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
@@ -66,7 +74,28 @@ fn resolve_directory_mold(dir: &Path) -> Result<String> {
         return Ok(main.to_string_lossy().into_owned());
     }
 
-    bail!("expected {dir_name}/{dir_name}.py or {dir_name}/__main__.py")
+    // 3. Single .py in directory
+    let mut py_files: Vec<_> = fs::read_dir(dir)
+        .with_context(|| format!("Cannot read directory: {}", dir.display()))?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "py"))
+        .collect();
+    py_files.sort_by_key(|e| e.file_name());
+
+    match py_files.len() {
+        1 => Ok(py_files[0].path().to_string_lossy().into_owned()),
+        0 => bail!("no .py script found in {dir_name}/"),
+        _ => {
+            let names: Vec<_> = py_files
+                .iter()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            bail!(
+                "ambiguous mold directory: {dir_name}/ contains multiple .py files ({})\npass the script path directly with -m",
+                names.join(", ")
+            )
+        }
+    }
 }
 
 impl MoldSource {
@@ -154,7 +183,7 @@ impl MoldSource {
                 } else {
                     // Auto-wrap: the expression becomes the return value
                     Ok(format!(
-                        "def transform(data, args, env, headers):\n    return {expr}"
+                        "def transform(data, args, env, headers, pipeline):\n    return {expr}"
                     ))
                 }
             }
@@ -363,7 +392,7 @@ fn fetch_mold_content(url: &str, token: Option<&str>) -> Result<String> {
 }
 
 /// Defaults extracted from `# fimod:` directives in a mold script header.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MoldDefaults {
     pub input_format: Option<String>,
     pub output_format: Option<String>,
@@ -379,6 +408,8 @@ pub struct MoldDefaults {
     pub args: Vec<(String, Option<String>)>,
     /// Documented ENV variables: (var_name, optional description)
     pub envs: Vec<(String, Option<String>)>,
+    /// Names of directives declared with `!=` (forced — not overridable by the CLI).
+    pub forced: HashSet<String>,
 }
 
 /// Parse `# fimod:` directives from the script preamble, and extract the
@@ -549,9 +580,17 @@ pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
             if item.is_empty() {
                 continue;
             }
-            if let Some((key, value)) = item.split_once('=') {
-                let key = key.trim();
+            if let Some((key_raw, value)) = item.split_once('=') {
+                let key_raw = key_raw.trim();
+                let (key, forced) = if let Some(stripped) = key_raw.strip_suffix('!') {
+                    (stripped, true)
+                } else {
+                    (key_raw, false)
+                };
                 let value = value.trim();
+                if forced {
+                    defaults.forced.insert(key.to_string());
+                }
                 match key {
                     "input-format" => defaults.input_format = Some(value.to_string()),
                     "output-format" => defaults.output_format = Some(value.to_string()),
@@ -640,7 +679,7 @@ mod tests {
     fn test_inline_auto_wrap() {
         let src = MoldSource::Inline("data['x'] + 1".to_string());
         let script = src.load(false).unwrap();
-        assert!(script.contains("def transform(data, args, env, headers):"));
+        assert!(script.contains("def transform(data, args, env, headers, pipeline):"));
         assert!(script.contains("return data['x'] + 1"));
     }
 
@@ -723,6 +762,43 @@ mod tests {
         let script = "# fimod: output-format=raw\ndef transform(data):\n    return data\n";
         let d = parse_mold_defaults(script);
         assert_eq!(d.output_format.as_deref(), Some("raw"));
+    }
+
+    // ─── forced directive (!=) tests ──────────────────────────────
+
+    #[test]
+    fn test_forced_output_format() {
+        let script = "# fimod: output-format!=yaml\ndef transform(data):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.output_format.as_deref(), Some("yaml"));
+        assert!(d.forced.contains("output-format"));
+    }
+
+    #[test]
+    fn test_forced_input_format() {
+        let script = "# fimod: input-format!=csv\ndef transform(data):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.input_format.as_deref(), Some("csv"));
+        assert!(d.forced.contains("input-format"));
+    }
+
+    #[test]
+    fn test_default_format_not_in_forced() {
+        let script = "# fimod: output-format=json\ndef transform(data):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.output_format.as_deref(), Some("json"));
+        assert!(!d.forced.contains("output-format"));
+    }
+
+    #[test]
+    fn test_forced_mixed_with_default() {
+        let script =
+            "# fimod: output-format!=yaml, input-format=json\ndef transform(data):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.output_format.as_deref(), Some("yaml"));
+        assert_eq!(d.input_format.as_deref(), Some("json"));
+        assert!(d.forced.contains("output-format"));
+        assert!(!d.forced.contains("input-format"));
     }
 
     // ─── docstring tests ───────────────────────────────────────
@@ -885,7 +961,7 @@ mod tests {
         fs::create_dir(&mold_dir).unwrap();
 
         let err = resolve_directory_mold(&mold_dir).unwrap_err();
-        assert!(err.to_string().contains("__main__.py"));
+        assert!(err.to_string().contains("no .py script found in"));
     }
 
     #[test]

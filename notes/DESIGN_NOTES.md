@@ -138,6 +138,7 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 - `input-format`, `output-format`, `csv-*`, `no-follow`, `arg`, `env`
 - Module-level docstring (`"""..."""`) is extracted as the `docs` field (used by `fimod mold list` and `catalog.toml`)
 - First mold in a chain → input/CSV options; last mold → output/compact/raw options.
+- `key!=value` marks a directive as **forced** — the CLI cannot override it. Forced directive names are stored in `MoldDefaults.forced: HashSet<String>`. Verbose warning (`--msg-level verbose`) is emitted when a forced directive is active.
 
 ### Mold resolution
 

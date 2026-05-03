@@ -37,7 +37,7 @@ fn test_csv_no_input_header() {
     let mold = setup_mold(
         &dir,
         "identity.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     // Headerless CSV rows are now arrays, not col0/col1 dicts
@@ -66,7 +66,7 @@ fn test_csv_headers_global_injected() {
     let mold = setup_mold(
         &dir,
         "use_headers.py",
-        "def transform(data, args, env, headers):\n    return headers\n",
+        "def transform(data, args, env, headers, **_):\n    return headers\n",
     );
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -86,7 +86,7 @@ fn test_csv_no_headers_global_when_headerless() {
     let mold = setup_mold(
         &dir,
         "try_headers.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     // Should succeed (headers is None when no header line)
@@ -135,7 +135,7 @@ fn test_csv_no_output_header() {
     let mold = setup_mold(
         &dir,
         "identity.py",
-        "def transform(data, args, env, headers):\n    return data\n",
+        "def transform(data, args, env, headers, **_):\n    return data\n",
     );
 
     let output = assert_cmd::cargo_bin_cmd!("fimod")

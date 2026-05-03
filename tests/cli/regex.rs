@@ -75,7 +75,7 @@ fn test_re_findall_emails() {
     );
 
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     emails = re_findall(r"\w+@\w+\.\w+", data["content"])
     return {"emails": emails}
 "#;
@@ -96,7 +96,7 @@ fn test_re_sub() {
     let input = setup_input(&dir, "data.json", r#"{"text": "a  b   c    d"}"#);
 
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"cleaned": re_sub(r"\s+", " ", data["text"])}
 "#;
     let mold = setup_mold(&dir, "clean.py", script);
@@ -151,7 +151,7 @@ fn test_re_multiple_calls_in_mold() {
     let input = setup_input(&dir, "data.json", r#"{"text": "  Hello   World  123  "}"#);
 
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     cleaned = re_sub(r"\s+", " ", data["text"].strip())
     words = re_findall(r"[a-zA-Z]+", cleaned)
     numbers = re_findall(r"\d+", cleaned)
@@ -181,7 +181,7 @@ fn test_re_with_lines_format() {
 
     // Filter lines matching error status codes (4xx)
     let script = r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return [l for l in data if re_search(r"\s4\d{2}$", l)]
 "#;
     let mold = setup_mold(&dir, "filter_errors.py", script);

@@ -56,6 +56,7 @@ nav:
     - Quick Tour: guides/quick-tour.md
     - Concepts: guides/concepts.md
     - Mold Scripting: guides/mold-scripting.md
+    - Dynamic Molds: guides/dynamic-molds.md
     - Authoring Molds: guides/authoring-molds.md
     - AI Integration: guides/ai-integration.md
     - CLI Reference: guides/cli-reference.md

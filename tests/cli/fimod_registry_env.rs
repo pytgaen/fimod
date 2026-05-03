@@ -9,7 +9,9 @@ fn test_fimod_registry_env_local() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("normalize.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'normalized': True}\n")
+        .write_str(
+            "def transform(data, args, env, headers, **_):\n    return {'normalized': True}\n",
+        )
         .unwrap();
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -28,7 +30,7 @@ fn test_fimod_registry_env_no_sources_toml_needed() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("identity.py")
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
 
     // No registry add — only FIMOD_REGISTRY
@@ -51,12 +53,12 @@ fn test_fimod_registry_env_multiple_comma_separated() {
 
     // mold_a only in dir1
     dir1.child("mold_a.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'from': 'dir1'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'from': 'dir1'}\n")
         .unwrap();
 
     // mold_b only in dir2
     dir2.child("mold_b.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'from': 'dir2'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'from': 'dir2'}\n")
         .unwrap();
 
     let env_val = format!(
@@ -97,11 +99,11 @@ fn test_fimod_registry_priority_over_sources_toml() {
     // Same mold name in both, different output
     toml_dir
         .child("check.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'source': 'toml'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'source': 'toml'}\n")
         .unwrap();
     env_dir
         .child("check.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'source': 'env'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'source': 'env'}\n")
         .unwrap();
 
     // Register toml_dir as default in sources.toml
@@ -133,7 +135,7 @@ fn test_sources_toml_fallback_when_env_misses() {
     // Only in toml_dir
     toml_dir
         .child("extra.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'found': 'toml'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'found': 'toml'}\n")
         .unwrap();
 
     // Register toml_dir as default
@@ -179,7 +181,7 @@ fn test_fimod_registry_named_entry() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("clean.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'from': 'ci'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'from': 'ci'}\n")
         .unwrap();
 
     let env_val = format!("ci={}", molds_dir.path().to_str().unwrap());
@@ -204,11 +206,11 @@ fn test_fimod_registry_named_priority_over_sources_toml() {
     // Same registry name "main", same mold name, different output
     toml_dir
         .child("check.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'source': 'toml'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'source': 'toml'}\n")
         .unwrap();
     env_dir
         .child("check.py")
-        .write_str("def transform(data, args, env, headers):\n    return {'source': 'env'}\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return {'source': 'env'}\n")
         .unwrap();
 
     // Register toml_dir as "main" in sources.toml
@@ -236,7 +238,7 @@ fn test_fimod_registry_unknown_named_falls_to_sources_toml() {
     let env_dir = assert_fs::TempDir::new().unwrap();
     env_dir
         .child("mold.py")
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
 
     // anonymous FIMOD_REGISTRY — @ghost/mold should fail (no named "ghost")

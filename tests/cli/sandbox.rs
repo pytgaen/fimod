@@ -12,7 +12,7 @@ fn test_sandbox_pathlib_exists_returns_null() {
         r#"
 from pathlib import Path
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["exists"] = Path("/etc/passwd").exists()
     return data
 "#,
@@ -37,7 +37,7 @@ fn test_sandbox_pathlib_read_text_returns_null() {
         r#"
 from pathlib import Path
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     content = Path("/etc/passwd").read_text()
     data["content"] = str(content)
     return data
@@ -63,7 +63,7 @@ fn test_sandbox_os_getenv_returns_null() {
         r#"
 import os
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["home"] = os.getenv("HOME")
     data["path"] = os.getenv("PATH")
     return data
@@ -88,7 +88,7 @@ fn test_sandbox_open_not_defined() {
         &dir,
         "sandbox_open.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     f = open("/etc/passwd", "r")
     data["content"] = f.read()
     return data
@@ -114,7 +114,7 @@ fn test_sandbox_no_subprocess() {
         r#"
 import subprocess
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["out"] = subprocess.check_output(["id"])
     return data
 "#,
@@ -138,7 +138,7 @@ fn test_sandbox_no_socket() {
         r#"
 import socket
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data["out"] = str(socket.getaddrinfo("example.com", 80))
     return data
 "#,
@@ -172,7 +172,7 @@ fn test_sandbox_clock_denied_by_default() {
         r#"
 from datetime import datetime
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return datetime.now().isoformat()
 "#,
     );
@@ -200,7 +200,7 @@ fn test_sandbox_clock_allowed_via_file() {
         r#"
 from datetime import datetime
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     d = datetime.now()
     return {"year": d.year}
 "#,
@@ -227,7 +227,7 @@ fn test_sandbox_date_today_denied_by_default() {
         r#"
 from datetime import date
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return date.today().isoformat()
 "#,
     );
@@ -255,7 +255,7 @@ fn test_sandbox_env_allowed_via_glob() {
         r#"
 import os
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {
         "allowed": os.getenv("FIMOD_TEST_VAR"),
         "denied": os.getenv("SECRET"),
@@ -286,7 +286,7 @@ fn test_sandbox_timeout_exits_137() {
         &dir,
         "loop.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     i = 0
     while True:
         i += 1
@@ -324,7 +324,7 @@ fn test_sandbox_empty_flag_forces_zero_auth() {
         r#"
 from datetime import datetime
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return datetime.now().isoformat()
 "#,
     );
@@ -349,7 +349,7 @@ fn test_sandbox_env_var_missing_file_errors() {
         &dir,
         "id.py",
         r#"
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"ok": True}
 "#,
     );
@@ -383,7 +383,7 @@ fn test_sandbox_canonical_file_auto_loaded() {
         r#"
 from datetime import datetime
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"year": datetime.now().year}
 "#,
     );

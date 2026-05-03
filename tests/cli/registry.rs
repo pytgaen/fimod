@@ -8,7 +8,7 @@ fn setup_mold_dir() -> (assert_fs::TempDir, assert_fs::fixture::ChildPath) {
     let dir = assert_fs::TempDir::new().unwrap();
     let script = dir.child("cleanup.py");
     script
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
     (dir, script)
 }
@@ -35,7 +35,7 @@ fn test_registry_add_local_and_list() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("cleanup.py")
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
 
     // Add
@@ -254,7 +254,7 @@ fn test_at_mold_default_registry() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("cleanup.py")
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
 
     assert_cmd::cargo_bin_cmd!("fimod")
@@ -277,7 +277,7 @@ fn test_at_mold_named_registry() {
     let molds_dir = assert_fs::TempDir::new().unwrap();
     molds_dir
         .child("toto.py")
-        .write_str("def transform(data, args, env, headers):\n    return data\n")
+        .write_str("def transform(data, args, env, headers, **_):\n    return data\n")
         .unwrap();
 
     assert_cmd::cargo_bin_cmd!("fimod")

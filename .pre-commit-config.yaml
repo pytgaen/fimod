@@ -1,4 +1,5 @@
 repos:
+
   - repo: builtin
     hooks:
       - id: trailing-whitespace
@@ -6,6 +7,13 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [ "--maxkb=500" ]
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
+        args: [ --markdown-linebreak-ext=md ]
+      - id: pretty-format-json
+        args: [ --indent=2, --no-sort-keys, --autofix ]
 
   - repo: local
     hooks:
@@ -13,12 +21,34 @@ repos:
         name: cargo fmt
         language: system
         entry: cargo fmt --all
-        types: [rust]
+        types: [ rust ]
         pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
         language: system
         entry: cargo clippy --tests -- -D warnings
-        types: [rust]
+        types: [ rust ]
         pass_filenames: false
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        name: conventional pre-commit
+        stages:
+          - commit-msg
+
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.21.0
+    hooks:
+      - id: yamlfmt
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: [ --number ]
+        additional_dependencies:
+          - mdformat-mkdocs
+          - mdformat-gfm
