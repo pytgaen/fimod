@@ -83,9 +83,13 @@ jobs:
           shared-key: "cargo-registry"
           key: ${{ matrix.target }}-${{ matrix.variant }}
 
-      - name: Install cross (Linux musl targets)
+      - name: Install Zig (Linux musl targets)
         if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: mlugg/setup-zig@v2
+
+      - name: Install cargo-zigbuild (Linux musl targets)
+        if: matrix.cross
+        run: cargo install cargo-zigbuild --locked
 
       # UPX — Linux : download épinglé + cache
       - name: Cache UPX
@@ -116,9 +120,9 @@ jobs:
           $exe = (Get-ChildItem -Recurse "$env:RUNNER_TEMP\upx_dir" -Filter upx.exe | Select-Object -First 1).FullName
           Copy-Item $exe "$env:SystemRoot\System32\upx.exe"
 
-      - name: Build with cross
+      - name: Build with cargo zigbuild
         if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }} ${{ matrix.features }}
+        run: cargo zigbuild --release --target ${{ matrix.target }} ${{ matrix.features }}
 
       - name: Build with cargo
         if: ${{ !matrix.cross }}

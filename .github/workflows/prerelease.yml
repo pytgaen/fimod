@@ -28,11 +28,14 @@ jobs:
           shared-key: "cargo-registry"
           key: x86_64-unknown-linux-musl-prerelease
 
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
 
       - name: Build
-        run: cross build --release --target x86_64-unknown-linux-musl
+        run: cargo zigbuild --release --target x86_64-unknown-linux-musl
 
       - name: Package
         id: pkg
