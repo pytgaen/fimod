@@ -16,14 +16,14 @@
         <link rel="prev" href="../concepts/">
       
       
-        <link rel="next" href="../authoring-molds/">
+        <link rel="next" href="../dynamic-molds/">
       
       
         
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.36">
+      <meta name="generator" content="zensical-0.0.39">
     
     
       
@@ -266,6 +266,8 @@
   
     
     
+      
+        
       
         
       
@@ -651,6 +653,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-pipeline-parameter" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🔗 The <code>pipeline</code> parameter
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔗 The pipeline parameter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Introspection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutating-the-current-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Mutating the current step
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#injecting-steps-dynamically" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Injecting steps dynamically
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mold-defaults" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -698,6 +750,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dynamic-molds/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dynamic Molds
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1507,6 +1587,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-pipeline-parameter" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🔗 The <code>pipeline</code> parameter
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔗 The pipeline parameter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Introspection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mutating-the-current-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Mutating the current step
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#injecting-steps-dynamically" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Injecting steps dynamically
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mold-defaults" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1581,7 +1711,7 @@
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">data</span> <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;min_age&quot;</span><span class="p">])]</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Full signature — all parameters</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">):</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="c1"># process data</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">return</span> <span class="n">data</span>
 </code></pre></div>
@@ -1762,7 +1892,7 @@ For all other functions (<code>re_search</code>, <code>re_match</code>, <code>re
 <p class="admonition-title">Tip</p>
 <p>Combine with <code>--output-format txt</code> (or <code># fimod: output-format=txt</code> in mold defaults) so the rendered text is written as-is, without JSON quoting.</p>
 </div>
-<p>Available: <code>tpl_render_str(template, ctx)</code> · <code>tpl_render_from_mold(path, ctx)</code> — see <a href="../../reference/built-ins/#template-functions-tpl">Built-ins Reference</a> for <code>auto_escape</code> option and the <a href="../quick-tour/#data-text-jinja2-templating">Quick Tour</a> for more examples.</p>
+<p>Available: <code>tpl_render_str(template, ctx)</code> · <code>tpl_render_from_mold(path, ctx)</code> — see <a href="../../reference/built-ins/#template-functions-tpl_">Built-ins Reference</a> for <code>auto_escape</code> option and the <a href="../quick-tour/#datatext-jinja2-templating">Quick Tour</a> for more examples.</p>
 <h3 id="message-logging-msg_">📢 Message logging (<code>msg_*</code>)</h3>
 <p>Output diagnostic messages to stderr — useful for progress, warnings, and debugging without polluting stdout:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
@@ -1782,7 +1912,7 @@ For all other functions (<code>re_search</code>, <code>re_match</code>, <code>re
 <a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">gk_fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Coverage </span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;coverage&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">% below 80% threshold&quot;</span><span class="p">)</span>
 <a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="k">return</span> <span class="n">data</span>
 </code></pre></div>
-<p>Available: <code>gk_fail(msg)</code> · <code>gk_assert(cond, msg)</code> · <code>gk_warn(cond, msg)</code> — see <a href="../../reference/built-ins/#gatekeeper-functions-gk">Built-ins Reference</a> for truthiness rules.</p>
+<p>Available: <code>gk_fail(msg)</code> · <code>gk_assert(cond, msg)</code> · <code>gk_warn(cond, msg)</code> — see <a href="../../reference/built-ins/#gatekeeper-functions-gk_">Built-ins Reference</a> for truthiness rules.</p>
 <h3 id="sandbox-gated-stdlib-calls">🛡️ Sandbox-gated stdlib calls</h3>
 <p>A few stdlib calls that read host state are gated by the <a href="../cli-reference/#sandbox-policy">sandbox policy</a>. They raise <code>PermissionError</code> when the policy denies them — catch it if you want a graceful fallback.</p>
 <table>
@@ -1871,27 +2001,225 @@ For all other functions (<code>re_search</code>, <code>re_match</code>, <code>re
 <p><code>headers</code> is only available when the input has a header row. Not injected with <code>--csv-no-input-header</code>.</p>
 </div>
 <hr />
+<h2 id="the-pipeline-parameter">🔗 The <code>pipeline</code> parameter</h2>
+<p><code>pipeline</code> gives a mold live access to the step chain it is running inside. Declare it only when you need it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>    <span class="k">return</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">length</span><span class="p">()</span>   <span class="c1"># number of steps in the chain</span>
+</code></pre></div>
+<h3 id="introspection">Introspection</h3>
+<p><code>pipeline.current_step()</code> returns the current step as a handle. Fields are read via <code>step.get('key')</code> — direct attribute access (<code>step.index</code>) and indexing (<code>step['index']</code>) are <strong>not</strong> supported (single API surface).</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'index'</code></td>
+<td><code>int</code></td>
+<td>0-based position in the chain</td>
+</tr>
+<tr>
+<td><code>'input_format'</code></td>
+<td><code>str | None</code></td>
+<td>Effective input format</td>
+</tr>
+<tr>
+<td><code>'output_format'</code></td>
+<td><code>str | None</code></td>
+<td>Output format override</td>
+</tr>
+<tr>
+<td><code>'input'</code></td>
+<td><code>str | None</code></td>
+<td>Input file path</td>
+</tr>
+<tr>
+<td><code>'output'</code></td>
+<td><code>str | None</code></td>
+<td>Output file path</td>
+</tr>
+<tr>
+<td><code>'in_place'</code></td>
+<td><code>bool</code></td>
+<td><code>--in-place</code> flag</td>
+</tr>
+<tr>
+<td><code>'slurp'</code></td>
+<td><code>bool</code></td>
+<td><code>--slurp</code> flag</td>
+</tr>
+<tr>
+<td><code>'no_input'</code></td>
+<td><code>bool</code></td>
+<td><code>--no-input</code> flag</td>
+</tr>
+<tr>
+<td><code>'args'</code></td>
+<td><code>dict</code></td>
+<td>Merged args (CLI ∪ <code>Step.create.args</code>, spec wins) for the current step; spec args (or <code>{}</code>) for a future step</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="n">step</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">current_step</span><span class="p">()</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>        <span class="s2">&quot;step&quot;</span><span class="p">:</span>  <span class="n">step</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;index&#39;</span><span class="p">),</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>        <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">length</span><span class="p">(),</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>        <span class="s2">&quot;fmt&quot;</span><span class="p">:</span>   <span class="n">step</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;output_format&#39;</span><span class="p">),</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>    <span class="p">}</span>
+</code></pre></div>
+<p><code>pipeline.step(i)</code> accesses any step by absolute index — current or future, never past:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Middle step of a 3-step chain reads its own index</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span>data<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;pipeline.current_step().get(&#39;index&#39;)&quot;</span><span class="w"> </span>-e<span class="w"> </span>data
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="c1"># → 1</span>
+</code></pre></div>
+<p>Unknown keys raise <code>Step.get('&lt;key&gt;'): unknown field</code>.</p>
+<h3 id="mutating-the-current-step">Mutating the current step</h3>
+<p>Use <code>step.set(key, value)</code> to mutate a step. Writable keys:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Value type</th>
+<th>Effect</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'exit'</code></td>
+<td><code>int</code></td>
+<td>Set process exit code</td>
+<td>current or future</td>
+</tr>
+<tr>
+<td><code>'output_format'</code></td>
+<td><code>str</code></td>
+<td>Override output serialization format</td>
+<td>current or future</td>
+</tr>
+<tr>
+<td><code>'input_format'</code></td>
+<td><code>str</code></td>
+<td>Force re-parse before the next step</td>
+<td>current or future</td>
+</tr>
+<tr>
+<td><code>'output_file'</code></td>
+<td><code>str</code></td>
+<td>Override output file path</td>
+<td>current or future</td>
+</tr>
+<tr>
+<td><code>'args'</code></td>
+<td><code>dict</code></td>
+<td>Replace the entire args block (CLI <code>--arg</code> merge still applied at exec)</td>
+<td><strong>future only</strong></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;valid&quot;</span><span class="p">):</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>        <span class="n">pipeline</span><span class="o">.</span><span class="n">current_step</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;exit&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div>
+<p>Works on future steps too — the mutation is queued and applied just before the target step runs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;output_format&#39;</span><span class="p">,</span> <span class="s1">&#39;yaml&#39;</span><span class="p">)</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;args&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;threshold&#39;</span><span class="p">:</span> <span class="mi">100</span><span class="p">})</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Global functions still available</p>
+<p><code>set_exit()</code>, <code>set_output_format()</code>, <code>set_output_file()</code> remain available as global functions.</p>
+</div>
+<h3 id="injecting-steps-dynamically">Injecting steps dynamically</h3>
+<p>Add new steps to the running chain with <code>Step.create(expr=...)</code> (inline expression) or <code>Step.create(mold=...)</code> (mold reference):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pipeline</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>    <span class="c1"># Insert a step immediately after this one</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>    <span class="n">pipeline</span><span class="o">.</span><span class="n">insert_next</span><span class="p">(</span><span class="n">Step</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">expr</span><span class="o">=</span><span class="s2">&quot;data[:100]&quot;</span><span class="p">))</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>    <span class="n">pipeline</span><span class="o">.</span><span class="n">insert_next</span><span class="p">(</span><span class="n">Step</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">mold</span><span class="o">=</span><span class="s2">&quot;@my-registry/sort&quot;</span><span class="p">))</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>    <span class="c1"># Append at the end of the chain</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>    <span class="n">pipeline</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Step</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">expr</span><span class="o">=</span><span class="s2">&quot;len(data)&quot;</span><span class="p">))</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>    <span class="k">return</span> <span class="n">data</span>
+</code></pre></div>
+<p><code>Step.create()</code> arguments:</p>
+<table>
+<thead>
+<tr>
+<th>Arg</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>expr=</code></td>
+<td>one of</td>
+<td>Inline expression (like <code>-e</code>)</td>
+</tr>
+<tr>
+<td><code>mold=</code></td>
+<td>one of</td>
+<td>Mold reference (like <code>-m</code>)</td>
+</tr>
+<tr>
+<td><code>input_format=</code></td>
+<td>no</td>
+<td>Force input format for the injected step</td>
+</tr>
+<tr>
+<td><code>output_format=</code></td>
+<td>no</td>
+<td>Set output format for the injected step</td>
+</tr>
+<tr>
+<td><code>args=</code></td>
+<td>no</td>
+<td>Per-step args dict propagated to the injected mold (heterogeneous types: bool, int, nested dicts). Merged with CLI <code>--arg</code> at exec time — spec values win on conflict.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Step</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>    <span class="n">mold</span><span class="o">=</span><span class="s2">&quot;@my-registry/normalize&quot;</span><span class="p">,</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>    <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;strict&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;limits&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">}},</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="p">))</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Snapshot semantics for <code>pipeline.length()</code> and <code>pipeline.step(i)</code></p>
+<p>Both are computed at the start of each step. A step injected by step <code>i</code>
+via <code>insert_next</code> / <code>append</code> is <strong>only visible from step <code>i+1</code> onwards</strong> —
+inside the same mold run, <code>pipeline.length()</code> and <code>pipeline.step(j)</code> still
+reflect the chain as it was when the current step started. Plan injections
+accordingly: you cannot read or mutate a step you've just appended in the
+same <code>transform()</code> call.</p>
+</div>
+<hr />
 <h2 id="mold-defaults">⚙️ Mold defaults</h2>
 <p>Scripts can embed default CLI options via <code># fimod:</code> directives at the very top of the file:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># fimod: input-format=csv, output-format=json</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="c1"># fimod: csv-delimiter=;</span>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">])}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># fimod: input-format=csv, output-format=json</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="c1"># fimod: csv-delimiter=;</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">])}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">]</span>
 </code></pre></div>
 <div class="admonition tip">
-<p class="admonition-title">CLI always wins</p>
-<p>Explicit CLI arguments always override mold defaults.</p>
+<p class="admonition-title">CLI wins by default — <code>!=</code> locks a directive</p>
+<p>Explicit CLI arguments override mold defaults declared with <code>=</code>.
+Use <code>!=</code> to force a value the caller cannot override (e.g. <code>output-format!=yaml</code>).</p>
 </div>
 <p>See <a href="../../reference/mold-defaults/">Mold Defaults</a> for all supported directives.</p>
 <hr />
 <h2 id="the-args-dict">📎 The <code>args</code> dict</h2>
 <p><code>--arg name=value</code> populates the <code>args</code> parameter of <code>transform(data, args, env, headers)</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="n">limit</span>  <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;threshold&quot;</span><span class="p">])</span>
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="n">prefix</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prefix&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">u</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">data</span> <span class="k">if</span> <span class="n">u</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="ow">and</span> <span class="n">u</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">limit</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>    <span class="n">limit</span>  <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;threshold&quot;</span><span class="p">])</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>    <span class="n">prefix</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prefix&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">u</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">data</span> <span class="k">if</span> <span class="n">u</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="ow">and</span> <span class="n">u</span><span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">limit</span><span class="p">]</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
 </code></pre></div>
 <p>When no <code>--arg</code> is passed, <code>args</code> is an empty dict <code>{}</code>.</p>
 <hr />
@@ -1906,7 +2234,7 @@ For all other functions (<code>re_search</code>, <code>re_match</code>, <code>re
 <li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> <code>isinstance()</code>, <code>len()</code>, <code>int()</code>, <code>str()</code>, <code>float()</code>, <code>bool()</code></li>
 <li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> f-strings (<code>f"Hello {name}"</code>, <code>f"{x:.2f}"</code>, <code>f"{x!r}"</code>)</li>
 <li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Nested functions, multiple return values (tuples)</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> All built-in helpers (<code>re_*</code>, <code>re_*_fancy</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>tpl_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>, <code>set_exit</code>, <code>set_input_format</code>, <code>set_output_format</code>, <code>set_output_file</code>)</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> All built-in helpers (<code>re_*</code>, <code>re_*_fancy</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>tpl_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>, <code>set_exit</code>, <code>set_input_format</code>, <code>set_output_format</code>, <code>set_output_file</code>, <code>Step.create(...)</code>)</li>
 </ul>
 <h2 id="monty-limitations">❌ Monty limitations</h2>
 <ul class="task-list">
