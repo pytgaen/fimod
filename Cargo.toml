@@ -23,7 +23,7 @@ clap_complete = { version = "4", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde-saphyr = "0.0.25"  # pure-Rust YAML (replaces deprecated serde_yaml)
+serde-saphyr = "0.0.26"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "0.8", features = ["indexmap"] }
 csv = "1.4"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
