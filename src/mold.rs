@@ -7,36 +7,106 @@ use anyhow::{bail, Context, Result};
 /// A compiled mold step ready for execution.
 #[derive(Clone)]
 pub struct MoldStep {
-    pub display: String,
+    /// Where this step's script came from. Single source of truth for
+    /// label, base directory, and reload semantics.
+    pub source: MoldSource,
     pub script: String,
     pub defaults: MoldDefaults,
-    /// Base directory for resolving relative paths (e.g., template files).
-    /// `None` for inline expressions.
-    pub base_dir: Option<String>,
     /// Per-step args provided via `Step.create(args={...})` from a prior step's
     /// `pipeline.insert_next` / `pipeline.append`. Merged with CLI `--arg`
     /// (step values win on key conflict). `None` for steps not injected with
     /// explicit args (they receive only CLI args, current behaviour).
     pub runtime_args: Option<serde_json::Value>,
+    /// Where this step came from in the pipeline: CLI args or runtime injection.
+    pub origin: StepOrigin,
+}
+
+/// Origin of a step in the pipeline — distinguishes CLI-supplied steps from
+/// those injected at runtime by a parent mold via `pipeline.insert_next` /
+/// `pipeline.append`.
+#[derive(Clone, Debug)]
+pub enum StepOrigin {
+    /// Provided via CLI args (`-m` / `-e`).
+    Cli,
+    /// Injected at runtime by a parent mold. `parent_step` is 0-based.
+    Injected { parent_step: usize },
+}
+
+impl MoldStep {
+    /// Short, human-readable label for error messages and debug output.
+    /// Delegates to [`MoldSource::label`].
+    pub fn label(&self) -> String {
+        self.source.label()
+    }
+
+    /// Base directory for resolving relative paths (templates, data files).
+    /// Delegates to [`MoldSource::base_dir`].
+    pub fn base_dir(&self) -> Option<String> {
+        self.source.base_dir()
+    }
+
+    /// Error context line: `step N/M (label)` or
+    /// `step N/M (label, injected by step P)`.
+    /// `idx` is 0-based; `total` is the chain length.
+    pub fn error_context(&self, idx: usize, total: usize) -> String {
+        let label = self.label();
+        match &self.origin {
+            StepOrigin::Cli => format!("step {}/{} ({})", idx + 1, total, label),
+            StepOrigin::Injected { parent_step } => format!(
+                "step {}/{} ({}, injected by step {})",
+                idx + 1,
+                total,
+                label,
+                parent_step + 1
+            ),
+        }
+    }
+}
+
+/// Truncate a string to `head + '…' + tail` if it exceeds `head + tail` chars.
+fn truncate_middle(s: &str, head: usize, tail: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= head + tail {
+        return s.to_string();
+    }
+    let h: String = chars.iter().take(head).collect();
+    let t: String = chars.iter().rev().take(tail).collect::<Vec<_>>().into_iter().rev().collect();
+    format!("{h}…{t}")
 }
 
 /// Where the mold script comes from.
-#[derive(Debug)]
+///
+/// Each non-inline variant carries a `display_ref`: the form the user originally
+/// typed (e.g. `@common/flatten`, `./local.py`, full URL). It is set by
+/// [`MoldSource::from_mold_str`] and surfaces in error messages and `--debug`
+/// output via [`MoldSource::label`]. For sources constructed elsewhere (e.g.
+/// directly from `registry.rs`) `display_ref` defaults to the resolved path/URL.
+#[derive(Debug, Clone)]
 pub enum MoldSource {
     /// Local file path.
-    File(String),
-    /// HTTP/HTTPS URL, with an optional Bearer token for authentication,
-    /// an optional catalog content hash for cache validation, and companion
-    /// file URLs to download alongside the main script.
+    File {
+        /// Resolved absolute or relative path to the script on disk.
+        path: String,
+        /// User-facing reference (what was typed): `./local.py`, `@local/x`,
+        /// or absolute path. Defaults to `path` when not provided.
+        display_ref: String,
+    },
+    /// HTTP/HTTPS URL.
     ///
-    /// The token is populated from:
-    /// - A named registry's `token_env` override, or default `GITHUB_TOKEN`/`GITLAB_TOKEN`
-    /// - Domain detection when the URL is passed directly via `-m https://...`
-    ///
-    /// The catalog hash is present only for registry-based molds; direct URLs have `None`.
-    /// Companion files (templates, data) are listed in catalog.toml and fetched into the
+    /// `token` is populated from a named registry's `token_env` override
+    /// or default `GITHUB_TOKEN`/`GITLAB_TOKEN` for known domains.
+    /// `catalog_hash` is present only for registry-based molds.
+    /// `companion_files` are listed in catalog.toml and fetched into the
     /// same cache directory.
-    Url(String, Option<String>, Option<String>, Vec<String>),
+    Url {
+        url: String,
+        token: Option<String>,
+        catalog_hash: Option<String>,
+        companion_files: Vec<String>,
+        /// User-facing reference: `@registry/name` for catalog refs, or the
+        /// URL itself when passed directly via `-m https://...`.
+        display_ref: String,
+    },
     /// Inline expression passed via `-e`.
     Inline(String),
 }
@@ -44,10 +114,42 @@ pub enum MoldSource {
 impl std::fmt::Display for MoldSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MoldSource::File(path) => write!(f, "file({path})"),
-            MoldSource::Url(url, _, _, _) => write!(f, "url({url})"),
+            MoldSource::File { path, .. } => write!(f, "file({path})"),
+            MoldSource::Url { url, .. } => write!(f, "url({url})"),
             MoldSource::Inline(_) => write!(f, "inline(-e)"),
         }
+    }
+}
+
+impl MoldSource {
+    /// Short, human-readable label for error messages and debug output.
+    ///
+    /// Examples:
+    /// - `-m @flatten`     → `@flatten`
+    /// - `-m ./local.py`   → `./local.py`
+    /// - `-m https://x`    → `https://x`
+    /// - `-e 'data + 1'`   → `-e 'data + 1'`
+    /// - `-e '<long…>'`    → `-e '<25 chars>…<25 chars>'` (when expr > 50 chars)
+    pub fn label(&self) -> String {
+        match self {
+            MoldSource::File { display_ref, .. } | MoldSource::Url { display_ref, .. } => {
+                display_ref.clone()
+            }
+            MoldSource::Inline(expr) => format!("-e '{}'", truncate_middle(expr, 25, 25)),
+        }
+    }
+
+    /// Override `display_ref` (no-op for `Inline`). Used by `from_mold_str`
+    /// to preserve the user-typed form (`@registry/name`) after delegating
+    /// resolution to the registry.
+    fn with_display_ref(mut self, new_ref: String) -> Self {
+        match &mut self {
+            MoldSource::File { display_ref, .. } | MoldSource::Url { display_ref, .. } => {
+                *display_ref = new_ref;
+            }
+            MoldSource::Inline(_) => {}
+        }
+        self
     }
 }
 
@@ -110,15 +212,22 @@ impl MoldSource {
     /// - `./rel/path`     → local file/directory
     /// - `path`           → local file/directory
     pub fn from_mold_str(s: &str, no_cache: bool) -> Result<Self> {
-        // Registry reference (@name or @source/name)
+        // Registry reference (@name or @source/name) — preserve the typed form.
         if let Some(spec) = s.strip_prefix('@') {
-            return crate::registry::resolve(spec, no_cache);
+            let inner = crate::registry::resolve(spec, no_cache)?;
+            return Ok(inner.with_display_ref(s.to_string()));
         }
 
         // Direct URL — auto-detect auth token from domain
         if s.starts_with("http://") || s.starts_with("https://") {
             let token = crate::registry::token_for_url(s);
-            return Ok(Self::Url(s.to_string(), token, None, vec![]));
+            return Ok(Self::Url {
+                url: s.to_string(),
+                token,
+                catalog_hash: None,
+                companion_files: vec![],
+                display_ref: s.to_string(),
+            });
         }
 
         // Local path or directory
@@ -126,9 +235,15 @@ impl MoldSource {
         if path.is_dir() {
             let resolved = resolve_directory_mold(path)
                 .with_context(|| format!("No mold script found in directory: {s}"))?;
-            Ok(Self::File(resolved))
+            Ok(Self::File {
+                path: resolved,
+                display_ref: s.to_string(),
+            })
         } else {
-            Ok(Self::File(s.to_string()))
+            Ok(Self::File {
+                path: s.to_string(),
+                display_ref: s.to_string(),
+            })
         }
     }
 
@@ -153,10 +268,16 @@ impl MoldSource {
     /// Load the mold script source code.
     pub fn load(&self, no_cache: bool) -> Result<String> {
         match self {
-            MoldSource::File(path) => {
+            MoldSource::File { path, .. } => {
                 fs::read_to_string(path).with_context(|| format!("Mold not found: {path}"))
             }
-            MoldSource::Url(url, token, catalog_hash, companion_files) => {
+            MoldSource::Url {
+                url,
+                token,
+                catalog_hash,
+                companion_files,
+                ..
+            } => {
                 #[cfg(feature = "reqwest")]
                 {
                     load_url_with_cache(
@@ -193,11 +314,13 @@ impl MoldSource {
     /// Return the base directory for resolving relative paths from this mold.
     pub fn base_dir(&self) -> Option<String> {
         match self {
-            MoldSource::File(path) => Path::new(path)
+            MoldSource::File { path, .. } => Path::new(path)
                 .parent()
                 .filter(|p| !p.as_os_str().is_empty())
                 .map(|p| p.to_string_lossy().into_owned()),
-            MoldSource::Url(url, _, catalog_hash, _) => {
+            MoldSource::Url {
+                url, catalog_hash, ..
+            } => {
                 #[cfg(feature = "reqwest")]
                 {
                     use sha2::{Digest, Sha256};
@@ -642,19 +765,19 @@ mod tests {
     #[test]
     fn test_resolve_file() {
         let src = MoldSource::resolve(Some("script.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::File(p) if p == "script.py"));
+        assert!(matches!(src, MoldSource::File { ref path, .. } if path == "script.py"));
     }
 
     #[test]
     fn test_resolve_url_http() {
         let src = MoldSource::resolve(Some("http://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _, _, _) if u == "http://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url { ref url, .. } if url == "http://example.com/m.py"));
     }
 
     #[test]
     fn test_resolve_url_https() {
         let src = MoldSource::resolve(Some("https://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url(u, _, _, _) if u == "https://example.com/m.py"));
+        assert!(matches!(src, MoldSource::Url { ref url, .. } if url == "https://example.com/m.py"));
     }
 
     #[test]
@@ -978,7 +1101,7 @@ mod tests {
         let dir_str = mold_dir.to_str().unwrap();
         let src = MoldSource::resolve(Some(dir_str), None).unwrap();
         match src {
-            MoldSource::File(p) => assert!(p.ends_with("converter/converter.py")),
+            MoldSource::File { path, .. } => assert!(path.ends_with("converter/converter.py")),
             _ => panic!("expected MoldSource::File"),
         }
     }

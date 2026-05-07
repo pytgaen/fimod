@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::engine::{MoldExecResult, MoldResult, PendingOp};
 use crate::format::{CsvOptions, DataFormat};
-use crate::mold::{MoldSource, MoldStep};
+use crate::mold::{MoldSource, MoldStep, StepOrigin};
 use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
 
@@ -56,22 +56,18 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
         match r {
             ScriptRef::Expr(e) => {
                 let source = MoldSource::Inline(e.clone());
-                let display = source.to_string();
-                let base_dir = source.base_dir();
                 let script = source.load(no_cache)?;
                 steps.push(MoldStep {
-                    display,
+                    source,
                     script,
                     defaults: mold::MoldDefaults::default(),
-                    base_dir,
                     runtime_args: None,
+                    origin: StepOrigin::Cli,
                 });
             }
             ScriptRef::Mold(m) => {
                 let source = MoldSource::from_mold_str(m, no_cache)?;
                 let is_inline = matches!(source, MoldSource::Inline(_));
-                let display = source.to_string();
-                let base_dir = source.base_dir();
                 let script = source.load(no_cache)?;
                 let defaults = if !is_inline {
                     mold::parse_mold_defaults(&script)
@@ -79,11 +75,11 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
                     mold::MoldDefaults::default()
                 };
                 steps.push(MoldStep {
-                    display,
+                    source,
                     script,
                     defaults,
-                    base_dir,
                     runtime_args: None,
+                    origin: StepOrigin::Cli,
                 });
             }
         }
@@ -135,8 +131,7 @@ pub fn execute_chain(
     let mut i = 0;
     while i < steps.len() {
         let step_script = steps[i].script.clone();
-        let step_display = steps[i].display.clone();
-        let step_base_dir = steps[i].base_dir.clone();
+        let step_base_dir = steps[i].base_dir();
         // Pending `set('args', ...)` mutation overrides the static spec for this step.
         let step_runtime_args = mutations
             .get(&i)
@@ -145,7 +140,7 @@ pub fn execute_chain(
             .or_else(|| steps[i].runtime_args.clone());
 
         if debug {
-            eprintln!("[debug] mold: {step_display}");
+            eprintln!("[debug] {}", steps[i].error_context(i, steps.len()));
         }
 
         // Apply pending format mutations for this step.
@@ -208,7 +203,8 @@ pub fn execute_chain(
             format_override_init: step_output_format_mutation.clone(),
             step_args: step_runtime_args,
         };
-        let exec = engine::execute_mold(&step_script, data, &opts)?;
+        let exec = engine::execute_mold(&step_script, data, &opts)
+            .with_context(|| format!("in {}", steps[i].error_context(i, steps.len())))?;
 
         // Accumulate pending mutations from this execution.
         for m in exec.pending_mutations {
@@ -232,7 +228,8 @@ pub fn execute_chain(
         // Inject new steps requested by this mold.
         let mut insert_at = i + 1;
         for ps in exec.pending_steps {
-            let new_step = resolve_pending(ps.spec)?;
+            let new_step = resolve_pending(ps.spec, i)
+                .with_context(|| format!("while resolving step injected by step {}", i + 1))?;
             match ps.op {
                 PendingOp::InsertNext => {
                     steps.insert(insert_at, new_step);
@@ -267,23 +264,30 @@ pub fn execute_chain(
             }
             if fmt_name == "raw" {
                 bail!(
-                    "set_output_format(\"raw\") can only be used in the final step of a mold chain"
+                    "in {}: set_output_format(\"raw\") can only be used in the final step of a mold chain",
+                    steps[i].error_context(i, steps.len())
                 );
             }
             if debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
+            let step_ctx = steps[i].error_context(i, steps.len());
             let as_string = match &result {
                 Value::String(s) => s.clone(),
-                other => serde_json::to_string(other)
-                    .context("Failed to serialize result for set_input_format re-parsing")?,
+                other => serde_json::to_string(other).with_context(|| {
+                    format!("after {step_ctx}: failed to serialize result for set_input_format re-parsing")
+                })?,
             };
-            let target_fmt = format::parse_format_name(fmt_name)?;
+            let target_fmt = format::parse_format_name(fmt_name)
+                .with_context(|| format!("after {step_ctx}: invalid set_input_format({fmt_name:?})"))?;
             let reparsed = if target_fmt == DataFormat::Csv {
-                let (val, _) = format::parse_csv(&as_string, &CsvOptions::default())?;
+                let (val, _) = format::parse_csv(&as_string, &CsvOptions::default())
+                    .with_context(|| format!("after {step_ctx}: re-parsing as csv failed"))?;
                 val
             } else {
-                target_fmt.parse(&as_string)?
+                target_fmt
+                    .parse(&as_string)
+                    .with_context(|| format!("after {step_ctx}: re-parsing as {fmt_name} failed"))?
             };
             data = convert::json_into_monty(reparsed);
         } else if is_last {
@@ -327,7 +331,8 @@ fn step_to_remaining_spec(step: &MoldStep) -> Value {
 }
 
 /// Resolve a pending step spec (from `insert_next`/`append`) into a `MoldStep`.
-fn resolve_pending(spec: Value) -> Result<MoldStep> {
+/// `parent_step` is the 0-based index of the mold that injected this step.
+fn resolve_pending(spec: Value, parent_step: usize) -> Result<MoldStep> {
     let script_ref = if let Some(m) = spec.get("mold").and_then(Value::as_str) {
         ScriptRef::Mold(m.to_string())
     } else if let Some(e) = spec.get("expr").and_then(Value::as_str) {
@@ -337,6 +342,7 @@ fn resolve_pending(spec: Value) -> Result<MoldStep> {
     };
     let mut steps = build_scripts(&[script_ref], false)?;
     let mut step = steps.remove(0);
+    step.origin = StepOrigin::Injected { parent_step };
     if let Some(fmt) = spec.get("input_format").and_then(Value::as_str) {
         step.defaults.input_format = Some(fmt.to_string());
     }

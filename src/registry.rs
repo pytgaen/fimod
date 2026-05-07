@@ -675,20 +675,32 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     // 1. base/mold_name.py
     let direct = base.join(format!("{mold_name}.py"));
     if direct.is_file() {
-        return Ok(MoldSource::File(direct.to_string_lossy().into_owned()));
+        let path = direct.to_string_lossy().into_owned();
+        return Ok(MoldSource::File {
+            display_ref: path.clone(),
+            path,
+        });
     }
 
     // 2. base/mold_name/<last_segment>.py
     let last = mold_name.split('/').next_back().unwrap_or(mold_name);
     let named = base.join(mold_name).join(format!("{last}.py"));
     if named.is_file() {
-        return Ok(MoldSource::File(named.to_string_lossy().into_owned()));
+        let path = named.to_string_lossy().into_owned();
+        return Ok(MoldSource::File {
+            display_ref: path.clone(),
+            path,
+        });
     }
 
     // 3. base/mold_name/__main__.py
     let main = base.join(mold_name).join("__main__.py");
     if main.is_file() {
-        return Ok(MoldSource::File(main.to_string_lossy().into_owned()));
+        let path = main.to_string_lossy().into_owned();
+        return Ok(MoldSource::File {
+            display_ref: path.clone(),
+            path,
+        });
     }
 
     bail!(
@@ -804,7 +816,13 @@ fn resolve_via_catalog(
         .iter()
         .map(|f| format!("{base_trimmed}/{f}"))
         .collect();
-    Ok(MoldSource::Url(url, token, catalog_hash, companion_urls))
+    Ok(MoldSource::Url {
+        display_ref: url.clone(),
+        url,
+        token,
+        catalog_hash,
+        companion_files: companion_urls,
+    })
 }
 
 // ── catalog data model ────────────────────────────────────────────────────────

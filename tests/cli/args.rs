@@ -270,7 +270,7 @@ fn test_debug_shows_formats_on_stderr() {
         .success()
         .stderr(predicate::str::contains("[debug] input format: json"))
         .stderr(predicate::str::contains("[debug] output format: json"))
-        .stderr(predicate::str::contains("[debug] mold: inline(-e)"))
+        .stderr(predicate::str::contains("[debug] step 1/1 (-e 'data')"))
         .stdout(predicate::str::contains("\"name\": \"Alice\""));
 }
 
@@ -347,7 +347,8 @@ fn test_debug_shows_mold_file_source() {
         .args(["-i", &input, "-m", &mold, "-d"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("[debug] mold: file("));
+        .stderr(predicate::str::contains("[debug] step 1/1 ("))
+        .stderr(predicate::str::contains("id.py"));
 }
 
 #[test]
@@ -411,8 +412,101 @@ fn test_error_python_runtime() {
         .args(["-i", &input, "-e", r#"data["missing_key"]"#])
         .assert()
         .failure()
+        .stderr(predicate::str::contains("in step 1/1 (-e 'data[\"missing_key\"]')"))
         .stderr(predicate::str::contains("Python error in mold"))
         .stderr(predicate::str::contains("KeyError"));
+}
+
+#[test]
+fn test_error_chain_reports_failing_step() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+    let ok = setup_mold(
+        &dir,
+        "ok.py",
+        "def transform(data, **_):\n    return data\n",
+    );
+    let fail = setup_mold(
+        &dir,
+        "fail.py",
+        "def transform(data, **_):\n    return data['missing']\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &ok, "-m", &fail, "-e", "data"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("in step 2/3 ("))
+        .stderr(predicate::str::contains("fail.py"))
+        .stderr(predicate::str::contains("KeyError"));
+}
+
+#[test]
+fn test_error_injected_step_labelled() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+    let injector = setup_mold(
+        &dir,
+        "injector.py",
+        r#"
+def transform(data, pipeline, **_):
+    pipeline.insert_next(Step.create(expr="data['missing']"))
+    return data
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &injector])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("injected by step 1"))
+        .stderr(predicate::str::contains("KeyError"));
+}
+
+#[test]
+fn test_error_registry_label_preserves_at_form() {
+    // A mold referenced as @broken should appear as `@broken` in the error
+    // context — NOT as the resolved file path.
+    let home = assert_fs::TempDir::new().unwrap();
+    let molds_dir = assert_fs::TempDir::new().unwrap();
+    let _ = setup_mold(
+        &molds_dir,
+        "broken.py",
+        "def transform(data, **_):\n    return data['missing']\n",
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+    let resolved_path = molds_dir.path().to_str().unwrap().to_string();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", "@broken"])
+        .env("HOME", home.path())
+        .env("FIMOD_REGISTRY", &resolved_path)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("step 1/1 (@broken)"))
+        .stderr(predicate::str::contains("KeyError"))
+        // Resolved tmpdir path must NOT leak into the error label.
+        .stderr(predicate::str::contains(resolved_path.as_str()).not());
+}
+
+#[test]
+fn test_error_long_expression_truncated() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+    // 60-char expression that fails — should be truncated as `head…tail`.
+    let long_expr = "data['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_missing']";
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", long_expr])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("step 1/1 (-e '"))
+        .stderr(predicate::str::contains("…"));
 }
 
 #[test]

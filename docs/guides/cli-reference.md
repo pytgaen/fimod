@@ -680,7 +680,22 @@ Prints pipeline diagnostics to **stderr** (stdout stays clean for piping):
 fimod s -i data.json -m transform.py --debug
 ```
 
-Output includes: input/output format, mold source, full script, input data, output data, **phase timings** (`parse`, `execute`, `serialize`, `total`).
+Output includes: input/output format, **per-step identification** (`step N/M (label)`), full script, input data, output data, **phase timings** (`parse`, `execute`, `serialize`, `total`).
+
+Each step in a chain is logged with its 1-based index, the chain length, and a short label (the raw `-m` reference, or `-e '<expr>'` for inline expressions, truncated to ~50 chars). Steps injected at runtime via `pipeline.insert_next` / `pipeline.append` are annotated with `injected by step P`:
+
+```text
+[debug] step 1/3 (./normalize.py)
+[debug] step 2/3 (@common/flatten)
+[debug] step 3/3 (-e 'data', injected by step 2)
+```
+
+The same identifier is prepended to runtime errors, so the failing step is always unambiguous:
+
+```text
+Error: in step 2/3 (@common/flatten): Python error in mold:
+KeyError: 'foo'
+```
 
 Timings are always emitted in seconds with millisecond precision (`0.045s`) for easy parsing:
 
