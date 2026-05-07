@@ -743,6 +743,56 @@ Requires `-i`. Incompatible with `-o`.
 
 ---
 
+## 👀 Watch mode (`--watch` / `-w`)
+
+Re-runs the transform whenever the input file or a local mold script changes — handy for iterating on a mold while editing it in another window:
+
+```bash
+fimod s -i data.json -m cleanup.py -o out.json --watch
+```
+
+Output goes to the usual destination (`-o` file or stdout). Status messages stream on stderr, so piping still works:
+
+```bash
+fimod s -i data.json -m cleanup.py --watch | jq .name
+# stderr: [watch] watching data.json, cleanup.py
+# stderr: [watch] run #1 ... ok (42ms)
+# stderr: [watch] run #2 ... ok (38ms)   (after editing cleanup.py)
+# stdout: "alice"
+# stdout: "alice"
+```
+
+A run that fails (Python error, parse error, missing file) is reported but **does not exit** the watch loop — fix the script and the next save triggers another run:
+
+```text
+[watch] run #3 ... failed (12ms)
+  in step 1/1 (cleanup.py): Python error in mold:
+  NameError: name 'foo' is not defined
+```
+
+**What is watched**:
+
+- `-i <file>` (the input file, must be local — not stdin or HTTP).
+- Each `-m <file.py>` that points to a local file (registry molds `@reg/name` and inline `-e` expressions are not watched).
+
+**Refused combinations** (each emits an explicit error):
+
+| Combo                                   | Reason                                          |
+|-----------------------------------------|-------------------------------------------------|
+| `--watch` + `-i -` (stdin)              | nothing to watch                                |
+| `--watch` + `-i http(s)://…`            | HTTP inputs not supported                       |
+| `--watch` + multiple `-i` (batch)       | watch is single-input only                      |
+| `--watch` + `--input-list`              | input list mode unsupported                     |
+| `--watch` + `--no-input`                | no input means no file to watch                 |
+| `--watch` + `--in-place`                | feedback loop (we'd watch the file we write)    |
+| `--watch` + `--output-format raw`       | raw mode bypasses the transform pipeline        |
+
+**Implementation details**: events are debounced (150 ms) so a single `:w` in your editor produces one re-run, not several. Parent directories are watched so atomic-rename editors (vim, VSCode) work correctly. The mold script is reloaded from disk on every iteration; no in-memory cache to invalidate.
+
+The feature can be disabled at compile time with `cargo build --no-default-features --features=reqwest` (omits `notify` and ~25 transitive crates). A binary built without `watch` rejects the flag with a clear error.
+
+---
+
 ## 🔌 Stdin / stdout
 
 ```bash
