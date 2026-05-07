@@ -1,4 +1,5 @@
 use super::helpers::{setup_input, setup_mold, GREET_MOLD};
+use assert_fs::prelude::*;
 use predicates::prelude::*;
 
 #[test]
@@ -1007,5 +1008,111 @@ fn test_raw_mode_binary_rejects_expression() {
         .failure()
         .stderr(predicate::str::contains(
             "--output-format raw is incompatible with -m/--mold",
+        ));
+}
+
+// ─── --watch validation ──────────────────────────────────────────────────────
+
+#[test]
+fn test_watch_rejects_no_input() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-e", "data", "--watch"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--watch requires -i/--input"));
+}
+
+#[test]
+fn test_watch_rejects_in_place() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"a": 1}"#);
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--watch", "--in-place"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not compatible with --in-place",
+        ));
+}
+
+#[test]
+fn test_watch_rejects_no_input_flag() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "-e", "1", "--watch"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not compatible with --no-input",
+        ));
+}
+
+#[test]
+fn test_watch_rejects_input_list() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let list = dir.child("list.txt");
+    list.write_str("foo.json\n").unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-I",
+            list.path().to_str().unwrap(),
+            "-e",
+            "data",
+            "--watch",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not compatible with --input-list",
+        ));
+}
+
+#[test]
+fn test_watch_rejects_batch_multiple_inputs() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let a = setup_input(&dir, "a.json", r#"{"x": 1}"#);
+    let b = setup_input(&dir, "b.json", r#"{"x": 2}"#);
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &a, "-i", &b, "-e", "data", "--watch"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not compatible with batch mode",
+        ));
+}
+
+#[test]
+fn test_watch_rejects_http_input() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            "https://example.com/data.json",
+            "-e",
+            "data",
+            "--watch",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not supported for HTTP inputs",
+        ));
+}
+
+#[test]
+fn test_watch_rejects_raw_output() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"a": 1}"#);
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "--output-format", "raw", "--watch"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--watch is not compatible with --output-format raw",
         ));
 }

@@ -82,6 +82,10 @@ struct ShapeArgs {
     #[arg(long = "in-place")]
     in_place: bool,
 
+    /// Re-run the transform when -i or -m files change (single input, file-based only)
+    #[arg(long, short = 'w')]
+    watch: bool,
+
     /// Use the filename from the input URL as the output filename (like curl -O)
     #[arg(short = 'O', long = "url-filename", conflicts_with_all = ["output", "in_place"])]
     url_filename: bool,
@@ -683,6 +687,32 @@ fn repl_feed(repl: &mut monty::MontyRepl<monty::NoLimitTracker>, snippet: &str) 
 }
 
 fn run_shape(mut shape: ShapeArgs) -> Result<()> {
+    // Validate --watch combos before any input resolution
+    if shape.watch {
+        if shape.in_place {
+            bail!("--watch is not compatible with --in-place");
+        }
+        if shape.no_input {
+            bail!("--watch is not compatible with --no-input");
+        }
+        if shape.input_list.is_some() {
+            bail!("--watch is not compatible with --input-list");
+        }
+        if shape.output_format.as_deref() == Some("raw") {
+            bail!("--watch is not compatible with --output-format raw");
+        }
+        if shape.input.is_empty() {
+            bail!("--watch requires -i/--input (cannot watch stdin)");
+        }
+        if shape.input.len() > 1 {
+            bail!("--watch is not compatible with batch mode (multiple -i)");
+        }
+        if shape.input.iter().any(|p| http::is_url(p)) {
+            bail!("--watch is not supported for HTTP inputs");
+        }
+        bail!("--watch is not yet implemented in this version");
+    }
+
     // Resolve --input-list into shape.input before any other processing
     if let Some(ref source) = shape.input_list.clone() {
         shape.input = read_input_list(source)?;

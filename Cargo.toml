@@ -12,9 +12,10 @@ keywords = ["cli", "data-shaper", "data-transformation", "json", "yaml"]
 rust-version = "1.75"
 
 [features]
-default = ["reqwest"]
-full = ["reqwest"]
+default = ["reqwest", "watch"]
+full = ["reqwest", "watch"]
 slim = []
+watch = ["dep:notify", "dep:notify-debouncer-mini"]
 
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
@@ -38,6 +39,8 @@ mimalloc = "0.1"
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+notify = { version = "6", optional = true }
+notify-debouncer-mini = { version = "0.4", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
