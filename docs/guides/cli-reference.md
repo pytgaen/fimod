@@ -754,37 +754,40 @@ Features:
 
 Fimod provides **dynamic** shell completions: subcommands, flags, format names, mold `@references`, and registry source names are all completed contextually.
 
-Run `fimod completions <shell>` to see the setup instruction for your shell, or use the snippets below:
+Add **one line** to your shell rc — `fimod setup completions` prints the activation script on stdout, you `eval` it. The shell is auto-detected from `$SHELL`; pass `--shell <SHELL>` to override.
 
 === "Bash"
 
     ```bash
-    echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc
+    echo 'eval "$(fimod setup completions --shell bash)"' >> ~/.bashrc
     ```
 
 === "Zsh"
 
     ```bash
-    echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc
+    echo 'eval "$(fimod setup completions --shell zsh)"' >> ~/.zshrc
     ```
 
 === "Fish"
 
     ```bash
-    echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish
+    fimod setup completions --shell fish > ~/.config/fish/completions/fimod.fish
     ```
 
 === "Elvish"
 
     ```bash
-    echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv
+    echo 'eval (fimod setup completions --shell elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
 === "PowerShell"
 
     ```powershell
-    echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE
+    Add-Content $PROFILE 'fimod setup completions --shell powershell | Out-String | Invoke-Expression'
     ```
+
+!!! note "Migrating from older snippets"
+    If you previously added `source <(COMPLETE=zsh fimod)` (or the equivalent for your shell) to your rc, **it still works** — the underlying mechanism is unchanged. To switch to the new pattern, replace it with the `eval "$(fimod setup completions ...)"` line above.
 
 ### What gets completed
 
@@ -801,4 +804,4 @@ Run `fimod completions <shell>` to see the setup instruction for your shell, or 
 | `fimod registry build-catalog --registry` | Configured source names |
 | `fimod mold list` | Configured source names |
 | `fimod mold show --registry` | Configured source names |
-| `fimod completions` | Shell names: `bash`, `zsh`, `fish`, `elvish`, `powershell` |
+| `fimod setup completions --shell` | Shell names: `bash`, `zsh`, `fish`, `elvish`, `powershell` |

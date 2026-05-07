@@ -521,12 +521,32 @@ fn test_completions_fish() {
 }
 
 #[test]
-fn test_completions_subcommand() {
+fn test_setup_completions_zsh() {
     assert_cmd::cargo_bin_cmd!("fimod")
-        .args(["completions", "zsh"])
+        .args(["setup", "completions", "--shell", "zsh"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("COMPLETE=zsh fimod"));
+        .stdout(predicate::str::contains("#compdef fimod"));
+}
+
+#[test]
+fn test_setup_completions_autodetect() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["setup", "completions"])
+        .env("SHELL", "/bin/bash")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fimod"));
+}
+
+#[test]
+fn test_setup_completions_autodetect_failure() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["setup", "completions"])
+        .env("SHELL", "")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("could not detect shell"));
 }
 
 #[test]

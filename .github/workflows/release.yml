@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  GIT_CLIFF_VERSION: "2.8.0"
   UPX_VERSION: "5.1.0"
 
 permissions:
@@ -15,46 +14,9 @@ permissions:
   packages: write
 
 jobs:
-  changelog:
-    name: Generate changelog
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Cache git-cliff
-        id: cache-cliff
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/bin/git-cliff
-          key: git-cliff-${{ env.GIT_CLIFF_VERSION }}-${{ runner.os }}
-
-      - name: Install git-cliff
-        if: steps.cache-cliff.outputs.cache-hit != 'true'
-        run: |
-          curl -sSfL \
-            "https://github.com/orhun/git-cliff/releases/download/v${{ env.GIT_CLIFF_VERSION }}/git-cliff-${{ env.GIT_CLIFF_VERSION }}-x86_64-unknown-linux-musl.tar.gz" \
-            | tar xz -C /tmp/
-          find /tmp -name 'git-cliff' -type f | head -1 | xargs -I{} cp {} /usr/local/bin/git-cliff
-          chmod +x /usr/local/bin/git-cliff
-
-      - name: Generate changelog with git-cliff
-        id: cliff
-        env:
-          GITHUB_REPO: ${{ github.repository }}
-        run: git-cliff --config cliff.toml --latest --strip header --output CHANGELOG_RELEASE.md
-
-      - name: Upload changelog artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: changelog
-          path: CHANGELOG_RELEASE.md
-
   build:
     name: Build ${{ matrix.variant }} / ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    needs: changelog
     strategy:
       fail-fast: false
       matrix:
@@ -163,7 +125,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [changelog, build]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -193,13 +155,24 @@ jobs:
           done > "$SUMS"
           echo "sums_file=${SUMS}" >> "$GITHUB_ENV"
 
-      - name: Read changelog
+      - name: Extract release section from CHANGELOG.md
         id: changelog
+        shell: bash
         run: |
-          BODY=$(cat artifacts/changelog/CHANGELOG_RELEASE.md 2>/dev/null || echo "Release ${{ github.ref_name }}")
-          echo "body<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$BODY"     >> "$GITHUB_OUTPUT"
-          echo "EOF"       >> "$GITHUB_OUTPUT"
+          VERSION="${GITHUB_REF_NAME#v}"
+          BODY=$(awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$BODY" ]; then
+            BODY="Release ${GITHUB_REF_NAME}"
+          fi
+          {
+            echo "body<<EOF_BODY"
+            echo "$BODY"
+            echo "EOF_BODY"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Determine pre-release
         id: prerelease

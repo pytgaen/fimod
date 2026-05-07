@@ -17,6 +17,7 @@ use fimod::{convert, format, http, registry, setup, test_runner};
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, CompletionCandidate};
+use clap_complete::env::Shells;
 use clap_complete::CompleteEnv;
 use monty::MontyObject;
 use serde_json::Value;
@@ -202,12 +203,6 @@ enum Commands {
         #[command(subcommand)]
         category: SetupCategory,
     },
-    /// Show how to enable shell completions
-    Completions {
-        /// Shell to generate instructions for
-        #[arg(value_enum)]
-        shell: CompletionShell,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -226,6 +221,16 @@ enum SetupCategory {
     All {
         #[command(subcommand)]
         action: SetupDefaults,
+    },
+    /// Print a shell completion script to stdout
+    ///
+    /// Use with `eval` in your shell rc:
+    ///   eval "$(fimod setup completions --shell zsh)"
+    /// If --shell is omitted, the shell is auto-detected from $SHELL.
+    Completions {
+        /// Target shell (auto-detected from $SHELL if omitted)
+        #[arg(long, value_enum)]
+        shell: Option<CompletionShell>,
     },
 }
 
@@ -469,26 +474,44 @@ fn complete_sources(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
         .collect()
 }
 
-fn print_completion_instructions(shell: CompletionShell) {
-    let (shell_name, instruction) = match shell {
-        CompletionShell::Bash => ("Bash", "echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc"),
-        CompletionShell::Zsh => ("Zsh", "echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc"),
-        CompletionShell::Fish => (
-            "Fish",
-            "echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish",
-        ),
-        CompletionShell::Elvish => (
-            "Elvish",
-            "echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv",
-        ),
-        CompletionShell::Powershell => (
-            "PowerShell",
-            r#"echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE"#,
-        ),
+fn print_completion_script(shell: Option<CompletionShell>) -> Result<()> {
+    let shell = shell.map_or_else(detect_shell, Ok)?;
+    let shell_name = match shell {
+        CompletionShell::Bash => "bash",
+        CompletionShell::Zsh => "zsh",
+        CompletionShell::Fish => "fish",
+        CompletionShell::Elvish => "elvish",
+        CompletionShell::Powershell => "powershell",
     };
-    eprintln!(
-        "# {shell_name}: add this to your shell config, then restart your shell:\n{instruction}"
-    );
+    let shells = Shells::builtins();
+    let completer = shells
+        .completer(shell_name)
+        .with_context(|| format!("unsupported shell: {shell_name}"))?;
+    completer
+        .write_registration("COMPLETE", "fimod", "fimod", "fimod", &mut io::stdout())
+        .context("failed to write completion script")?;
+    Ok(())
+}
+
+fn detect_shell() -> Result<CompletionShell> {
+    let shell_path = std::env::var("SHELL").unwrap_or_default();
+    let basename = Path::new(&shell_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    match basename {
+        "bash" => Ok(CompletionShell::Bash),
+        "zsh" => Ok(CompletionShell::Zsh),
+        "fish" => Ok(CompletionShell::Fish),
+        "elvish" => Ok(CompletionShell::Elvish),
+        "pwsh" | "powershell" => Ok(CompletionShell::Powershell),
+        "" => bail!(
+            "could not detect shell: $SHELL is empty — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
+        ),
+        other => bail!(
+            "unrecognized shell `{other}` from $SHELL — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
+        ),
+    }
 }
 
 fn main() -> Result<()> {
@@ -565,11 +588,8 @@ fn dispatch(cli: Cli) -> Result<()> {
             SetupCategory::All {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::all_defaults(yes, force),
+            SetupCategory::Completions { shell } => print_completion_script(shell),
         },
-        Some(Commands::Completions { shell }) => {
-            print_completion_instructions(shell);
-            Ok(())
-        }
         None => {
             Cli::command().print_help()?;
             std::process::exit(2);
