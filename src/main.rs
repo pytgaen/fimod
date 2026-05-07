@@ -12,6 +12,7 @@ use fimod::pipeline::{
     HttpOptions, ScriptRef,
 };
 use fimod::MONTY_VERSION;
+use fimod::sandbox::SandboxPolicy;
 use fimod::{convert, format, http, registry, setup, test_runner};
 
 use anyhow::{bail, Context, Result};
@@ -872,6 +873,17 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         return Ok(());
     }
 
+    run_shape_pipeline(&shape, &policy, debug, msg_level, is_multi_slurp, is_batch)
+}
+
+fn run_shape_pipeline(
+    shape: &ShapeArgs,
+    policy: &SandboxPolicy,
+    debug: bool,
+    msg_level: u8,
+    is_multi_slurp: bool,
+    is_batch: bool,
+) -> Result<()> {
     // Parse --arg name=value pairs
     let extra_args: Vec<(String, String)> = shape
         .args
@@ -973,7 +985,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
 
     // Build HTTP options
     let http_opts = HttpOptions {
-        headers: shape.http_header,
+        headers: shape.http_header.clone(),
         timeout: shape.timeout,
         no_follow: shape.no_follow || first_defaults.no_follow,
     };
@@ -1058,7 +1070,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         let data = convert::json_into_monty(combined);
         let slurp_context = serde_json::json!({
             "input": null,
-            "output": shape.output,
+            "output": shape.output.clone(),
             "input_format": effective_input_format,
             "output_format": effective_output_format,
             "in_place": false,
@@ -1074,7 +1086,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             &slurp_context,
             debug,
             msg_level,
-            &policy,
+            policy,
         )?;
         let result = slurp_exec.value;
         let opt_exit_code = slurp_exec.exit_code;
@@ -1149,7 +1161,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                 shape.in_place,
                 shape.check,
                 &http_opts,
-                &policy,
+                policy,
             )?;
         }
         return Ok(());
@@ -1192,6 +1204,6 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         shape.in_place,
         shape.check,
         &http_opts,
-        &policy,
+        policy,
     )
 }
