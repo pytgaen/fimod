@@ -25,6 +25,9 @@ use serde_json::Value;
 
 use format::{CsvOptions, DataFormat};
 
+#[cfg(feature = "watch")]
+mod watch;
+
 /// Verbosity level for `msg_*` functions in mold scripts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum MsgLevel {
@@ -711,7 +714,6 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         if shape.input.iter().any(|p| http::is_url(p)) {
             bail!("--watch is not supported for HTTP inputs");
         }
-        bail!("--watch is not yet implemented in this version");
     }
 
     // Resolve --input-list into shape.input before any other processing
@@ -871,6 +873,13 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         }
 
         return Ok(());
+    }
+
+    if shape.watch {
+        #[cfg(feature = "watch")]
+        return watch::run_watch(&shape, &policy, debug, msg_level);
+        #[cfg(not(feature = "watch"))]
+        bail!("--watch is not available in this build (compiled without the 'watch' feature)");
     }
 
     run_shape_pipeline(&shape, &policy, debug, msg_level, is_multi_slurp, is_batch)
