@@ -680,7 +680,22 @@ Prints pipeline diagnostics to **stderr** (stdout stays clean for piping):
 fimod s -i data.json -m transform.py --debug
 ```
 
-Output includes: input/output format, mold source, full script, input data, output data.
+Output includes: input/output format, mold source, full script, input data, output data, **phase timings** (`parse`, `execute`, `serialize`, `total`).
+
+Timings are always emitted in seconds with millisecond precision (`0.045s`) for easy parsing:
+
+```text
+[debug] parse: 0.002s
+[debug] execute: 0.045s
+[debug] serialize: 0.001s
+[debug] total: 0.048s
+```
+
+```bash
+# extract execute time of a run
+fimod s -i big.json -m heavy.py --debug 2>&1 1>/dev/null \
+  | awk '/\[debug\] execute:/ {print $3}'
+```
 
 !!! tip
     In debug mode, Python `print()` statements are also redirected to stderr.

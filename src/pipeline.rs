@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
 use std::process;
+use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use monty::MontyObject;
@@ -396,6 +397,7 @@ fn run_pipeline_core(
     http_opts: &HttpOptions,
     policy: &SandboxPolicy,
 ) -> Result<PipelineResult> {
+    let parse_start = Instant::now();
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
 
@@ -562,7 +564,12 @@ fn run_pipeline_core(
         None => serde_json::Value::Null,
     };
 
+    if debug {
+        eprintln!("[debug] parse: {:.3}s", parse_start.elapsed().as_secs_f64());
+    }
+
     // Execute the mold chain
+    let exec_start = Instant::now();
     let exec = execute_chain(
         scripts,
         data,
@@ -574,6 +581,9 @@ fn run_pipeline_core(
         msg_level,
         policy,
     )?;
+    if debug {
+        eprintln!("[debug] execute: {:.3}s", exec_start.elapsed().as_secs_f64());
+    }
 
     Ok(PipelineResult {
         value: exec.value,
@@ -612,6 +622,7 @@ pub fn process_single_input(
     http_opts: &HttpOptions,
     policy: &SandboxPolicy,
 ) -> Result<()> {
+    let total_start = Instant::now();
     let context_base = serde_json::json!({
         "input": input_path,
         "output": output_path,
@@ -707,7 +718,16 @@ pub fn process_single_input(
         csv_opts,
         no_input,
         debug,
-    )
+    )?;
+
+    if debug {
+        eprintln!(
+            "[debug] total: {:.3}s",
+            total_start.elapsed().as_secs_f64()
+        );
+    }
+
+    Ok(())
 }
 
 pub fn output_result(
@@ -719,6 +739,7 @@ pub fn output_result(
     no_input: bool,
     debug: bool,
 ) -> Result<()> {
+    let serialize_start = Instant::now();
     let output_fallback = if no_input || in_fmt == DataFormat::Http {
         DataFormat::Json
     } else {
@@ -756,6 +777,13 @@ pub fn output_result(
         None => {
             print!("{output_str}");
         }
+    }
+
+    if debug {
+        eprintln!(
+            "[debug] serialize: {:.3}s",
+            serialize_start.elapsed().as_secs_f64()
+        );
     }
 
     Ok(())

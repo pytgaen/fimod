@@ -275,6 +275,22 @@ fn test_debug_shows_formats_on_stderr() {
 }
 
 #[test]
+fn test_debug_shows_phase_timings() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.json", r#"{"x": 1}"#);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--debug"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_match(r"\[debug\] parse: \d+\.\d{3}s").unwrap())
+        .stderr(predicate::str::is_match(r"\[debug\] execute: \d+\.\d{3}s").unwrap())
+        .stderr(predicate::str::is_match(r"\[debug\] serialize: \d+\.\d{3}s").unwrap())
+        .stderr(predicate::str::is_match(r"\[debug\] total: \d+\.\d{3}s").unwrap());
+}
+
+#[test]
 fn test_debug_shows_script() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "test.json", r#"{"name": "Alice"}"#);
