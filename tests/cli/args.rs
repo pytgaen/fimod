@@ -413,7 +413,9 @@ fn test_error_python_runtime() {
         .args(["-i", &input, "-e", r#"data["missing_key"]"#])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("in step 1/1 (-e 'data[\"missing_key\"]')"))
+        .stderr(predicate::str::contains(
+            "in step 1/1 (-e 'data[\"missing_key\"]')",
+        ))
         .stderr(predicate::str::contains("Python error in mold"))
         .stderr(predicate::str::contains("KeyError"));
 }
@@ -1057,13 +1059,7 @@ fn test_watch_rejects_input_list() {
     list.write_str("foo.json\n").unwrap();
     assert_cmd::cargo_bin_cmd!("fimod")
         .arg("shape")
-        .args([
-            "-I",
-            list.path().to_str().unwrap(),
-            "-e",
-            "data",
-            "--watch",
-        ])
+        .args(["-I", list.path().to_str().unwrap(), "-e", "data", "--watch"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(

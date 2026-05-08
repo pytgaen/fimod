@@ -11,8 +11,8 @@ use fimod::pipeline::{
     parse_input_entry, path_stem, process_single_input, read_and_parse_for_slurp, read_input_list,
     url_filename, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
-use fimod::MONTY_VERSION;
 use fimod::sandbox::SandboxPolicy;
+use fimod::MONTY_VERSION;
 use fimod::{convert, format, http, registry, setup, test_runner};
 
 use anyhow::{bail, Context, Result};
@@ -1067,10 +1067,9 @@ fn run_shape_pipeline(
             // Named mode → Value::Object keyed by stem or explicit alias
             let mut map = serde_json::Map::new();
             for (path, alias_opt) in &entries {
-                let alias = match alias_opt
-                    .as_ref()
-                    .expect("invariant: has_alias && all_alias means every entry carries an alias_opt")
-                {
+                let alias = match alias_opt.as_ref().expect(
+                    "invariant: has_alias && all_alias means every entry carries an alias_opt",
+                ) {
                     Some(name) => name.to_string(),
                     None => path_stem(path),
                 };

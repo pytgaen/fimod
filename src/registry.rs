@@ -746,9 +746,10 @@ fn resolve_remote(
     token: Option<String>,
     no_cache: bool,
 ) -> Result<MoldSource> {
-    let base_url = source.url.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("{} registry has no URL configured", source.kind)
-    })?;
+    let base_url = source
+        .url
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("{} registry has no URL configured", source.kind))?;
     let resolved_base = match source.kind {
         SourceType::Github => github_to_raw(base_url)?,
         _ => base_url.to_string(),

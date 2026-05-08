@@ -66,7 +66,14 @@ fn truncate_middle(s: &str, head: usize, tail: usize) -> String {
         return s.to_string();
     }
     let h: String = chars.iter().take(head).collect();
-    let t: String = chars.iter().rev().take(tail).collect::<Vec<_>>().into_iter().rev().collect();
+    let t: String = chars
+        .iter()
+        .rev()
+        .take(tail)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     format!("{h}…{t}")
 }
 
@@ -785,7 +792,9 @@ mod tests {
     #[test]
     fn test_resolve_url_https() {
         let src = MoldSource::resolve(Some("https://example.com/m.py"), None).unwrap();
-        assert!(matches!(src, MoldSource::Url { ref url, .. } if url == "https://example.com/m.py"));
+        assert!(
+            matches!(src, MoldSource::Url { ref url, .. } if url == "https://example.com/m.py")
+        );
     }
 
     #[test]

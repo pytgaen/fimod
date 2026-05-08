@@ -282,8 +282,9 @@ pub fn execute_chain(
                 });
             }
             let step_ctx = steps[i].error_context(i, steps.len());
-            let target_fmt = format::parse_format_name(fmt_name)
-                .with_context(|| format!("after {step_ctx}: invalid set_input_format({fmt_name:?})"))?;
+            let target_fmt = format::parse_format_name(fmt_name).with_context(|| {
+                format!("after {step_ctx}: invalid set_input_format({fmt_name:?})")
+            })?;
             if target_fmt == DataFormat::Raw {
                 bail!(
                     "in {step_ctx}: set_output_format(\"raw\") can only be used in the final step of a mold chain"

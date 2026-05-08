@@ -73,7 +73,7 @@ rtk cargo test --test molds_test    # All mold fixture tests
 ## Workflow
 
 After implementing or modifying a feature, always:
-1. Run `rtk cargo clippy` and `rtk cargo test` before considering the task complete.
+1. Run `rtk task lint` (cargo fmt --check + clippy + cargo deny check) and `rtk task test` before considering the task complete. These are the same checks the CI runs, so a local fail predicts a CI fail.
 2. Check if documentation needs updating (README.md, docs/built-ins.md, docs/cli-reference.md, docs/mold-scripting.md) and propose the changes.
 3. When updating ROADMAP.md, move completed items to the appropriate documentation files (built-ins.md, cli-reference.md, etc.) rather than just marking them as done in the roadmap.
 
