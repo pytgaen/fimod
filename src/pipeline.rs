@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
-use std::process;
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
@@ -20,6 +19,20 @@ use crate::{convert, engine, format, http, mold};
 pub enum ScriptRef {
     Mold(String),
     Expr(String),
+}
+
+/// Outcome of a CLI invocation. Either completed normally, or the pipeline
+/// requested the process to exit with a specific code (`set_exit()` in a mold,
+/// `--check` mode, or a sandbox kill).
+///
+/// Returning this through `Result` instead of calling `process::exit()`
+/// directly lets `pipeline.rs` stay free of side effects so it can be used as
+/// a library; only `main()` is allowed to actually exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "CliResult::Exit must be propagated to main() so the process exits with the right code"]
+pub enum CliResult {
+    Done,
+    Exit(i32),
 }
 
 fn debug_phase(debug: bool, label: &str, start: Instant) {
@@ -612,8 +625,10 @@ fn run_pipeline_core(
 
 /// Process a single input through the full pipeline: read → parse → execute chain → serialize → write.
 ///
-/// This is the CLI-facing function that handles output writing and `process::exit()`.
-/// For library usage, prefer `run_pipeline` which returns the result without side effects.
+/// Handles output writing and returns a `CliResult` describing whether the
+/// invocation completed normally or requests the process to exit with a code
+/// (from `set_exit()` or `--check`). For library usage, prefer `run_pipeline`,
+/// which returns the result without writing or signalling exits.
 #[allow(clippy::too_many_arguments)]
 pub fn process_single_input(
     input_path: Option<&str>,
@@ -632,7 +647,7 @@ pub fn process_single_input(
     check: bool,
     http_opts: &HttpOptions,
     policy: &SandboxPolicy,
-) -> Result<()> {
+) -> Result<CliResult> {
     let total_start = Instant::now();
     let context_base = serde_json::json!({
         "input": input_path,
@@ -694,9 +709,9 @@ pub fn process_single_input(
             }
         }
         if let Some(code) = result.exit_code {
-            process::exit(code);
+            return Ok(CliResult::Exit(code));
         }
-        return Ok(());
+        return Ok(CliResult::Done);
     }
 
     // If set_input_format() or set_output_format() was called (non-raw), it overrides the output format
@@ -718,12 +733,12 @@ pub fn process_single_input(
                 debug,
             )?;
         }
-        process::exit(code);
+        return Ok(CliResult::Exit(code));
     }
 
     if check {
         let code = if is_truthy(&result.value) { 0 } else { 1 };
-        process::exit(code);
+        return Ok(CliResult::Exit(code));
     }
 
     output_result(
@@ -738,7 +753,7 @@ pub fn process_single_input(
 
     debug_phase(debug, "total", total_start);
 
-    Ok(())
+    Ok(CliResult::Done)
 }
 
 pub fn output_result(

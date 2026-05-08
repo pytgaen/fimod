@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use fimod::mold::MoldSource;
+use fimod::pipeline::CliResult;
 use fimod::sandbox::SandboxPolicy;
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
@@ -20,7 +21,7 @@ use crate::ShapeArgs;
 
 const DEBOUNCE_MS: u64 = 150;
 
-pub fn run_watch(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8) -> Result<()> {
+pub fn run_watch(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8) -> Result<CliResult> {
     let watch_files = collect_watch_files(shape);
 
     eprintln!(
@@ -87,13 +88,13 @@ pub fn run_watch(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_lev
         }
     }
 
-    Ok(())
+    Ok(CliResult::Done)
 }
 
 fn run_once(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8, run_n: u32) {
     let start = Instant::now();
     match crate::run_shape_pipeline(shape, policy, debug, msg_level) {
-        Ok(()) => eprintln!("[watch] run #{run_n} ok ({}ms)", start.elapsed().as_millis()),
+        Ok(_) => eprintln!("[watch] run #{run_n} ok ({}ms)", start.elapsed().as_millis()),
         Err(e) => eprintln!(
             "[watch] run #{run_n} failed ({}ms)\n  {:#}",
             start.elapsed().as_millis(),

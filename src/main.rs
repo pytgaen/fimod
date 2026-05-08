@@ -9,7 +9,7 @@ use std::process;
 use fimod::pipeline::{
     build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
     path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    HttpOptions, ScriptRef,
+    CliResult, HttpOptions, ScriptRef,
 };
 use fimod::MONTY_VERSION;
 use fimod::sandbox::SandboxPolicy;
@@ -528,19 +528,40 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let result = dispatch(cli);
 
-    if let Err(ref e) = result {
-        if let Some(sandbox_err) = e.downcast_ref::<fimod::engine::SandboxLimitExceeded>() {
-            eprintln!("{sandbox_err}");
-            process::exit(fimod::engine::SANDBOX_EXPLODED_EXIT_CODE);
+    match result {
+        Ok(CliResult::Done) => Ok(()),
+        Ok(CliResult::Exit(code)) => process::exit(code),
+        Err(e) => {
+            if let Some(sandbox_err) = e.downcast_ref::<fimod::engine::SandboxLimitExceeded>() {
+                eprintln!("{sandbox_err}");
+                process::exit(fimod::engine::SANDBOX_EXPLODED_EXIT_CODE);
+            }
+            Err(e)
         }
     }
-    result
 }
 
-fn dispatch(cli: Cli) -> Result<()> {
+fn dispatch(cli: Cli) -> Result<CliResult> {
     match cli.command {
         Some(Commands::Shape(shape)) => run_shape(*shape),
-        Some(Commands::Registry { action }) => match action {
+        // `mold test` can request exit code 1 on failure; handle separately.
+        Some(Commands::Mold {
+            action: MoldAction::Test { mold, tests_dir },
+        }) => test_runner::run(&mold, &tests_dir),
+        Some(other) => dispatch_other(other).map(|()| CliResult::Done),
+        None => {
+            Cli::command().print_help()?;
+            Ok(CliResult::Exit(2))
+        }
+    }
+}
+
+/// Dispatch all non-`Shape` subcommands (which never request a process exit
+/// with a custom code, only success or anyhow error).
+fn dispatch_other(cmd: Commands) -> Result<()> {
+    match cmd {
+        Commands::Shape(_) => unreachable!("handled by dispatch()"),
+        Commands::Registry { action } => match action {
             RegistryAction::List { output_format } => registry::list(&output_format),
             RegistryAction::Add {
                 name,
@@ -567,7 +588,7 @@ fn dispatch(cli: Cli) -> Result<()> {
                 CacheAction::Info => registry::cache_info(),
             },
         },
-        Some(Commands::Mold { action }) => match action {
+        Commands::Mold { action } => match action {
             MoldAction::List {
                 registry,
                 output_format,
@@ -581,12 +602,12 @@ fn dispatch(cli: Cli) -> Result<()> {
                 Some(p) => registry::show_mold_by_path(&p, name.as_deref(), output_format),
                 None => registry::show_mold(&name.unwrap(), registry.as_deref(), output_format),
             },
-            MoldAction::Test { mold, tests_dir } => test_runner::run(&mold, &tests_dir),
+            MoldAction::Test { .. } => unreachable!("handled by dispatch()"),
         },
-        Some(Commands::Monty { action }) => match action {
+        Commands::Monty { action } => match action {
             MontyAction::Repl => run_monty_repl(),
         },
-        Some(Commands::Setup { category }) => match category {
+        Commands::Setup { category } => match category {
             SetupCategory::Registry {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::registry_defaults(yes, force),
@@ -598,10 +619,6 @@ fn dispatch(cli: Cli) -> Result<()> {
             } => setup::all_defaults(yes, force),
             SetupCategory::Completions { shell } => print_completion_script(shell),
         },
-        None => {
-            Cli::command().print_help()?;
-            std::process::exit(2);
-        }
     }
 }
 
@@ -690,7 +707,7 @@ fn repl_feed(repl: &mut monty::MontyRepl<monty::NoLimitTracker>, snippet: &str) 
     }
 }
 
-fn run_shape(mut shape: ShapeArgs) -> Result<()> {
+fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
     // Parse output format once so the rest of the function can dispatch on
     // the typed `OutputMode` enum instead of string-comparing to "raw".
     let output_mode = shape
@@ -840,7 +857,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                 fs::write(&filename, &bytes)
                     .with_context(|| format!("Failed to write output file: {filename}"))?;
             }
-            return Ok(());
+            return Ok(CliResult::Done);
         }
 
         // Single input
@@ -881,7 +898,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             }
         }
 
-        return Ok(());
+        return Ok(CliResult::Done);
     }
 
     if shape.watch {
@@ -899,7 +916,7 @@ fn run_shape_pipeline(
     policy: &SandboxPolicy,
     debug: bool,
     msg_level: u8,
-) -> Result<()> {
+) -> Result<CliResult> {
     let is_batch = shape.input.len() > 1;
     let is_multi_slurp = is_batch && shape.slurp;
 
@@ -1128,14 +1145,14 @@ fn run_shape_pipeline(
                     debug,
                 )?;
             }
-            process::exit(code);
+            return Ok(CliResult::Exit(code));
         }
 
         if shape.check {
-            process::exit(if is_truthy(&result) { 0 } else { 1 });
+            return Ok(CliResult::Exit(if is_truthy(&result) { 0 } else { 1 }));
         }
 
-        return output_result(
+        output_result(
             &result,
             actual_output,
             eff_out_fmt,
@@ -1143,7 +1160,8 @@ fn run_shape_pipeline(
             &csv_opts,
             false,
             debug,
-        );
+        )?;
+        return Ok(CliResult::Done);
     }
 
     if is_batch {
@@ -1164,7 +1182,8 @@ fn run_shape_pipeline(
                 Path::new(dir).join(filename).to_string_lossy().into_owned()
             };
 
-            process_single_input(
+            // Propagate the first per-file CliResult::Exit; otherwise continue.
+            if let CliResult::Exit(code) = process_single_input(
                 Some(input_path.as_str()),
                 false, // no_input always false in batch
                 shape.slurp,
@@ -1181,9 +1200,11 @@ fn run_shape_pipeline(
                 shape.check,
                 &http_opts,
                 policy,
-            )?;
+            )? {
+                return Ok(CliResult::Exit(code));
+            }
         }
-        return Ok(());
+        return Ok(CliResult::Done);
     }
 
     // Single-file (or stdin) mode
