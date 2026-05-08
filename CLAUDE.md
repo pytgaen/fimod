@@ -6,6 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fimod is a Rust CLI that transforms structured data files by executing Python "mold" scripts via [Monty](https://github.com/pydantic/monty) (Pydantic's embedded Python engine). No system Python installation required.
 
+## Project notes
+
+Before any decision on tooling, build, architecture, release flow, or any
+cross-cutting concern, consult these files in `notes/`:
+
+- `notes/VISION.md` — long-term direction and product constraints
+- `notes/ARCHITECTURE.md` — module map, pipeline structure, boundaries
+- `notes/DESIGN_NOTES.md` — concrete design decisions, tooling conventions
+  (e.g. "Local tooling (mise.toml)" — all build tools managed via mise),
+  watchpoints, and known invariants
+- `notes/release-workflow.md` — release process specifics
+- `notes/changelog-X.Y.Z.md` — drafted during a release cycle (transient)
+
+These are the project's source of truth, not optional reading.
+
 ## CLI usage — always prefix verbose commands with `rtk`
 
 This project follows the `rtk-cli-optimizer` skill convention. All verbose CLI
