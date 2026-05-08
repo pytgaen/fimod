@@ -54,7 +54,7 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **NDJSON** | ✅ (--slurp) | ❌ | manual I/O | 🟢 built-in (--slurp) |
 | **Cross-format** | ❌ | YAML↔JSON↔XML | manual | 🟢 any → any |
 | **Dependencies** | jq binary | yq binary | Python + pip | 🟢 **single binary** |
-| **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~2.3 MB** (UPX-compressed) |
+| **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~2.9 MB** (UPX-compressed) |
 | **Regex** | limited | limited | `import re` | 🟢 `re_*` built-in (PCRE2) |
 | **Deep access** | `.a.b.c` | `.a.b.c` | manual | 🟢 `dp_get(data, "a.b.c")` |
 | **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `it_unique_by` |
