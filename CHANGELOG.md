@@ -2,6 +2,44 @@
 
 All notable changes to fimod are documented here.
 
+## [0.7.0] — 2026-05-08
+
+### Highlights
+
+- 👁️ **Watch mode** — `fimod shape --watch <input>` re-runs the pipeline on every file change. 150 ms debounce, parent-dir watching (atomic-rename safe), errors don't kill the loop. Watches both `-i` and local `-m` paths.
+- 🐞 **Debug phases & step labels** — `--debug` prints per-phase timings (`parse: 0.045s`, `execute: 0.123s`, …) and identifies each step in chains (`step 2/4 (label, injected by step 1)`).
+- ⚙️ **CLI setup restructure** *(small BREAKING)* — `fimod setup completions --shell <shell>` replaces `fimod completions <shell>`. Prints the script directly to stdout for `eval "$(fimod setup completions --shell zsh)"`.
+- 🚀 **Performance** — regexes cached per pattern (process-wide); `dp_get` / `dp_has` walk `MontyObject` directly without JSON conversion, fixing O(N²) cost in 100 k-row mold loops.
+
+### Features
+
+- **watch:** `fimod shape --watch <input>` re-runs the pipeline on changes. Watches parent dirs of `-i` and local `-m` files (atomic-rename safe), filters events by canonicalized target path, debounces 150 ms via `notify-debouncer-mini`. Status on stderr (`[watch] run #N ok (Xms)` / `failed (Xms)\n  <err>`); errors don't exit the loop. First run immediate at startup. Output destinations unchanged. Gated behind feature `watch` (enabled by default).
+- **cli:** `--watch` (`-w`) flag with combo validation. Refused: `--in-place`, `--no-input`, `--input-list`, `--output-format raw`, missing `-i`, multiple `-i` (batch), HTTP input.
+- **debug:** per-phase timings on stderr — `[debug] parse: …s`, `execute: …s`, `serialize: …s`, `total: …s`. Always seconds with millisecond precision.
+- **debug:** step identification in chain output and errors — `[debug] step N/M (label)` replaces the single `[debug] mold: file(...)` line. Errors prefixed `Error: in step N/M (label): …`. Runtime-injected steps annotated `injected by step P`.
+- **cli:** `fimod setup completions --shell <shell>` prints completion script to stdout. Auto-detects `$SHELL` when `--shell` is omitted. Generated via `clap_complete::env::Shells::builtins`, preserving dynamic completions for `@mold` and registry source names.
+- **env:** `--env` glob patterns accept `*SUFFIX` and `*INNER*` (previously only `*` and `PREFIX*`). Side effect of consolidating `sandbox::matches_glob` into the env-pattern path.
+
+### Bug Fixes
+
+- **setup:** `fimod setup registry defaults --force` actually honors `--force` (was silently dropped by `force: _` in the Registry match arm). When set, removes any source whose URL matches the canonical `fimod-powered` / `examples` URLs before re-installing them under the canonical name and priority. Supported way to take ownership when those community registries have been renamed or repointed by hand. The deprecated `fimod registry setup` alias still passes `force=false`.
+- **install:** `install.sh` correctly detects non-interactive contexts (Docker without `-it`, GitHub Actions, `ssh` without `-t`) by attempting to open `/dev/tty` (`(: </dev/tty) 2>/dev/null`) instead of just testing existence (`[ -e /dev/tty ]`). Fixes the registry/sandbox prompt branches that previously crashed on `cannot open /dev/tty`.
+
+### Performance
+
+- **regex:** compiled regexes cached process-wide via `OnceLock<Mutex<HashMap<String, Arc<Regex>>>>`, keyed by pattern. First call compiles and stores; subsequent calls return an `Arc` clone. Was rebuilding `fancy_regex::Regex` on every `re_*` invocation — 100 k recompilations of the same pattern in a 100 k-row CSV mold loop.
+- **dotpath:** `dp_get` / `dp_has` walk `MontyObject` directly via new `get_at_path_monty`. Previously converted the entire input tree to `serde_json::Value` on every invocation — O(N²) on top-level data of size N. `dp_get` now clones only the leaf value; `dp_has` doesn't clone at all.
+
+### Documentation
+
+- `docs/guides/cli-reference.md` — new "Watch mode" section (typical usage, output destinations, error survival, watched-files scope, refused-combos table, debounce/parent-dir/reload semantics, feature-flag opt-out).
+- `README.md` — advertised binary size updated to ~2.9 MB.
+
+### Housekeeping
+
+- `[lint]` header removed from `molds/.ruff.toml`.
+- **deps:** bump `notify` 6 → 8, `notify-debouncer-mini` 0.4 → 0.7, `toml` 0.8 → 1 (rename feature `indexmap` → `preserve_order`).
+
 ## [0.6.0] — 2026-05-03
 
 ### Highlights
