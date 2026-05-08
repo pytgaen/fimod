@@ -756,8 +756,8 @@ Output goes to the usual destination (`-o` file or stdout). Status messages stre
 ```bash
 fimod s -i data.json -m cleanup.py --watch | jq .name
 # stderr: [watch] watching data.json, cleanup.py
-# stderr: [watch] run #1 ... ok (42ms)
-# stderr: [watch] run #2 ... ok (38ms)   (after editing cleanup.py)
+# stderr: [watch] run #1 ok (42ms)
+# stderr: [watch] run #2 ok (38ms)   (after editing cleanup.py)
 # stdout: "alice"
 # stdout: "alice"
 ```
@@ -765,7 +765,7 @@ fimod s -i data.json -m cleanup.py --watch | jq .name
 A run that fails (Python error, parse error, missing file) is reported but **does not exit** the watch loop — fix the script and the next save triggers another run:
 
 ```text
-[watch] run #3 ... failed (12ms)
+[watch] run #3 failed (12ms)
   in step 1/1 (cleanup.py): Python error in mold:
   NameError: name 'foo' is not defined
 ```

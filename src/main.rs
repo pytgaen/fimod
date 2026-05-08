@@ -882,7 +882,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         bail!("--watch is not available in this build (compiled without the 'watch' feature)");
     }
 
-    run_shape_pipeline(&shape, &policy, debug, msg_level, is_multi_slurp, is_batch)
+    run_shape_pipeline(&shape, &policy, debug, msg_level)
 }
 
 fn run_shape_pipeline(
@@ -890,9 +890,10 @@ fn run_shape_pipeline(
     policy: &SandboxPolicy,
     debug: bool,
     msg_level: u8,
-    is_multi_slurp: bool,
-    is_batch: bool,
 ) -> Result<()> {
+    let is_batch = shape.input.len() > 1;
+    let is_multi_slurp = is_batch && shape.slurp;
+
     // Parse --arg name=value pairs
     let extra_args: Vec<(String, String)> = shape
         .args

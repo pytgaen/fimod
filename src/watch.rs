@@ -5,11 +5,13 @@
 //! `watch` Cargo feature.
 
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
+use fimod::mold::MoldSource;
 use fimod::sandbox::SandboxPolicy;
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
@@ -18,16 +20,8 @@ use crate::ShapeArgs;
 
 const DEBOUNCE_MS: u64 = 150;
 
-pub fn run_watch(
-    shape: &ShapeArgs,
-    policy: &SandboxPolicy,
-    debug: bool,
-    msg_level: u8,
-) -> Result<()> {
+pub fn run_watch(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8) -> Result<()> {
     let watch_files = collect_watch_files(shape);
-    if watch_files.is_empty() {
-        bail!("--watch: no watchable files (this is a bug)");
-    }
 
     eprintln!(
         "[watch] watching {}",
@@ -41,6 +35,13 @@ pub fn run_watch(
     let canonical_targets: HashSet<PathBuf> = watch_files
         .iter()
         .filter_map(|p| p.canonicalize().ok())
+        .collect();
+
+    // Pre-compute target filenames so noisy sibling events (.swp, .tmp, etc.)
+    // can be rejected without a canonicalize() syscall on every event.
+    let target_filenames: HashSet<OsString> = watch_files
+        .iter()
+        .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
         .collect();
 
     let (tx, rx) = mpsc::channel();
@@ -69,9 +70,12 @@ pub fn run_watch(
             Ok(Ok(events)) => {
                 let triggered = events.iter().any(|e| {
                     e.path
-                        .canonicalize()
-                        .map(|p| canonical_targets.contains(&p))
-                        .unwrap_or(false)
+                        .file_name()
+                        .is_some_and(|n| target_filenames.contains(n))
+                        && e.path
+                            .canonicalize()
+                            .map(|p| canonical_targets.contains(&p))
+                            .unwrap_or(false)
                 });
                 if triggered {
                     run_n += 1;
@@ -86,19 +90,15 @@ pub fn run_watch(
     Ok(())
 }
 
-fn run_once(
-    shape: &ShapeArgs,
-    policy: &SandboxPolicy,
-    debug: bool,
-    msg_level: u8,
-    run_n: u32,
-) {
+fn run_once(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8, run_n: u32) {
     let start = Instant::now();
-    eprint!("[watch] run #{run_n} ... ");
-    // is_multi_slurp + is_batch are always false in watch (rejected by validation)
-    match crate::run_shape_pipeline(shape, policy, debug, msg_level, false, false) {
-        Ok(()) => eprintln!("ok ({}ms)", start.elapsed().as_millis()),
-        Err(e) => eprintln!("failed ({}ms)\n  {:#}", start.elapsed().as_millis(), e),
+    match crate::run_shape_pipeline(shape, policy, debug, msg_level) {
+        Ok(()) => eprintln!("[watch] run #{run_n} ok ({}ms)", start.elapsed().as_millis()),
+        Err(e) => eprintln!(
+            "[watch] run #{run_n} failed ({}ms)\n  {:#}",
+            start.elapsed().as_millis(),
+            e
+        ),
     }
 }
 
@@ -108,7 +108,7 @@ fn collect_watch_files(shape: &ShapeArgs) -> Vec<PathBuf> {
         files.push(PathBuf::from(input));
     }
     for m in &shape.mold {
-        if !m.starts_with('@') {
+        if MoldSource::is_local_path(m) {
             let p = PathBuf::from(m);
             if p.exists() {
                 files.push(p);

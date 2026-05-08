@@ -647,7 +647,8 @@ fn test_setup_completions_autodetect() {
         .env("SHELL", "/bin/bash")
         .assert()
         .success()
-        .stdout(predicate::str::contains("fimod"));
+        .stdout(predicate::str::contains("_clap_complete_fimod()"))
+        .stdout(predicate::str::contains("-F _clap_complete_fimod fimod"));
 }
 
 #[test]

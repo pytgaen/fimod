@@ -676,10 +676,7 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     let direct = base.join(format!("{mold_name}.py"));
     if direct.is_file() {
         let path = direct.to_string_lossy().into_owned();
-        return Ok(MoldSource::File {
-            display_ref: path.clone(),
-            path,
-        });
+        return Ok(MoldSource::file(path));
     }
 
     // 2. base/mold_name/<last_segment>.py
@@ -687,20 +684,14 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     let named = base.join(mold_name).join(format!("{last}.py"));
     if named.is_file() {
         let path = named.to_string_lossy().into_owned();
-        return Ok(MoldSource::File {
-            display_ref: path.clone(),
-            path,
-        });
+        return Ok(MoldSource::file(path));
     }
 
     // 3. base/mold_name/__main__.py
     let main = base.join(mold_name).join("__main__.py");
     if main.is_file() {
         let path = main.to_string_lossy().into_owned();
-        return Ok(MoldSource::File {
-            display_ref: path.clone(),
-            path,
-        });
+        return Ok(MoldSource::file(path));
     }
 
     bail!(

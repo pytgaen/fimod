@@ -33,14 +33,10 @@ pub enum StepOrigin {
 }
 
 impl MoldStep {
-    /// Short, human-readable label for error messages and debug output.
-    /// Delegates to [`MoldSource::label`].
     pub fn label(&self) -> String {
         self.source.label()
     }
 
-    /// Base directory for resolving relative paths (templates, data files).
-    /// Delegates to [`MoldSource::base_dir`].
     pub fn base_dir(&self) -> Option<String> {
         self.source.base_dir()
     }
@@ -122,6 +118,21 @@ impl std::fmt::Display for MoldSource {
 }
 
 impl MoldSource {
+    /// Construct a `File` source. `display_ref` defaults to `path`; use
+    /// [`MoldSource::with_display_ref`] to override after construction.
+    pub fn file(path: String) -> Self {
+        Self::File {
+            display_ref: path.clone(),
+            path,
+        }
+    }
+
+    /// True if `s` refers to a local mold script (not `@registry/...`, not an
+    /// HTTP URL). Used to decide what to watch and to skip non-file references.
+    pub fn is_local_path(s: &str) -> bool {
+        !s.starts_with('@') && !crate::http::is_url(s)
+    }
+
     /// Short, human-readable label for error messages and debug output.
     ///
     /// Examples:
@@ -133,7 +144,7 @@ impl MoldSource {
     pub fn label(&self) -> String {
         match self {
             MoldSource::File { display_ref, .. } | MoldSource::Url { display_ref, .. } => {
-                display_ref.clone()
+                truncate_middle(display_ref, 30, 30)
             }
             MoldSource::Inline(expr) => format!("-e '{}'", truncate_middle(expr, 25, 25)),
         }

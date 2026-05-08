@@ -22,6 +22,12 @@ pub enum ScriptRef {
     Expr(String),
 }
 
+fn debug_phase(debug: bool, label: &str, start: Instant) {
+    if debug {
+        eprintln!("[debug] {label}: {:.3}s", start.elapsed().as_secs_f64());
+    }
+}
+
 /// Determine if a JSON value is "truthy" for --check mode.
 /// Falsy: null, false, 0, "", [], {}
 /// Everything else is truthy.
@@ -570,9 +576,7 @@ fn run_pipeline_core(
         None => serde_json::Value::Null,
     };
 
-    if debug {
-        eprintln!("[debug] parse: {:.3}s", parse_start.elapsed().as_secs_f64());
-    }
+    debug_phase(debug, "parse", parse_start);
 
     // Execute the mold chain
     let exec_start = Instant::now();
@@ -587,9 +591,7 @@ fn run_pipeline_core(
         msg_level,
         policy,
     )?;
-    if debug {
-        eprintln!("[debug] execute: {:.3}s", exec_start.elapsed().as_secs_f64());
-    }
+    debug_phase(debug, "execute", exec_start);
 
     Ok(PipelineResult {
         value: exec.value,
@@ -726,12 +728,7 @@ pub fn process_single_input(
         debug,
     )?;
 
-    if debug {
-        eprintln!(
-            "[debug] total: {:.3}s",
-            total_start.elapsed().as_secs_f64()
-        );
-    }
+    debug_phase(debug, "total", total_start);
 
     Ok(())
 }
@@ -785,12 +782,7 @@ pub fn output_result(
         }
     }
 
-    if debug {
-        eprintln!(
-            "[debug] serialize: {:.3}s",
-            serialize_start.elapsed().as_secs_f64()
-        );
-    }
+    debug_phase(debug, "serialize", serialize_start);
 
     Ok(())
 }
