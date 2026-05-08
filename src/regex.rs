@@ -4,6 +4,8 @@ use anyhow::{bail, Result};
 use fancy_regex::RegexBuilder;
 use monty::{DictPairs, MontyObject};
 
+use crate::monty_args::expect_string;
+
 const DEFAULT_BACKTRACK_LIMIT: usize = 100_000;
 
 static BACKTRACK_LIMIT: OnceLock<usize> = OnceLock::new();
@@ -106,14 +108,6 @@ pub fn dispatch(name: &str, args: Vec<MontyObject>) -> Result<MontyObject> {
         "re_sub_fancy" => re_sub(args, true),
         "re_split" | "re_split_fancy" => re_split(args),
         _ => bail!("Unknown external function: {name}"),
-    }
-}
-
-/// Extract a &str from a MontyObject::String, with a label for error messages.
-fn expect_string<'a>(obj: &'a MontyObject, label: &str) -> Result<&'a str> {
-    match obj {
-        MontyObject::String(s) => Ok(s.as_str()),
-        _ => bail!("{label} must be a string, got {obj:?}"),
     }
 }
 

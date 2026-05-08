@@ -59,6 +59,27 @@ fn build_client(timeout: u64, no_follow: bool) -> Result<reqwest::blocking::Clie
         .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))
 }
 
+/// Build a client, attach custom headers, and send a GET. Shared scaffold for
+/// `fetch_url` and `fetch_url_bytes`; status checking and body decoding are
+/// the caller's responsibility.
+#[cfg(feature = "reqwest")]
+fn send_get(
+    url: &str,
+    headers: &[String],
+    timeout: u64,
+    no_follow: bool,
+) -> Result<reqwest::blocking::Response> {
+    let client = build_client(timeout, no_follow)?;
+    let mut request = client.get(url);
+    for h in headers {
+        let (name, value) = parse_header(h)?;
+        request = request.header(name, value);
+    }
+    request
+        .send()
+        .map_err(|e| anyhow::anyhow!("HTTP request failed for {url}: {e}"))
+}
+
 /// Fetch a URL via HTTP GET.
 ///
 /// - `headers`: custom headers as "Name: Value" strings
@@ -73,15 +94,6 @@ pub fn fetch_url(
     no_follow: bool,
     debug: bool,
 ) -> Result<HttpResponse> {
-    let client = build_client(timeout, no_follow)?;
-
-    let mut request = client.get(url);
-
-    for h in headers {
-        let (name, value) = parse_header(h)?;
-        request = request.header(name, value);
-    }
-
     if debug {
         eprintln!("[debug] HTTP GET {url}");
         if no_follow {
@@ -89,9 +101,7 @@ pub fn fetch_url(
         }
     }
 
-    let resp = request
-        .send()
-        .map_err(|e| anyhow::anyhow!("HTTP request failed for {url}: {e}"))?;
+    let resp = send_get(url, headers, timeout, no_follow)?;
 
     let status = resp.status().as_u16();
     let content_type = resp
@@ -156,15 +166,6 @@ pub fn fetch_url_bytes(
     no_follow: bool,
     debug: bool,
 ) -> Result<Vec<u8>> {
-    let client = build_client(timeout, no_follow)?;
-
-    let mut request = client.get(url);
-
-    for h in headers {
-        let (name, value) = parse_header(h)?;
-        request = request.header(name, value);
-    }
-
     if debug {
         eprintln!("[debug] HTTP GET {url} (binary)");
         if no_follow {
@@ -172,9 +173,7 @@ pub fn fetch_url_bytes(
         }
     }
 
-    let resp = request
-        .send()
-        .map_err(|e| anyhow::anyhow!("HTTP request failed for {url}: {e}"))?;
+    let resp = send_get(url, headers, timeout, no_follow)?;
 
     let status = resp.status().as_u16();
     if debug {

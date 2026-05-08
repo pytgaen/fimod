@@ -808,31 +808,16 @@ pub fn read_input_list(source: &str) -> Result<Vec<String>> {
 
 /// Check if an environment variable name matches any of the --env patterns.
 ///
-/// Each pattern string may contain comma-separated segments.
-/// Each segment is either:
-/// - `*` → matches everything
-/// - `PREFIX*` → matches names starting with PREFIX
-/// - `EXACT` → exact match
+/// Each pattern string may contain comma-separated segments. Each segment uses
+/// the same glob syntax as `sandbox::matches_glob` (`*`, `PREFIX*`, `*SUFFIX`,
+/// `*INNER*`, exact).
 pub fn env_pattern_matches(name: &str, patterns: &[String]) -> bool {
-    for pat_str in patterns {
-        for segment in pat_str.split(',') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                continue;
-            }
-            if segment == "*" {
-                return true;
-            }
-            if let Some(prefix) = segment.strip_suffix('*') {
-                if name.starts_with(prefix) {
-                    return true;
-                }
-            } else if name == segment {
-                return true;
-            }
-        }
-    }
-    false
+    patterns
+        .iter()
+        .flat_map(|p| p.split(','))
+        .map(str::trim)
+        .filter(|seg| !seg.is_empty())
+        .any(|seg| crate::sandbox::matches_glob(seg, name))
 }
 
 /// Parse "path:alias" syntax from a single -i entry.

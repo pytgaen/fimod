@@ -2,6 +2,8 @@ use anyhow::{bail, Result};
 use digest::Digest;
 use monty::MontyObject;
 
+use crate::monty_args::expect_string;
+
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["hs_md5", "hs_sha1", "hs_sha256"];
 
@@ -20,10 +22,7 @@ fn hash_fn<D: Digest>(args: Vec<MontyObject>, name: &str) -> Result<MontyObject>
     if args.len() != 1 {
         bail!("{}() takes 1 argument (string), got {}", name, args.len());
     }
-    let input = match &args[0] {
-        MontyObject::String(s) => s.as_str(),
-        _ => bail!("{name}() expects a string argument"),
-    };
+    let input = expect_string(&args[0], &format!("{name}() argument"))?;
     let mut hasher = D::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();

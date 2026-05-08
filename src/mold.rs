@@ -230,7 +230,7 @@ impl MoldSource {
         }
 
         // Direct URL — auto-detect auth token from domain
-        if s.starts_with("http://") || s.starts_with("https://") {
+        if crate::http::is_url(s) {
             let token = crate::registry::token_for_url(s);
             return Ok(Self::Url {
                 url: s.to_string(),
@@ -334,9 +334,8 @@ impl MoldSource {
             } => {
                 #[cfg(feature = "reqwest")]
                 {
-                    use sha2::{Digest, Sha256};
                     let cache_base = crate::registry::cache_base_dir();
-                    let url_hash = hex::encode(Sha256::digest(url.as_bytes()));
+                    let url_hash = crate::paths::sha256_hex(url.as_bytes());
                     if catalog_hash.is_some() {
                         Some(
                             cache_base
@@ -381,10 +380,8 @@ fn load_url_with_cache(
     companion_urls: &[String],
     no_cache: bool,
 ) -> Result<String> {
-    use sha2::{Digest, Sha256};
-
     let cache_base = crate::registry::cache_base_dir();
-    let url_hash = hex::encode(Sha256::digest(url.as_bytes()));
+    let url_hash = crate::paths::sha256_hex(url.as_bytes());
 
     // ── hash-based cache (registry molds) ─────────────────────────────────
     if let Some(expected_hash) = catalog_hash {
