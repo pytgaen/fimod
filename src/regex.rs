@@ -1,4 +1,5 @@
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use fancy_regex::RegexBuilder;
@@ -19,13 +20,39 @@ fn backtrack_limit() -> usize {
     })
 }
 
+/// Process-wide cache of compiled `fancy_regex::Regex` instances, keyed by
+/// pattern string. Without this, a mold doing `re_sub(r"\d+", ..., row)` over
+/// 100k rows would recompile the regex on every iteration. The cache holds an
+/// `Arc` so callers can borrow without locking.
+///
+/// Bounded only by the set of distinct patterns the running molds use; in
+/// practice that's a handful of strings per pipeline run.
+static REGEX_CACHE: OnceLock<Mutex<HashMap<String, Arc<fancy_regex::Regex>>>> = OnceLock::new();
+
 /// Compile a regex with a configurable backtrack limit (ReDoS protection).
 /// Override the default (100 000) via `FIMOD_REGEX_BACKTRACK_LIMIT` env var.
-fn compile_regex(pattern: &str) -> Result<fancy_regex::Regex> {
-    RegexBuilder::new(pattern)
+///
+/// Compilation is cached by pattern, so repeated calls with the same string
+/// (typical inside a mold loop over many rows) reuse the previously built
+/// `Regex`.
+fn compile_regex(pattern: &str) -> Result<Arc<fancy_regex::Regex>> {
+    let cache = REGEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    {
+        let guard = cache.lock().unwrap();
+        if let Some(re) = guard.get(pattern) {
+            return Ok(Arc::clone(re));
+        }
+    }
+    let compiled = RegexBuilder::new(pattern)
         .backtrack_limit(backtrack_limit())
         .build()
-        .map_err(|e| anyhow::anyhow!("Invalid regex pattern: {e}"))
+        .map_err(|e| anyhow::anyhow!("Invalid regex pattern: {e}"))?;
+    let arc = Arc::new(compiled);
+    cache
+        .lock()
+        .unwrap()
+        .insert(pattern.to_string(), Arc::clone(&arc));
+    Ok(arc)
 }
 
 /// Names of external functions exposed to Python molds.
