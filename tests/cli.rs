@@ -58,3 +58,5 @@ mod setup;
 mod template;
 #[path = "cli/txt.rs"]
 mod txt;
+#[path = "cli/watch.rs"]
+mod watch;

@@ -20,12 +20,12 @@ watch = ["dep:notify", "dep:notify-debouncer-mini"]
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
 clap = { version = "4", features = ["derive"] }
-clap_complete = { version = "4", features = ["unstable-dynamic"] }
+clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde-saphyr = "0.0.25"  # pure-Rust YAML (replaces deprecated serde_yaml)
-toml = { version = "0.8", features = ["indexmap"] }
+serde-saphyr = "0.0.26"  # pure-Rust YAML (replaces deprecated serde_yaml)
+toml = { version = "1", features = ["preserve_order"] }
 csv = "1.4"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
 fancy-regex = "0.18"
@@ -33,14 +33,14 @@ rustyline = "18"
 md-5 = "0.11"
 sha1 = "0.11"
 sha2 = "0.11"
-digest = "0.11"
+digest = "0.11.3"
 hex = "0.4"
 mimalloc = "0.1"
 minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-notify = { version = "6", optional = true }
-notify-debouncer-mini = { version = "0.4", optional = true }
+notify = { version = "8", optional = true }
+notify-debouncer-mini = { version = "0.7", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.

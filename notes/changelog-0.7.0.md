@@ -47,6 +47,7 @@
 - **Release process:** `cliff.toml` and the `Generate changelog` job in `.github/workflows/release.yml` removed. CHANGELOG.md is now hand-curated from `notes/changelog-X.Y.Z.md` (deleted on release); the workflow extracts the body from the matching `## [X.Y.Z]` section via awk.
 - Archived `notes/fix-0.6.0.md`, `notes/plan-0.6.0.md`, `notes/resume-0.6.0.md`.
 - `[lint]` header removed from `molds/.ruff.toml`.
+- **deps:** bump `notify` 6 → 8, `notify-debouncer-mini` 0.4 → 0.7, `toml` 0.8 → 1 (rename feature `indexmap` → `preserve_order`).
 
 ---
 
