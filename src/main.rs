@@ -7,9 +7,9 @@ use std::path::Path;
 use std::process;
 
 use fimod::pipeline::{
-    build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
-    path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    CliResult, HttpOptions, ScriptRef, SingleRunOptions,
+    build_context_base, build_env, build_scripts, execute_chain, is_truthy, output_result,
+    parse_input_entry, path_stem, process_single_input, read_and_parse_for_slurp, read_input_list,
+    url_filename, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
 use fimod::MONTY_VERSION;
 use fimod::sandbox::SandboxPolicy;
@@ -600,7 +600,11 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
                 output_format,
             } => match path {
                 Some(p) => registry::show_mold_by_path(&p, name.as_deref(), output_format),
-                None => registry::show_mold(&name.unwrap(), registry.as_deref(), output_format),
+                None => registry::show_mold(
+                    &name.expect("clap: --name is required when --path is absent"),
+                    registry.as_deref(),
+                    output_format,
+                ),
             },
             MoldAction::Test { .. } => unreachable!("handled by dispatch()"),
         },
@@ -800,7 +804,10 @@ fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
             bail!("Batch mode requires -o/--output directory or --in-place");
         }
         if !shape.in_place {
-            let out = shape.output.as_ref().unwrap();
+            let out = shape
+                .output
+                .as_ref()
+                .expect("invariant: batch mode without --in-place requires -o (validated above)");
             if Path::new(out).exists() && !Path::new(out).is_dir() {
                 bail!("Batch mode output must be a directory: {out}");
             }
@@ -1060,7 +1067,10 @@ fn run_shape_pipeline(
             // Named mode → Value::Object keyed by stem or explicit alias
             let mut map = serde_json::Map::new();
             for (path, alias_opt) in &entries {
-                let alias = match alias_opt.as_ref().unwrap() {
+                let alias = match alias_opt
+                    .as_ref()
+                    .expect("invariant: has_alias && all_alias means every entry carries an alias_opt")
+                {
                     Some(name) => name.to_string(),
                     None => path_stem(path),
                 };
@@ -1104,15 +1114,15 @@ fn run_shape_pipeline(
         }
 
         let data = convert::json_into_monty(combined);
-        let slurp_context = serde_json::json!({
-            "input": null,
-            "output": shape.output.clone(),
-            "input_format": effective_input_format,
-            "output_format": effective_output_format,
-            "in_place": false,
-            "slurp": true,
-            "no_input": false,
-        });
+        let slurp_context = build_context_base(
+            None,
+            shape.output.as_deref(),
+            effective_input_format,
+            effective_output_format,
+            false,
+            true,
+            false,
+        );
         let slurp_exec = execute_chain(
             &scripts,
             data,
@@ -1175,7 +1185,10 @@ fn run_shape_pipeline(
             let per_file_output: String = if shape.in_place {
                 input_path.clone()
             } else {
-                let dir = shape.output.as_ref().unwrap();
+                let dir = shape
+                    .output
+                    .as_ref()
+                    .expect("invariant: batch mode without --in-place requires -o");
                 let filename = Path::new(input_path)
                     .file_name()
                     .context("Input path has no filename")?;

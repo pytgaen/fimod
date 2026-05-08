@@ -623,6 +623,29 @@ fn run_pipeline_core(
 // CLI wrapper: output writing + process::exit
 // ---------------------------------------------------------------------------
 
+/// Build the `context_base` JSON object exposed to molds via the `pipeline`
+/// API. Centralizes the exact shape (key names, value types) that
+/// `execute_chain` reads back via `context_base.get(...)`.
+pub fn build_context_base(
+    input: Option<&str>,
+    output: Option<&str>,
+    input_format: Option<&str>,
+    output_format: Option<&str>,
+    in_place: bool,
+    slurp: bool,
+    no_input: bool,
+) -> Value {
+    serde_json::json!({
+        "input": input,
+        "output": output,
+        "input_format": input_format,
+        "output_format": output_format,
+        "in_place": in_place,
+        "slurp": slurp,
+        "no_input": no_input,
+    })
+}
+
 /// Pre-computed inputs for `process_single_input`. Bundled into a struct so the
 /// CLI-facing signature stays manageable as new pipeline-wide options are
 /// added (the alternative was a 16-argument function).
@@ -671,15 +694,15 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
         policy,
     } = opts;
     let total_start = Instant::now();
-    let context_base = serde_json::json!({
-        "input": input_path,
-        "output": output_path,
-        "input_format": effective_input_format,
-        "output_format": effective_output_format,
-        "in_place": in_place,
-        "slurp": slurp,
-        "no_input": no_input,
-    });
+    let context_base = build_context_base(
+        input_path,
+        output_path,
+        effective_input_format,
+        effective_output_format,
+        in_place,
+        slurp,
+        no_input,
+    );
     let result = run_pipeline_core(
         input_path,
         no_input,
@@ -1084,15 +1107,15 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         .as_deref()
         .or(first_defaults.input_format.as_deref());
 
-    let context_base = serde_json::json!({
-        "input": input_path,
-        "output": null,
-        "input_format": effective_input_format,
-        "output_format": config.output_format,
-        "in_place": false,
-        "slurp": config.slurp,
-        "no_input": config.no_input,
-    });
+    let context_base = build_context_base(
+        input_path,
+        None,
+        effective_input_format,
+        config.output_format.as_deref(),
+        false,
+        config.slurp,
+        config.no_input,
+    );
 
     run_pipeline_core(
         input_path,
