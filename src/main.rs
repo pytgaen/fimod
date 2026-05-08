@@ -691,6 +691,15 @@ fn repl_feed(repl: &mut monty::MontyRepl<monty::NoLimitTracker>, snippet: &str) 
 }
 
 fn run_shape(mut shape: ShapeArgs) -> Result<()> {
+    // Parse output format once so the rest of the function can dispatch on
+    // the typed `OutputMode` enum instead of string-comparing to "raw".
+    let output_mode = shape
+        .output_format
+        .as_deref()
+        .map(format::OutputMode::parse)
+        .transpose()?;
+    let is_raw_output = output_mode == Some(format::OutputMode::Raw);
+
     // Validate --watch combos before any input resolution
     if shape.watch {
         if shape.in_place {
@@ -702,7 +711,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         if shape.input_list.is_some() {
             bail!("--watch is not compatible with --input-list");
         }
-        if shape.output_format.as_deref() == Some("raw") {
+        if is_raw_output {
             bail!("--watch is not compatible with --output-format raw");
         }
         if shape.input.is_empty() {
@@ -782,7 +791,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
     }
 
     // --output-format raw: short-circuit the entire pipeline (binary pass-through)
-    if shape.output_format.as_deref() == Some("raw") {
+    if is_raw_output {
         // Validate: raw output is incompatible with molds/expressions
         if !shape.mold.is_empty() || !shape.expression.is_empty() {
             bail!("--output-format raw is incompatible with -m/--mold and -e/--expression (raw bypasses the transform pipeline)");

@@ -23,6 +23,49 @@ pub enum DataFormat {
     Http,
 }
 
+/// Input format wrapper. `Raw` is forbidden in input position; the type
+/// system enforces it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Normal(DataFormat),
+    Http,
+}
+
+/// Output format wrapper. `Http` is forbidden in output position; the type
+/// system enforces it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputMode {
+    Normal(DataFormat),
+    Raw,
+}
+
+impl InputMode {
+    /// Parse a CLI format name into an `InputMode`. Rejects `"raw"`.
+    pub fn parse(name: &str) -> Result<Self> {
+        let fmt = parse_format_name(name)?;
+        match fmt {
+            DataFormat::Http => Ok(InputMode::Http),
+            DataFormat::Raw => bail!(
+                "'raw' is output-only and cannot be used as input format \
+                 (use set_output_format(\"raw\") for binary output)"
+            ),
+            normal => Ok(InputMode::Normal(normal)),
+        }
+    }
+}
+
+impl OutputMode {
+    /// Parse a CLI format name into an `OutputMode`. Rejects `"http"`.
+    pub fn parse(name: &str) -> Result<Self> {
+        let fmt = parse_format_name(name)?;
+        match fmt {
+            DataFormat::Raw => Ok(OutputMode::Raw),
+            DataFormat::Http => bail!("'http' is input-only and cannot be used as output format"),
+            normal => Ok(OutputMode::Normal(normal)),
+        }
+    }
+}
+
 /// CSV-specific options.
 #[derive(Debug, Clone)]
 pub struct CsvOptions {

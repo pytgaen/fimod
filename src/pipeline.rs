@@ -268,24 +268,23 @@ pub fn execute_chain(
                     pending_mutations: vec![],
                 });
             }
-            if fmt_name == "raw" {
+            let step_ctx = steps[i].error_context(i, steps.len());
+            let target_fmt = format::parse_format_name(fmt_name)
+                .with_context(|| format!("after {step_ctx}: invalid set_input_format({fmt_name:?})"))?;
+            if target_fmt == DataFormat::Raw {
                 bail!(
-                    "in {}: set_output_format(\"raw\") can only be used in the final step of a mold chain",
-                    steps[i].error_context(i, steps.len())
+                    "in {step_ctx}: set_output_format(\"raw\") can only be used in the final step of a mold chain"
                 );
             }
             if debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
-            let step_ctx = steps[i].error_context(i, steps.len());
             let as_string = match &result {
                 Value::String(s) => s.clone(),
                 other => serde_json::to_string(other).with_context(|| {
                     format!("after {step_ctx}: failed to serialize result for set_input_format re-parsing")
                 })?,
             };
-            let target_fmt = format::parse_format_name(fmt_name)
-                .with_context(|| format!("after {step_ctx}: invalid set_input_format({fmt_name:?})"))?;
             let reparsed = if target_fmt == DataFormat::Csv {
                 let (val, _) = format::parse_csv(&as_string, &CsvOptions::default())
                     .with_context(|| format!("after {step_ctx}: re-parsing as csv failed"))?;
@@ -413,6 +412,10 @@ fn run_pipeline_core(
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
 
+    let parsed_input_fmt = effective_input_format
+        .map(format::parse_format_name)
+        .transpose()?;
+
     let (in_fmt, data) = if no_input {
         if debug {
             eprintln!("[debug] no-input mode: data = None");
@@ -438,7 +441,7 @@ fn run_pipeline_core(
                 .and_then(http::content_type_to_format);
 
             // If --input-format http, build the HTTP dict directly and skip normal parsing
-            if effective_input_format == Some("http") {
+            if parsed_input_fmt == Some(DataFormat::Http) {
                 // Detect binary content: no known text format and not a text/ type
                 let is_binary = ct_fmt.is_none()
                     && resp
@@ -498,8 +501,8 @@ fn run_pipeline_core(
             (fmt, convert::json_into_monty(val))
         } else {
             // Format resolution: --input-format > Content-Type > extension > JSON
-            let in_fmt = if let Some(name) = effective_input_format {
-                format::parse_format_name(name)?
+            let in_fmt = if let Some(fmt) = parsed_input_fmt {
+                fmt
             } else if let Some(ct_name) = ct_format {
                 format::parse_format_name(ct_name)?
             } else if is_http {
@@ -661,7 +664,12 @@ pub fn process_single_input(
 
     // Binary pass-through: set_output_format("raw") signals that raw HTTP bytes should be written
     // directly, bypassing the normal serde serialization pipeline.
-    if result.format_override.as_deref() == Some("raw") {
+    let format_override_parsed = result
+        .format_override
+        .as_deref()
+        .map(format::parse_format_name)
+        .transpose()?;
+    if format_override_parsed == Some(DataFormat::Raw) {
         let bytes = result.http_raw_bytes.ok_or_else(|| {
             anyhow::anyhow!(
                 "set_output_format(\"raw\") requires --input-format http (no raw bytes available)"
