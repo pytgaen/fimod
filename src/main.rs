@@ -560,7 +560,7 @@ fn dispatch(cli: Cli) -> Result<()> {
             }
             RegistryAction::Setup { yes } => {
                 eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
-                setup::registry_defaults(yes)
+                setup::registry_defaults(yes, false)
             }
             RegistryAction::Cache { action } => match action {
                 CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
@@ -588,8 +588,8 @@ fn dispatch(cli: Cli) -> Result<()> {
         },
         Some(Commands::Setup { category }) => match category {
             SetupCategory::Registry {
-                action: SetupDefaults::Defaults { yes, force: _ },
-            } => setup::registry_defaults(yes),
+                action: SetupDefaults::Defaults { yes, force },
+            } => setup::registry_defaults(yes, force),
             SetupCategory::Sandbox {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::sandbox_defaults(yes, force),

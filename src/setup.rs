@@ -22,8 +22,13 @@ allow_env    = []     # opt in per-key as needed
 "#;
 
 /// Install recommended community registries. Thin wrapper over `registry::setup`.
-pub fn registry_defaults(yes: bool) -> Result<()> {
-    registry::setup(yes)
+///
+/// `force` forces fimod to take ownership of `fimod-powered` and `examples`
+/// entries: if they already exist (under any name pointing to the canonical
+/// URLs), they are removed first so the canonical name + URL + priority is
+/// re-applied.
+pub fn registry_defaults(yes: bool, force: bool) -> Result<()> {
+    registry::setup(yes, force)
 }
 
 /// Write the recommended sandbox policy to `~/.config/fimod/sandbox.toml`.
@@ -70,7 +75,7 @@ pub fn sandbox_defaults(yes: bool, force: bool) -> Result<()> {
 
 /// Run `registry_defaults` then `sandbox_defaults`, stopping at the first failure.
 pub fn all_defaults(yes: bool, force: bool) -> Result<()> {
-    registry_defaults(yes)?;
+    registry_defaults(yes, force)?;
     println!();
     sandbox_defaults(yes, force)?;
     Ok(())

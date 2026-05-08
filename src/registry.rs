@@ -1799,13 +1799,34 @@ fn mold_match_to_json(mold_name: &str, m: &MoldMatch) -> serde_json::Value {
 /// - Fresh install (no default yet) → adds as default, no prompt needed.
 /// - Default already set, `--force` absent → adds without overriding default (asks first unless `--yes`).
 /// - Default already set, `--force` present → adds and promotes to default (asks first unless `--yes`).
-pub fn setup(yes: bool) -> Result<()> {
+pub fn setup(yes: bool, force: bool) -> Result<()> {
     const EXAMPLES_NAME: &str = "examples";
     const EXAMPLES_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
     const POWERED_NAME: &str = "fimod-powered";
     const POWERED_URL: &str = "https://github.com/pytgaen/fimod-powered/tree/main/molds";
 
     let mut cfg = load_config()?;
+
+    // --force: take ownership of the canonical URLs by removing any existing
+    // entry pointing to them, so they get reinstalled with the canonical
+    // name and priority below.
+    if force {
+        let to_remove: Vec<String> = cfg
+            .sources
+            .iter()
+            .filter(|(_, s)| {
+                let url = s.url.as_deref();
+                url == Some(POWERED_URL) || url == Some(EXAMPLES_URL)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        for name in &to_remove {
+            remove(name)?;
+        }
+        if !to_remove.is_empty() {
+            cfg = load_config()?;
+        }
+    }
 
     // ── Migrate legacy "official" → "examples" ──
     if let Some(source) = cfg.sources.get("official") {
