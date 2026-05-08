@@ -75,5 +75,5 @@ fn test_hs_md5_error_on_non_string() {
         .args(["-i", &input, "-e", r#"hs_md5(data)"#])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("expects a string"));
+        .stderr(predicate::str::contains("must be a string"));
 }

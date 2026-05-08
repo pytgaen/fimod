@@ -291,7 +291,7 @@ case "$REG_PREF" in
     echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
     ;;
   ask)
-    if [ -t 0 ] || [ -e /dev/tty ]; then
+    if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
       echo "  Install community registries? [Y/n]"
       printf "  > "
       read -r REPLY </dev/tty
@@ -328,7 +328,7 @@ else
       echo "  Skipped. Run 'fimod setup sandbox defaults' at any time."
       ;;
     ask)
-      if [ -t 0 ] || [ -e /dev/tty ]; then
+      if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
         echo "  Install recommended sandbox policy? [Y/n]"
         printf "  > "
         read -r REPLY </dev/tty

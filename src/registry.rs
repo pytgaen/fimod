@@ -179,7 +179,7 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>) -> Result<()> {
         bail!("Registry '{name}' already exists (use 'fimod registry remove {name}' first)");
     }
 
-    let source = if location.starts_with("http://") || location.starts_with("https://") {
+    let source = if crate::http::is_url(location) {
         let kind = SourceType::detect_from_url(location);
         if let Some((existing_name, _)) = cfg
             .sources
@@ -444,7 +444,7 @@ struct EnvRegistry {
 
 /// Build a Source from a location string (path or URL).
 fn source_from_location(location: &str) -> Source {
-    if location.starts_with("http://") || location.starts_with("https://") {
+    if crate::http::is_url(location) {
         let kind = SourceType::detect_from_url(location);
         Source {
             kind,
@@ -534,9 +534,9 @@ fn resolve_source(source: &Source, mold_name: &str, no_cache: bool) -> Result<Mo
     let token = effective_token(source);
     match &source.kind {
         SourceType::Local => resolve_local(source, mold_name),
-        SourceType::Github => resolve_github(source, mold_name, token, no_cache),
-        SourceType::Gitlab => resolve_gitlab(source, mold_name, token, no_cache),
-        SourceType::Http => resolve_http(source, mold_name, token, no_cache),
+        SourceType::Github | SourceType::Gitlab | SourceType::Http => {
+            resolve_remote(source, mold_name, token, no_cache)
+        }
     }
 }
 
@@ -675,20 +675,23 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
     // 1. base/mold_name.py
     let direct = base.join(format!("{mold_name}.py"));
     if direct.is_file() {
-        return Ok(MoldSource::File(direct.to_string_lossy().into_owned()));
+        let path = direct.to_string_lossy().into_owned();
+        return Ok(MoldSource::file(path));
     }
 
     // 2. base/mold_name/<last_segment>.py
     let last = mold_name.split('/').next_back().unwrap_or(mold_name);
     let named = base.join(mold_name).join(format!("{last}.py"));
     if named.is_file() {
-        return Ok(MoldSource::File(named.to_string_lossy().into_owned()));
+        let path = named.to_string_lossy().into_owned();
+        return Ok(MoldSource::file(path));
     }
 
     // 3. base/mold_name/__main__.py
     let main = base.join(mold_name).join("__main__.py");
     if main.is_file() {
-        return Ok(MoldSource::File(main.to_string_lossy().into_owned()));
+        let path = main.to_string_lossy().into_owned();
+        return Ok(MoldSource::file(path));
     }
 
     bail!(
@@ -734,7 +737,10 @@ fn remote_catalog_entry(
     Ok(Some((path, entry.hash.clone(), entry.files.clone())))
 }
 
-fn resolve_github(
+/// Resolve a mold from a remote source (GitHub, GitLab, generic HTTP).
+/// Applies the `github_to_raw` URL transform for GitHub before delegating to
+/// `resolve_via_catalog`.
+fn resolve_remote(
     source: &Source,
     mold_name: &str,
     token: Option<String>,
@@ -743,35 +749,12 @@ fn resolve_github(
     let base_url = source
         .url
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("GitHub registry has no URL configured"))?;
-    let raw_base = github_to_raw(base_url)?;
-    resolve_via_catalog(source, mold_name, &raw_base, token, no_cache)
-}
-
-fn resolve_gitlab(
-    source: &Source,
-    mold_name: &str,
-    token: Option<String>,
-    no_cache: bool,
-) -> Result<MoldSource> {
-    let base_url = source
-        .url
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("GitLab registry has no URL configured"))?;
-    resolve_via_catalog(source, mold_name, base_url, token, no_cache)
-}
-
-fn resolve_http(
-    source: &Source,
-    mold_name: &str,
-    token: Option<String>,
-    no_cache: bool,
-) -> Result<MoldSource> {
-    let base_url = source
-        .url
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("HTTP registry has no URL configured"))?;
-    resolve_via_catalog(source, mold_name, base_url, token, no_cache)
+        .ok_or_else(|| anyhow::anyhow!("{} registry has no URL configured", source.kind))?;
+    let resolved_base = match source.kind {
+        SourceType::Github => github_to_raw(base_url)?,
+        _ => base_url.to_string(),
+    };
+    resolve_via_catalog(source, mold_name, &resolved_base, token, no_cache)
 }
 
 /// Shared resolution logic: try catalog first, warn and fall back to `{mold_name}.py` otherwise.
@@ -804,7 +787,13 @@ fn resolve_via_catalog(
         .iter()
         .map(|f| format!("{base_trimmed}/{f}"))
         .collect();
-    Ok(MoldSource::Url(url, token, catalog_hash, companion_urls))
+    Ok(MoldSource::Url {
+        display_ref: url.clone(),
+        url,
+        token,
+        catalog_hash,
+        companion_files: companion_urls,
+    })
 }
 
 // ── catalog data model ────────────────────────────────────────────────────────
@@ -972,8 +961,7 @@ pub(crate) fn cache_base_dir() -> PathBuf {
 
 /// Catalog cache directory for a specific source URL.
 fn catalog_cache_dir(catalog_url: &str) -> PathBuf {
-    use sha2::{Digest, Sha256};
-    let hash = hex::encode(Sha256::digest(catalog_url.as_bytes()));
+    let hash = crate::paths::sha256_hex(catalog_url.as_bytes());
     cache_base_dir().join("catalog").join(&hash[..16])
 }
 
@@ -1812,13 +1800,34 @@ fn mold_match_to_json(mold_name: &str, m: &MoldMatch) -> serde_json::Value {
 /// - Fresh install (no default yet) → adds as default, no prompt needed.
 /// - Default already set, `--force` absent → adds without overriding default (asks first unless `--yes`).
 /// - Default already set, `--force` present → adds and promotes to default (asks first unless `--yes`).
-pub fn setup(yes: bool) -> Result<()> {
+pub fn setup(yes: bool, force: bool) -> Result<()> {
     const EXAMPLES_NAME: &str = "examples";
     const EXAMPLES_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
     const POWERED_NAME: &str = "fimod-powered";
     const POWERED_URL: &str = "https://github.com/pytgaen/fimod-powered/tree/main/molds";
 
     let mut cfg = load_config()?;
+
+    // --force: take ownership of the canonical URLs by removing any existing
+    // entry pointing to them, so they get reinstalled with the canonical
+    // name and priority below.
+    if force {
+        let to_remove: Vec<String> = cfg
+            .sources
+            .iter()
+            .filter(|(_, s)| {
+                let url = s.url.as_deref();
+                url == Some(POWERED_URL) || url == Some(EXAMPLES_URL)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        for name in &to_remove {
+            remove(name)?;
+        }
+        if !to_remove.is_empty() {
+            cfg = load_config()?;
+        }
+    }
 
     // ── Migrate legacy "official" → "examples" ──
     if let Some(source) = cfg.sources.get("official") {
@@ -1925,7 +1934,6 @@ pub fn setup(yes: bool) -> Result<()> {
 ///
 /// Returns a hex string truncated to 16 characters.
 fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
-    use sha2::{Digest, Sha256};
     use std::collections::BTreeSet;
 
     let script_path = base.join(rel_path);
@@ -1940,7 +1948,7 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
         // Flat file: hash the file directly.
         let content = fs::read(&script_path)
             .with_context(|| format!("Cannot read mold for hashing: {}", script_path.display()))?;
-        let digest = hex::encode(Sha256::digest(&content));
+        let digest = crate::paths::sha256_hex(&content);
         return Ok(digest[..32].to_string());
     }
 
@@ -1972,14 +1980,14 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
 
     let mut combined = String::new();
     for (path, content) in &files {
-        let file_hash = hex::encode(Sha256::digest(content));
+        let file_hash = crate::paths::sha256_hex(content);
         if !combined.is_empty() {
             combined.push('|');
         }
         combined.push_str(&format!("{path}:{file_hash}"));
     }
 
-    let digest = hex::encode(Sha256::digest(combined.as_bytes()));
+    let digest = crate::paths::sha256_hex(combined.as_bytes());
     Ok(digest[..32].to_string())
 }
 

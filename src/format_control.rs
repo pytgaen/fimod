@@ -46,12 +46,7 @@ fn dispatch_set_input_format(
         _ => bail!("set_input_format() expects a string argument"),
     };
 
-    // raw is output-only — use set_output_format("raw") for binary output.
-    if name == "raw" {
-        bail!("set_input_format(\"raw\") is invalid: raw is output-only; use set_output_format(\"raw\") for binary output");
-    }
-
-    crate::format::parse_format_name(&name)?;
+    crate::format::InputMode::parse(&name)?;
 
     let mut lock = format_override.lock().unwrap();
     *lock = Some(name);
@@ -79,11 +74,7 @@ fn dispatch_cast_input_format(
         _ => bail!("cast_input_format() expects a string as first argument"),
     };
 
-    if name == "raw" {
-        bail!("cast_input_format(\"raw\") is invalid: raw is output-only; use set_output_format(\"raw\") for binary output");
-    }
-
-    crate::format::parse_format_name(&name)?;
+    crate::format::InputMode::parse(&name)?;
 
     let mut lock = format_override.lock().unwrap();
     *lock = Some(name);
@@ -110,7 +101,7 @@ fn dispatch_set_output_format(
         _ => bail!("set_output_format() expects a string argument"),
     };
 
-    crate::format::parse_format_name(&name)?;
+    crate::format::OutputMode::parse(&name)?;
 
     let mut lock = format_override.lock().unwrap();
     *lock = Some(name);

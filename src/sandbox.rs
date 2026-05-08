@@ -207,7 +207,7 @@ fn split_numeric_suffix(s: &str) -> (&str, &str) {
 
 /// Match a simple glob pattern against a string.
 /// Supports `*` suffix (`FIMOD_*`), prefix (`*_TOKEN`), contains (`*INNER*`), or exact match.
-fn matches_glob(pattern: &str, input: &str) -> bool {
+pub(crate) fn matches_glob(pattern: &str, input: &str) -> bool {
     if pattern == "*" {
         return true;
     }

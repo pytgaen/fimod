@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
-use std::process;
+use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use monty::MontyObject;
@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::engine::{MoldExecResult, MoldResult, PendingOp};
 use crate::format::{CsvOptions, DataFormat};
-use crate::mold::{MoldSource, MoldStep};
+use crate::mold::{MoldSource, MoldStep, StepOrigin};
 use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
 
@@ -19,6 +19,26 @@ use crate::{convert, engine, format, http, mold};
 pub enum ScriptRef {
     Mold(String),
     Expr(String),
+}
+
+/// Outcome of a CLI invocation. Either completed normally, or the pipeline
+/// requested the process to exit with a specific code (`set_exit()` in a mold,
+/// `--check` mode, or a sandbox kill).
+///
+/// Returning this through `Result` instead of calling `process::exit()`
+/// directly lets `pipeline.rs` stay free of side effects so it can be used as
+/// a library; only `main()` is allowed to actually exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "CliResult::Exit must be propagated to main() so the process exits with the right code"]
+pub enum CliResult {
+    Done,
+    Exit(i32),
+}
+
+fn debug_phase(debug: bool, label: &str, start: Instant) {
+    if debug {
+        eprintln!("[debug] {label}: {:.3}s", start.elapsed().as_secs_f64());
+    }
 }
 
 /// Determine if a JSON value is "truthy" for --check mode.
@@ -55,22 +75,18 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
         match r {
             ScriptRef::Expr(e) => {
                 let source = MoldSource::Inline(e.clone());
-                let display = source.to_string();
-                let base_dir = source.base_dir();
                 let script = source.load(no_cache)?;
                 steps.push(MoldStep {
-                    display,
+                    source,
                     script,
                     defaults: mold::MoldDefaults::default(),
-                    base_dir,
                     runtime_args: None,
+                    origin: StepOrigin::Cli,
                 });
             }
             ScriptRef::Mold(m) => {
                 let source = MoldSource::from_mold_str(m, no_cache)?;
                 let is_inline = matches!(source, MoldSource::Inline(_));
-                let display = source.to_string();
-                let base_dir = source.base_dir();
                 let script = source.load(no_cache)?;
                 let defaults = if !is_inline {
                     mold::parse_mold_defaults(&script)
@@ -78,11 +94,11 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
                     mold::MoldDefaults::default()
                 };
                 steps.push(MoldStep {
-                    display,
+                    source,
                     script,
                     defaults,
-                    base_dir,
                     runtime_args: None,
+                    origin: StepOrigin::Cli,
                 });
             }
         }
@@ -134,8 +150,7 @@ pub fn execute_chain(
     let mut i = 0;
     while i < steps.len() {
         let step_script = steps[i].script.clone();
-        let step_display = steps[i].display.clone();
-        let step_base_dir = steps[i].base_dir.clone();
+        let step_base_dir = steps[i].base_dir();
         // Pending `set('args', ...)` mutation overrides the static spec for this step.
         let step_runtime_args = mutations
             .get(&i)
@@ -144,7 +159,7 @@ pub fn execute_chain(
             .or_else(|| steps[i].runtime_args.clone());
 
         if debug {
-            eprintln!("[debug] mold: {step_display}");
+            eprintln!("[debug] {}", steps[i].error_context(i, steps.len()));
         }
 
         // Apply pending format mutations for this step.
@@ -207,7 +222,8 @@ pub fn execute_chain(
             format_override_init: step_output_format_mutation.clone(),
             step_args: step_runtime_args,
         };
-        let exec = engine::execute_mold(&step_script, data, &opts)?;
+        let exec = engine::execute_mold(&step_script, data, &opts)
+            .with_context(|| format!("in {}", steps[i].error_context(i, steps.len())))?;
 
         // Accumulate pending mutations from this execution.
         for m in exec.pending_mutations {
@@ -231,7 +247,8 @@ pub fn execute_chain(
         // Inject new steps requested by this mold.
         let mut insert_at = i + 1;
         for ps in exec.pending_steps {
-            let new_step = resolve_pending(ps.spec)?;
+            let new_step = resolve_pending(ps.spec, i)
+                .with_context(|| format!("while resolving step injected by step {}", i + 1))?;
             match ps.op {
                 PendingOp::InsertNext => {
                     steps.insert(insert_at, new_step);
@@ -264,9 +281,13 @@ pub fn execute_chain(
                     pending_mutations: vec![],
                 });
             }
-            if fmt_name == "raw" {
+            let step_ctx = steps[i].error_context(i, steps.len());
+            let target_fmt = format::parse_format_name(fmt_name).with_context(|| {
+                format!("after {step_ctx}: invalid set_input_format({fmt_name:?})")
+            })?;
+            if target_fmt == DataFormat::Raw {
                 bail!(
-                    "set_output_format(\"raw\") can only be used in the final step of a mold chain"
+                    "in {step_ctx}: set_output_format(\"raw\") can only be used in the final step of a mold chain"
                 );
             }
             if debug {
@@ -274,15 +295,18 @@ pub fn execute_chain(
             }
             let as_string = match &result {
                 Value::String(s) => s.clone(),
-                other => serde_json::to_string(other)
-                    .context("Failed to serialize result for set_input_format re-parsing")?,
+                other => serde_json::to_string(other).with_context(|| {
+                    format!("after {step_ctx}: failed to serialize result for set_input_format re-parsing")
+                })?,
             };
-            let target_fmt = format::parse_format_name(fmt_name)?;
             let reparsed = if target_fmt == DataFormat::Csv {
-                let (val, _) = format::parse_csv(&as_string, &CsvOptions::default())?;
+                let (val, _) = format::parse_csv(&as_string, &CsvOptions::default())
+                    .with_context(|| format!("after {step_ctx}: re-parsing as csv failed"))?;
                 val
             } else {
-                target_fmt.parse(&as_string)?
+                target_fmt
+                    .parse(&as_string)
+                    .with_context(|| format!("after {step_ctx}: re-parsing as {fmt_name} failed"))?
             };
             data = convert::json_into_monty(reparsed);
         } else if is_last {
@@ -326,7 +350,8 @@ fn step_to_remaining_spec(step: &MoldStep) -> Value {
 }
 
 /// Resolve a pending step spec (from `insert_next`/`append`) into a `MoldStep`.
-fn resolve_pending(spec: Value) -> Result<MoldStep> {
+/// `parent_step` is the 0-based index of the mold that injected this step.
+fn resolve_pending(spec: Value, parent_step: usize) -> Result<MoldStep> {
     let script_ref = if let Some(m) = spec.get("mold").and_then(Value::as_str) {
         ScriptRef::Mold(m.to_string())
     } else if let Some(e) = spec.get("expr").and_then(Value::as_str) {
@@ -336,6 +361,7 @@ fn resolve_pending(spec: Value) -> Result<MoldStep> {
     };
     let mut steps = build_scripts(&[script_ref], false)?;
     let mut step = steps.remove(0);
+    step.origin = StepOrigin::Injected { parent_step };
     if let Some(fmt) = spec.get("input_format").and_then(Value::as_str) {
         step.defaults.input_format = Some(fmt.to_string());
     }
@@ -396,8 +422,13 @@ fn run_pipeline_core(
     http_opts: &HttpOptions,
     policy: &SandboxPolicy,
 ) -> Result<PipelineResult> {
+    let parse_start = Instant::now();
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
+
+    let parsed_input_fmt = effective_input_format
+        .map(format::parse_format_name)
+        .transpose()?;
 
     let (in_fmt, data) = if no_input {
         if debug {
@@ -424,7 +455,7 @@ fn run_pipeline_core(
                 .and_then(http::content_type_to_format);
 
             // If --input-format http, build the HTTP dict directly and skip normal parsing
-            if effective_input_format == Some("http") {
+            if parsed_input_fmt == Some(DataFormat::Http) {
                 // Detect binary content: no known text format and not a text/ type
                 let is_binary = ct_fmt.is_none()
                     && resp
@@ -484,8 +515,8 @@ fn run_pipeline_core(
             (fmt, convert::json_into_monty(val))
         } else {
             // Format resolution: --input-format > Content-Type > extension > JSON
-            let in_fmt = if let Some(name) = effective_input_format {
-                format::parse_format_name(name)?
+            let in_fmt = if let Some(fmt) = parsed_input_fmt {
+                fmt
             } else if let Some(ct_name) = ct_format {
                 format::parse_format_name(ct_name)?
             } else if is_http {
@@ -562,7 +593,10 @@ fn run_pipeline_core(
         None => serde_json::Value::Null,
     };
 
+    debug_phase(debug, "parse", parse_start);
+
     // Execute the mold chain
+    let exec_start = Instant::now();
     let exec = execute_chain(
         scripts,
         data,
@@ -574,6 +608,7 @@ fn run_pipeline_core(
         msg_level,
         policy,
     )?;
+    debug_phase(debug, "execute", exec_start);
 
     Ok(PipelineResult {
         value: exec.value,
@@ -589,38 +624,86 @@ fn run_pipeline_core(
 // CLI wrapper: output writing + process::exit
 // ---------------------------------------------------------------------------
 
-/// Process a single input through the full pipeline: read → parse → execute chain → serialize → write.
-///
-/// This is the CLI-facing function that handles output writing and `process::exit()`.
-/// For library usage, prefer `run_pipeline` which returns the result without side effects.
-#[allow(clippy::too_many_arguments)]
-pub fn process_single_input(
-    input_path: Option<&str>,
-    no_input: bool,
-    slurp: bool,
-    effective_input_format: Option<&str>,
-    csv_opts: &CsvOptions,
-    scripts: &[MoldStep],
-    extra_args: &[(String, String)],
-    env_value: &Value,
-    debug: bool,
-    msg_level: u8,
-    output_path: Option<&str>,
-    effective_output_format: Option<&str>,
+/// Build the `context_base` JSON object exposed to molds via the `pipeline`
+/// API. Centralizes the exact shape (key names, value types) that
+/// `execute_chain` reads back via `context_base.get(...)`.
+pub fn build_context_base(
+    input: Option<&str>,
+    output: Option<&str>,
+    input_format: Option<&str>,
+    output_format: Option<&str>,
     in_place: bool,
-    check: bool,
-    http_opts: &HttpOptions,
-    policy: &SandboxPolicy,
-) -> Result<()> {
-    let context_base = serde_json::json!({
-        "input": input_path,
-        "output": output_path,
-        "input_format": effective_input_format,
-        "output_format": effective_output_format,
+    slurp: bool,
+    no_input: bool,
+) -> Value {
+    serde_json::json!({
+        "input": input,
+        "output": output,
+        "input_format": input_format,
+        "output_format": output_format,
         "in_place": in_place,
         "slurp": slurp,
         "no_input": no_input,
-    });
+    })
+}
+
+/// Pre-computed inputs for `process_single_input`. Bundled into a struct so the
+/// CLI-facing signature stays manageable as new pipeline-wide options are
+/// added (the alternative was a 16-argument function).
+pub struct SingleRunOptions<'a> {
+    pub input_path: Option<&'a str>,
+    pub no_input: bool,
+    pub slurp: bool,
+    pub effective_input_format: Option<&'a str>,
+    pub csv_opts: &'a CsvOptions,
+    pub scripts: &'a [MoldStep],
+    pub extra_args: &'a [(String, String)],
+    pub env_value: &'a Value,
+    pub debug: bool,
+    pub msg_level: u8,
+    pub output_path: Option<&'a str>,
+    pub effective_output_format: Option<&'a str>,
+    pub in_place: bool,
+    pub check: bool,
+    pub http_opts: &'a HttpOptions,
+    pub policy: &'a SandboxPolicy,
+}
+
+/// Process a single input through the full pipeline: read → parse → execute chain → serialize → write.
+///
+/// Handles output writing and returns a `CliResult` describing whether the
+/// invocation completed normally or requests the process to exit with a code
+/// (from `set_exit()` or `--check`). For library usage, prefer `run_pipeline`,
+/// which returns the result without writing or signalling exits.
+pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
+    let SingleRunOptions {
+        input_path,
+        no_input,
+        slurp,
+        effective_input_format,
+        csv_opts,
+        scripts,
+        extra_args,
+        env_value,
+        debug,
+        msg_level,
+        output_path,
+        effective_output_format,
+        in_place,
+        check,
+        http_opts,
+        policy,
+    } = opts;
+    let total_start = Instant::now();
+    let context_base = build_context_base(
+        input_path,
+        output_path,
+        effective_input_format,
+        effective_output_format,
+        in_place,
+        slurp,
+        no_input,
+    );
     let result = run_pipeline_core(
         input_path,
         no_input,
@@ -642,7 +725,12 @@ pub fn process_single_input(
 
     // Binary pass-through: set_output_format("raw") signals that raw HTTP bytes should be written
     // directly, bypassing the normal serde serialization pipeline.
-    if result.format_override.as_deref() == Some("raw") {
+    let format_override_parsed = result
+        .format_override
+        .as_deref()
+        .map(format::parse_format_name)
+        .transpose()?;
+    if format_override_parsed == Some(DataFormat::Raw) {
         let bytes = result.http_raw_bytes.ok_or_else(|| {
             anyhow::anyhow!(
                 "set_output_format(\"raw\") requires --input-format http (no raw bytes available)"
@@ -667,9 +755,9 @@ pub fn process_single_input(
             }
         }
         if let Some(code) = result.exit_code {
-            process::exit(code);
+            return Ok(CliResult::Exit(code));
         }
-        return Ok(());
+        return Ok(CliResult::Done);
     }
 
     // If set_input_format() or set_output_format() was called (non-raw), it overrides the output format
@@ -691,12 +779,12 @@ pub fn process_single_input(
                 debug,
             )?;
         }
-        process::exit(code);
+        return Ok(CliResult::Exit(code));
     }
 
     if check {
         let code = if is_truthy(&result.value) { 0 } else { 1 };
-        process::exit(code);
+        return Ok(CliResult::Exit(code));
     }
 
     output_result(
@@ -707,7 +795,11 @@ pub fn process_single_input(
         csv_opts,
         no_input,
         debug,
-    )
+    )?;
+
+    debug_phase(debug, "total", total_start);
+
+    Ok(CliResult::Done)
 }
 
 pub fn output_result(
@@ -719,6 +811,7 @@ pub fn output_result(
     no_input: bool,
     debug: bool,
 ) -> Result<()> {
+    let serialize_start = Instant::now();
     let output_fallback = if no_input || in_fmt == DataFormat::Http {
         DataFormat::Json
     } else {
@@ -758,6 +851,8 @@ pub fn output_result(
         }
     }
 
+    debug_phase(debug, "serialize", serialize_start);
+
     Ok(())
 }
 
@@ -782,31 +877,16 @@ pub fn read_input_list(source: &str) -> Result<Vec<String>> {
 
 /// Check if an environment variable name matches any of the --env patterns.
 ///
-/// Each pattern string may contain comma-separated segments.
-/// Each segment is either:
-/// - `*` → matches everything
-/// - `PREFIX*` → matches names starting with PREFIX
-/// - `EXACT` → exact match
+/// Each pattern string may contain comma-separated segments. Each segment uses
+/// the same glob syntax as `sandbox::matches_glob` (`*`, `PREFIX*`, `*SUFFIX`,
+/// `*INNER*`, exact).
 pub fn env_pattern_matches(name: &str, patterns: &[String]) -> bool {
-    for pat_str in patterns {
-        for segment in pat_str.split(',') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                continue;
-            }
-            if segment == "*" {
-                return true;
-            }
-            if let Some(prefix) = segment.strip_suffix('*') {
-                if name.starts_with(prefix) {
-                    return true;
-                }
-            } else if name == segment {
-                return true;
-            }
-        }
-    }
-    false
+    patterns
+        .iter()
+        .flat_map(|p| p.split(','))
+        .map(str::trim)
+        .filter(|seg| !seg.is_empty())
+        .any(|seg| crate::sandbox::matches_glob(seg, name))
 }
 
 /// Parse "path:alias" syntax from a single -i entry.
@@ -1028,15 +1108,15 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         .as_deref()
         .or(first_defaults.input_format.as_deref());
 
-    let context_base = serde_json::json!({
-        "input": input_path,
-        "output": null,
-        "input_format": effective_input_format,
-        "output_format": config.output_format,
-        "in_place": false,
-        "slurp": config.slurp,
-        "no_input": config.no_input,
-    });
+    let context_base = build_context_base(
+        input_path,
+        None,
+        effective_input_format,
+        config.output_format.as_deref(),
+        false,
+        config.slurp,
+        config.no_input,
+    );
 
     run_pipeline_core(
         input_path,

@@ -14,3 +14,10 @@ pub(crate) fn config_dir() -> Result<PathBuf> {
         .context("HOME environment variable not set")?;
     Ok(Path::new(&home).join(".config").join("fimod"))
 }
+
+/// Hex-encoded SHA-256 of arbitrary bytes. Used to derive stable cache keys
+/// (catalog hash, mold cache directories) from URLs or content.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(bytes))
+}

@@ -680,7 +680,37 @@ Prints pipeline diagnostics to **stderr** (stdout stays clean for piping):
 fimod s -i data.json -m transform.py --debug
 ```
 
-Output includes: input/output format, mold source, full script, input data, output data.
+Output includes: input/output format, **per-step identification** (`step N/M (label)`), full script, input data, output data, **phase timings** (`parse`, `execute`, `serialize`, `total`).
+
+Each step in a chain is logged with its 1-based index, the chain length, and a short label (the raw `-m` reference, or `-e '<expr>'` for inline expressions, truncated to ~50 chars). Steps injected at runtime via `pipeline.insert_next` / `pipeline.append` are annotated with `injected by step P`:
+
+```text
+[debug] step 1/3 (./normalize.py)
+[debug] step 2/3 (@common/flatten)
+[debug] step 3/3 (-e 'data', injected by step 2)
+```
+
+The same identifier is prepended to runtime errors, so the failing step is always unambiguous:
+
+```text
+Error: in step 2/3 (@common/flatten): Python error in mold:
+KeyError: 'foo'
+```
+
+Timings are always emitted in seconds with millisecond precision (`0.045s`) for easy parsing:
+
+```text
+[debug] parse: 0.002s
+[debug] execute: 0.045s
+[debug] serialize: 0.001s
+[debug] total: 0.048s
+```
+
+```bash
+# extract execute time of a run
+fimod s -i big.json -m heavy.py --debug 2>&1 1>/dev/null \
+  | awk '/\[debug\] execute:/ {print $3}'
+```
 
 !!! tip
     In debug mode, Python `print()` statements are also redirected to stderr.
@@ -710,6 +740,56 @@ fimod s -i config.json -e '{"host": data["host"], "port": data["port"]}' --in-pl
 ```
 
 Requires `-i`. Incompatible with `-o`.
+
+---
+
+## 👀 Watch mode (`--watch` / `-w`)
+
+Re-runs the transform whenever the input file or a local mold script changes — handy for iterating on a mold while editing it in another window:
+
+```bash
+fimod s -i data.json -m cleanup.py -o out.json --watch
+```
+
+Output goes to the usual destination (`-o` file or stdout). Status messages stream on stderr, so piping still works:
+
+```bash
+fimod s -i data.json -m cleanup.py --watch | jq .name
+# stderr: [watch] watching data.json, cleanup.py
+# stderr: [watch] run #1 ok (42ms)
+# stderr: [watch] run #2 ok (38ms)   (after editing cleanup.py)
+# stdout: "alice"
+# stdout: "alice"
+```
+
+A run that fails (Python error, parse error, missing file) is reported but **does not exit** the watch loop — fix the script and the next save triggers another run:
+
+```text
+[watch] run #3 failed (12ms)
+  in step 1/1 (cleanup.py): Python error in mold:
+  NameError: name 'foo' is not defined
+```
+
+**What is watched**:
+
+- `-i <file>` (the input file, must be local — not stdin or HTTP).
+- Each `-m <file.py>` that points to a local file (registry molds `@reg/name` and inline `-e` expressions are not watched).
+
+**Refused combinations** (each emits an explicit error):
+
+| Combo                                   | Reason                                          |
+|-----------------------------------------|-------------------------------------------------|
+| `--watch` + `-i -` (stdin)              | nothing to watch                                |
+| `--watch` + `-i http(s)://…`            | HTTP inputs not supported                       |
+| `--watch` + multiple `-i` (batch)       | watch is single-input only                      |
+| `--watch` + `--input-list`              | input list mode unsupported                     |
+| `--watch` + `--no-input`                | no input means no file to watch                 |
+| `--watch` + `--in-place`                | feedback loop (we'd watch the file we write)    |
+| `--watch` + `--output-format raw`       | raw mode bypasses the transform pipeline        |
+
+**Implementation details**: events are debounced (150 ms) so a single `:w` in your editor produces one re-run, not several. Parent directories are watched so atomic-rename editors (vim, VSCode) work correctly. The mold script is reloaded from disk on every iteration; no in-memory cache to invalidate.
+
+The feature can be disabled at compile time with `cargo build --no-default-features --features=reqwest` (omits `notify` and ~25 transitive crates). A binary built without `watch` rejects the flag with a clear error.
 
 ---
 
@@ -754,37 +834,40 @@ Features:
 
 Fimod provides **dynamic** shell completions: subcommands, flags, format names, mold `@references`, and registry source names are all completed contextually.
 
-Run `fimod completions <shell>` to see the setup instruction for your shell, or use the snippets below:
+Add **one line** to your shell rc — `fimod setup completions` prints the activation script on stdout, you `eval` it. The shell is auto-detected from `$SHELL`; pass `--shell <SHELL>` to override.
 
 === "Bash"
 
     ```bash
-    echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc
+    echo 'eval "$(fimod setup completions --shell bash)"' >> ~/.bashrc
     ```
 
 === "Zsh"
 
     ```bash
-    echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc
+    echo 'eval "$(fimod setup completions --shell zsh)"' >> ~/.zshrc
     ```
 
 === "Fish"
 
     ```bash
-    echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish
+    fimod setup completions --shell fish > ~/.config/fish/completions/fimod.fish
     ```
 
 === "Elvish"
 
     ```bash
-    echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv
+    echo 'eval (fimod setup completions --shell elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
 === "PowerShell"
 
     ```powershell
-    echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE
+    Add-Content $PROFILE 'fimod setup completions --shell powershell | Out-String | Invoke-Expression'
     ```
+
+!!! note "Migrating from older snippets"
+    If you previously added `source <(COMPLETE=zsh fimod)` (or the equivalent for your shell) to your rc, **it still works** — the underlying mechanism is unchanged. To switch to the new pattern, replace it with the `eval "$(fimod setup completions ...)"` line above.
 
 ### What gets completed
 
@@ -801,4 +884,4 @@ Run `fimod completions <shell>` to see the setup instruction for your shell, or 
 | `fimod registry build-catalog --registry` | Configured source names |
 | `fimod mold list` | Configured source names |
 | `fimod mold show --registry` | Configured source names |
-| `fimod completions` | Shell names: `bash`, `zsh`, `fish`, `elvish`, `powershell` |
+| `fimod setup completions --shell` | Shell names: `bash`, `zsh`, `fish`, `elvish`, `powershell` |

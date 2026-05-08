@@ -263,12 +263,12 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
 }
 
 /// Entry point for `fimod mold test <mold> <tests_dir>`.
-pub fn run(mold_path: &str, tests_dir: &str) -> Result<()> {
+pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResult> {
     let cases = discover_test_cases(tests_dir)?;
 
     if cases.is_empty() {
         println!("No test cases found in {tests_dir}");
-        return Ok(());
+        return Ok(crate::pipeline::CliResult::Done);
     }
 
     let source = MoldSource::from_mold_str(mold_path, false)?;
@@ -302,6 +302,7 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<()> {
             passed,
             if passed == 1 { "" } else { "s" }
         );
+        Ok(crate::pipeline::CliResult::Done)
     } else {
         println!(
             "{} test{}, {} passed, {} failed",
@@ -310,8 +311,6 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<()> {
             passed,
             failed
         );
-        std::process::exit(1);
+        Ok(crate::pipeline::CliResult::Exit(1))
     }
-
-    Ok(())
 }

@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 use anyhow::{bail, Result};
 use monty::MontyObject;
 
+use crate::monty_args::expect_string;
+
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["gk_fail", "gk_assert", "gk_warn"];
 
@@ -43,10 +45,7 @@ fn dispatch_fail(
     if args.len() != 1 {
         bail!("gk_fail() takes 1 argument (string), got {}", args.len());
     }
-    let msg = match &args[0] {
-        MontyObject::String(s) => s.as_str(),
-        _ => bail!("gk_fail() expects a string argument"),
-    };
+    let msg = expect_string(&args[0], "gk_fail() argument")?;
     eprintln!("[ERROR] {msg}");
     let mut lock = exit_code.lock().unwrap();
     *lock = Some(1);
@@ -64,10 +63,7 @@ fn dispatch_assert(
             args.len()
         );
     }
-    let msg = match &args[1] {
-        MontyObject::String(s) => s.as_str(),
-        _ => bail!("gk_assert() expects a string as second argument"),
-    };
+    let msg = expect_string(&args[1], "gk_assert() second argument")?;
     if !is_truthy(&args[0]) {
         eprintln!("[ERROR] {msg}");
         let mut lock = exit_code.lock().unwrap();
@@ -84,10 +80,7 @@ fn dispatch_warn(args: Vec<MontyObject>) -> Result<MontyObject> {
             args.len()
         );
     }
-    let msg = match &args[1] {
-        MontyObject::String(s) => s.as_str(),
-        _ => bail!("gk_warn() expects a string as second argument"),
-    };
+    let msg = expect_string(&args[1], "gk_warn() second argument")?;
     if !is_truthy(&args[0]) {
         eprintln!("[WARN] {msg}");
     }

@@ -7,21 +7,26 @@ use std::path::Path;
 use std::process;
 
 use fimod::pipeline::{
-    build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
-    path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    HttpOptions, ScriptRef,
+    build_context_base, build_env, build_scripts, execute_chain, is_truthy, output_result,
+    parse_input_entry, path_stem, process_single_input, read_and_parse_for_slurp, read_input_list,
+    url_filename, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
+use fimod::sandbox::SandboxPolicy;
 use fimod::MONTY_VERSION;
 use fimod::{convert, format, http, registry, setup, test_runner};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter, CompletionCandidate};
+use clap_complete::env::Shells;
 use clap_complete::CompleteEnv;
 use monty::MontyObject;
 use serde_json::Value;
 
 use format::{CsvOptions, DataFormat};
+
+#[cfg(feature = "watch")]
+mod watch;
 
 /// Verbosity level for `msg_*` functions in mold scripts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -80,6 +85,10 @@ struct ShapeArgs {
     /// Modify input file(s) in-place (requires -i, incompatible with -o)
     #[arg(long = "in-place")]
     in_place: bool,
+
+    /// Re-run the transform when -i or -m files change (single input, file-based only)
+    #[arg(long, short = 'w')]
+    watch: bool,
 
     /// Use the filename from the input URL as the output filename (like curl -O)
     #[arg(short = 'O', long = "url-filename", conflicts_with_all = ["output", "in_place"])]
@@ -202,12 +211,6 @@ enum Commands {
         #[command(subcommand)]
         category: SetupCategory,
     },
-    /// Show how to enable shell completions
-    Completions {
-        /// Shell to generate instructions for
-        #[arg(value_enum)]
-        shell: CompletionShell,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -226,6 +229,16 @@ enum SetupCategory {
     All {
         #[command(subcommand)]
         action: SetupDefaults,
+    },
+    /// Print a shell completion script to stdout
+    ///
+    /// Use with `eval` in your shell rc:
+    ///   eval "$(fimod setup completions --shell zsh)"
+    /// If --shell is omitted, the shell is auto-detected from $SHELL.
+    Completions {
+        /// Target shell (auto-detected from $SHELL if omitted)
+        #[arg(long, value_enum)]
+        shell: Option<CompletionShell>,
     },
 }
 
@@ -469,26 +482,44 @@ fn complete_sources(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
         .collect()
 }
 
-fn print_completion_instructions(shell: CompletionShell) {
-    let (shell_name, instruction) = match shell {
-        CompletionShell::Bash => ("Bash", "echo 'source <(COMPLETE=bash fimod)' >> ~/.bashrc"),
-        CompletionShell::Zsh => ("Zsh", "echo 'source <(COMPLETE=zsh fimod)' >> ~/.zshrc"),
-        CompletionShell::Fish => (
-            "Fish",
-            "echo 'COMPLETE=fish fimod | source' >> ~/.config/fish/completions/fimod.fish",
-        ),
-        CompletionShell::Elvish => (
-            "Elvish",
-            "echo 'eval (E:COMPLETE=elvish fimod | slurp)' >> ~/.elvish/rc.elv",
-        ),
-        CompletionShell::Powershell => (
-            "PowerShell",
-            r#"echo '$env:COMPLETE = "powershell"; fimod | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE' >> $PROFILE"#,
-        ),
+fn print_completion_script(shell: Option<CompletionShell>) -> Result<()> {
+    let shell = shell.map_or_else(detect_shell, Ok)?;
+    let shell_name = match shell {
+        CompletionShell::Bash => "bash",
+        CompletionShell::Zsh => "zsh",
+        CompletionShell::Fish => "fish",
+        CompletionShell::Elvish => "elvish",
+        CompletionShell::Powershell => "powershell",
     };
-    eprintln!(
-        "# {shell_name}: add this to your shell config, then restart your shell:\n{instruction}"
-    );
+    let shells = Shells::builtins();
+    let completer = shells
+        .completer(shell_name)
+        .with_context(|| format!("unsupported shell: {shell_name}"))?;
+    completer
+        .write_registration("COMPLETE", "fimod", "fimod", "fimod", &mut io::stdout())
+        .context("failed to write completion script")?;
+    Ok(())
+}
+
+fn detect_shell() -> Result<CompletionShell> {
+    let shell_path = std::env::var("SHELL").unwrap_or_default();
+    let basename = Path::new(&shell_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    match basename {
+        "bash" => Ok(CompletionShell::Bash),
+        "zsh" => Ok(CompletionShell::Zsh),
+        "fish" => Ok(CompletionShell::Fish),
+        "elvish" => Ok(CompletionShell::Elvish),
+        "pwsh" | "powershell" => Ok(CompletionShell::Powershell),
+        "" => bail!(
+            "could not detect shell: $SHELL is empty — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
+        ),
+        other => bail!(
+            "unrecognized shell `{other}` from $SHELL — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
+        ),
+    }
 }
 
 fn main() -> Result<()> {
@@ -497,19 +528,40 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let result = dispatch(cli);
 
-    if let Err(ref e) = result {
-        if let Some(sandbox_err) = e.downcast_ref::<fimod::engine::SandboxLimitExceeded>() {
-            eprintln!("{sandbox_err}");
-            process::exit(fimod::engine::SANDBOX_EXPLODED_EXIT_CODE);
+    match result {
+        Ok(CliResult::Done) => Ok(()),
+        Ok(CliResult::Exit(code)) => process::exit(code),
+        Err(e) => {
+            if let Some(sandbox_err) = e.downcast_ref::<fimod::engine::SandboxLimitExceeded>() {
+                eprintln!("{sandbox_err}");
+                process::exit(fimod::engine::SANDBOX_EXPLODED_EXIT_CODE);
+            }
+            Err(e)
         }
     }
-    result
 }
 
-fn dispatch(cli: Cli) -> Result<()> {
+fn dispatch(cli: Cli) -> Result<CliResult> {
     match cli.command {
         Some(Commands::Shape(shape)) => run_shape(*shape),
-        Some(Commands::Registry { action }) => match action {
+        // `mold test` can request exit code 1 on failure; handle separately.
+        Some(Commands::Mold {
+            action: MoldAction::Test { mold, tests_dir },
+        }) => test_runner::run(&mold, &tests_dir),
+        Some(other) => dispatch_other(other).map(|()| CliResult::Done),
+        None => {
+            Cli::command().print_help()?;
+            Ok(CliResult::Exit(2))
+        }
+    }
+}
+
+/// Dispatch all non-`Shape` subcommands (which never request a process exit
+/// with a custom code, only success or anyhow error).
+fn dispatch_other(cmd: Commands) -> Result<()> {
+    match cmd {
+        Commands::Shape(_) => unreachable!("handled by dispatch()"),
+        Commands::Registry { action } => match action {
             RegistryAction::List { output_format } => registry::list(&output_format),
             RegistryAction::Add {
                 name,
@@ -529,14 +581,14 @@ fn dispatch(cli: Cli) -> Result<()> {
             }
             RegistryAction::Setup { yes } => {
                 eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
-                setup::registry_defaults(yes)
+                setup::registry_defaults(yes, false)
             }
             RegistryAction::Cache { action } => match action {
                 CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
                 CacheAction::Info => registry::cache_info(),
             },
         },
-        Some(Commands::Mold { action }) => match action {
+        Commands::Mold { action } => match action {
             MoldAction::List {
                 registry,
                 output_format,
@@ -548,32 +600,29 @@ fn dispatch(cli: Cli) -> Result<()> {
                 output_format,
             } => match path {
                 Some(p) => registry::show_mold_by_path(&p, name.as_deref(), output_format),
-                None => registry::show_mold(&name.unwrap(), registry.as_deref(), output_format),
+                None => registry::show_mold(
+                    &name.expect("clap: --name is required when --path is absent"),
+                    registry.as_deref(),
+                    output_format,
+                ),
             },
-            MoldAction::Test { mold, tests_dir } => test_runner::run(&mold, &tests_dir),
+            MoldAction::Test { .. } => unreachable!("handled by dispatch()"),
         },
-        Some(Commands::Monty { action }) => match action {
+        Commands::Monty { action } => match action {
             MontyAction::Repl => run_monty_repl(),
         },
-        Some(Commands::Setup { category }) => match category {
+        Commands::Setup { category } => match category {
             SetupCategory::Registry {
-                action: SetupDefaults::Defaults { yes, force: _ },
-            } => setup::registry_defaults(yes),
+                action: SetupDefaults::Defaults { yes, force },
+            } => setup::registry_defaults(yes, force),
             SetupCategory::Sandbox {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::sandbox_defaults(yes, force),
             SetupCategory::All {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::all_defaults(yes, force),
+            SetupCategory::Completions { shell } => print_completion_script(shell),
         },
-        Some(Commands::Completions { shell }) => {
-            print_completion_instructions(shell);
-            Ok(())
-        }
-        None => {
-            Cli::command().print_help()?;
-            std::process::exit(2);
-        }
     }
 }
 
@@ -662,7 +711,41 @@ fn repl_feed(repl: &mut monty::MontyRepl<monty::NoLimitTracker>, snippet: &str) 
     }
 }
 
-fn run_shape(mut shape: ShapeArgs) -> Result<()> {
+fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
+    // Parse output format once so the rest of the function can dispatch on
+    // the typed `OutputMode` enum instead of string-comparing to "raw".
+    let output_mode = shape
+        .output_format
+        .as_deref()
+        .map(format::OutputMode::parse)
+        .transpose()?;
+    let is_raw_output = output_mode == Some(format::OutputMode::Raw);
+
+    // Validate --watch combos before any input resolution
+    if shape.watch {
+        if shape.in_place {
+            bail!("--watch is not compatible with --in-place");
+        }
+        if shape.no_input {
+            bail!("--watch is not compatible with --no-input");
+        }
+        if shape.input_list.is_some() {
+            bail!("--watch is not compatible with --input-list");
+        }
+        if is_raw_output {
+            bail!("--watch is not compatible with --output-format raw");
+        }
+        if shape.input.is_empty() {
+            bail!("--watch requires -i/--input (cannot watch stdin)");
+        }
+        if shape.input.len() > 1 {
+            bail!("--watch is not compatible with batch mode (multiple -i)");
+        }
+        if shape.input.iter().any(|p| http::is_url(p)) {
+            bail!("--watch is not supported for HTTP inputs");
+        }
+    }
+
     // Resolve --input-list into shape.input before any other processing
     if let Some(ref source) = shape.input_list.clone() {
         shape.input = read_input_list(source)?;
@@ -721,7 +804,10 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             bail!("Batch mode requires -o/--output directory or --in-place");
         }
         if !shape.in_place {
-            let out = shape.output.as_ref().unwrap();
+            let out = shape
+                .output
+                .as_ref()
+                .expect("invariant: batch mode without --in-place requires -o (validated above)");
             if Path::new(out).exists() && !Path::new(out).is_dir() {
                 bail!("Batch mode output must be a directory: {out}");
             }
@@ -729,7 +815,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
     }
 
     // --output-format raw: short-circuit the entire pipeline (binary pass-through)
-    if shape.output_format.as_deref() == Some("raw") {
+    if is_raw_output {
         // Validate: raw output is incompatible with molds/expressions
         if !shape.mold.is_empty() || !shape.expression.is_empty() {
             bail!("--output-format raw is incompatible with -m/--mold and -e/--expression (raw bypasses the transform pipeline)");
@@ -778,7 +864,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                 fs::write(&filename, &bytes)
                     .with_context(|| format!("Failed to write output file: {filename}"))?;
             }
-            return Ok(());
+            return Ok(CliResult::Done);
         }
 
         // Single input
@@ -819,8 +905,27 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             }
         }
 
-        return Ok(());
+        return Ok(CliResult::Done);
     }
+
+    if shape.watch {
+        #[cfg(feature = "watch")]
+        return watch::run_watch(&shape, &policy, debug, msg_level);
+        #[cfg(not(feature = "watch"))]
+        bail!("--watch is not available in this build (compiled without the 'watch' feature)");
+    }
+
+    run_shape_pipeline(&shape, &policy, debug, msg_level)
+}
+
+fn run_shape_pipeline(
+    shape: &ShapeArgs,
+    policy: &SandboxPolicy,
+    debug: bool,
+    msg_level: u8,
+) -> Result<CliResult> {
+    let is_batch = shape.input.len() > 1;
+    let is_multi_slurp = is_batch && shape.slurp;
 
     // Parse --arg name=value pairs
     let extra_args: Vec<(String, String)> = shape
@@ -923,7 +1028,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
 
     // Build HTTP options
     let http_opts = HttpOptions {
-        headers: shape.http_header,
+        headers: shape.http_header.clone(),
         timeout: shape.timeout,
         no_follow: shape.no_follow || first_defaults.no_follow,
     };
@@ -962,7 +1067,9 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             // Named mode → Value::Object keyed by stem or explicit alias
             let mut map = serde_json::Map::new();
             for (path, alias_opt) in &entries {
-                let alias = match alias_opt.as_ref().unwrap() {
+                let alias = match alias_opt.as_ref().expect(
+                    "invariant: has_alias && all_alias means every entry carries an alias_opt",
+                ) {
                     Some(name) => name.to_string(),
                     None => path_stem(path),
                 };
@@ -1006,15 +1113,15 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         }
 
         let data = convert::json_into_monty(combined);
-        let slurp_context = serde_json::json!({
-            "input": null,
-            "output": shape.output,
-            "input_format": effective_input_format,
-            "output_format": effective_output_format,
-            "in_place": false,
-            "slurp": true,
-            "no_input": false,
-        });
+        let slurp_context = build_context_base(
+            None,
+            shape.output.as_deref(),
+            effective_input_format,
+            effective_output_format,
+            false,
+            true,
+            false,
+        );
         let slurp_exec = execute_chain(
             &scripts,
             data,
@@ -1024,7 +1131,7 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             &slurp_context,
             debug,
             msg_level,
-            &policy,
+            policy,
         )?;
         let result = slurp_exec.value;
         let opt_exit_code = slurp_exec.exit_code;
@@ -1047,14 +1154,14 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
                     debug,
                 )?;
             }
-            process::exit(code);
+            return Ok(CliResult::Exit(code));
         }
 
         if shape.check {
-            process::exit(if is_truthy(&result) { 0 } else { 1 });
+            return Ok(CliResult::Exit(if is_truthy(&result) { 0 } else { 1 }));
         }
 
-        return output_result(
+        output_result(
             &result,
             actual_output,
             eff_out_fmt,
@@ -1062,7 +1169,8 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             &csv_opts,
             false,
             debug,
-        );
+        )?;
+        return Ok(CliResult::Done);
     }
 
     if is_batch {
@@ -1076,33 +1184,39 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
             let per_file_output: String = if shape.in_place {
                 input_path.clone()
             } else {
-                let dir = shape.output.as_ref().unwrap();
+                let dir = shape
+                    .output
+                    .as_ref()
+                    .expect("invariant: batch mode without --in-place requires -o");
                 let filename = Path::new(input_path)
                     .file_name()
                     .context("Input path has no filename")?;
                 Path::new(dir).join(filename).to_string_lossy().into_owned()
             };
 
-            process_single_input(
-                Some(input_path.as_str()),
-                false, // no_input always false in batch
-                shape.slurp,
+            // Propagate the first per-file CliResult::Exit; otherwise continue.
+            if let CliResult::Exit(code) = process_single_input(SingleRunOptions {
+                input_path: Some(input_path.as_str()),
+                no_input: false, // no_input always false in batch
+                slurp: shape.slurp,
                 effective_input_format,
-                &csv_opts,
-                &scripts,
-                &extra_args,
-                &env_value,
+                csv_opts: &csv_opts,
+                scripts: &scripts,
+                extra_args: &extra_args,
+                env_value: &env_value,
                 debug,
                 msg_level,
-                Some(per_file_output.as_str()),
+                output_path: Some(per_file_output.as_str()),
                 effective_output_format,
-                shape.in_place,
-                shape.check,
-                &http_opts,
-                &policy,
-            )?;
+                in_place: shape.in_place,
+                check: shape.check,
+                http_opts: &http_opts,
+                policy,
+            })? {
+                return Ok(CliResult::Exit(code));
+            }
         }
-        return Ok(());
+        return Ok(CliResult::Done);
     }
 
     // Single-file (or stdin) mode
@@ -1126,22 +1240,22 @@ fn run_shape(mut shape: ShapeArgs) -> Result<()> {
         shape.output.as_deref()
     };
 
-    process_single_input(
+    process_single_input(SingleRunOptions {
         input_path,
-        shape.no_input,
-        shape.slurp,
+        no_input: shape.no_input,
+        slurp: shape.slurp,
         effective_input_format,
-        &csv_opts,
-        &scripts,
-        &extra_args,
-        &env_value,
+        csv_opts: &csv_opts,
+        scripts: &scripts,
+        extra_args: &extra_args,
+        env_value: &env_value,
         debug,
         msg_level,
         output_path,
         effective_output_format,
-        shape.in_place,
-        shape.check,
-        &http_opts,
-        &policy,
-    )
+        in_place: shape.in_place,
+        check: shape.check,
+        http_opts: &http_opts,
+        policy,
+    })
 }

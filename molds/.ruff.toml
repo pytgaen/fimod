@@ -5,7 +5,6 @@
 # These are not Python imports — declaring them here silences false-positive
 # `F821 undefined name` warnings without disabling the check entirely.
 
-[lint]
 builtins = [
     # Pipeline injection
     "Step",

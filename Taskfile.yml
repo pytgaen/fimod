@@ -48,6 +48,13 @@ tasks:
     cmds:
       - cargo watch -x test
 
+  lint:
+    desc: Run cargo fmt --check, clippy -D warnings, and cargo deny check (cargo-deny via mise)
+    cmds:
+      - cargo fmt --check
+      - cargo clippy --all-targets -- -D warnings
+      - mise exec -- cargo-deny check
+
   install:nextest:
     desc: Install cargo-nextest
     cmds:

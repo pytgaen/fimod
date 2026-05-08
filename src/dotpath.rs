@@ -29,33 +29,6 @@ fn parse_path(path: &str) -> Vec<&str> {
     }
 }
 
-/// Navigate into a JSON Value following a dot-path.
-/// Returns None if the path doesn't resolve.
-fn get_at_path(value: &Value, path: &str) -> Option<Value> {
-    let segments = parse_path(path);
-    let mut current = value.clone();
-
-    for seg in segments {
-        current = match seg.parse::<i64>() {
-            Ok(idx) => {
-                let arr = current.as_array()?;
-                let actual_idx = if idx < 0 {
-                    (arr.len() as i64 + idx) as usize
-                } else {
-                    idx as usize
-                };
-                arr.get(actual_idx)?.clone()
-            }
-            Err(_) => {
-                let obj = current.as_object()?;
-                obj.get(seg)?.clone()
-            }
-        };
-    }
-
-    Some(current)
-}
-
 /// Set a value at a dot-path, returning a deep-cloned copy.
 /// Creates intermediate objects/arrays as needed.
 fn set_at_path(value: &Value, path: &str, new_val: &Value) -> Value {
@@ -112,6 +85,38 @@ fn set_recursive(value: &Value, segments: &[&str], new_val: &Value) -> Value {
     }
 }
 
+/// Walk `data` along the dot-path without converting through `serde_json::Value`.
+/// Returns a borrow into the input tree, so the caller decides when (and what
+/// to) clone. Critical hot path: a mold doing `dp_get(row, "x.y")` over 100 k
+/// rows used to round-trip the entire `data` to JSON on every call.
+fn get_at_path_monty<'a>(data: &'a MontyObject, path: &str) -> Option<&'a MontyObject> {
+    let segments = parse_path(path);
+    let mut current: &MontyObject = data;
+    for seg in segments {
+        current = match current {
+            MontyObject::Dict(pairs) => pairs.into_iter().find_map(|(k, v)| match k {
+                MontyObject::String(s) if s == seg => Some(v),
+                _ => None,
+            })?,
+            MontyObject::List(arr) => {
+                let idx = seg.parse::<i64>().ok()?;
+                let actual = if idx < 0 {
+                    let n = arr.len() as i64 + idx;
+                    if n < 0 {
+                        return None;
+                    }
+                    n as usize
+                } else {
+                    idx as usize
+                };
+                arr.get(actual)?
+            }
+            _ => return None,
+        };
+    }
+    Some(current)
+}
+
 /// dp_get(data, path) or dp_get(data, path, default)
 /// Returns the value at the dot-path, or default/None if not found.
 fn dp_get(args: Vec<MontyObject>) -> Result<MontyObject> {
@@ -127,21 +132,14 @@ fn dp_get(args: Vec<MontyObject>) -> Result<MontyObject> {
     let path_obj = iter.next().unwrap();
     let default = iter.next();
 
-    let data_json = monty_to_json(data_obj)?;
     let path = match path_obj {
         MontyObject::String(s) => s,
         other => bail!("dp_get() path must be a string, got {other:?}"),
     };
 
-    match get_at_path(&data_json, &path) {
-        Some(val) => Ok(json_into_monty(val)),
-        None => {
-            if let Some(def) = default {
-                Ok(def)
-            } else {
-                Ok(MontyObject::None)
-            }
-        }
+    match get_at_path_monty(&data_obj, &path) {
+        Some(val) => Ok(val.clone()),
+        None => Ok(default.unwrap_or(MontyObject::None)),
     }
 }
 
@@ -185,13 +183,14 @@ fn dp_has(args: Vec<MontyObject>) -> Result<MontyObject> {
     let data_obj = iter.next().unwrap();
     let path_obj = iter.next().unwrap();
 
-    let data_json = monty_to_json(data_obj)?;
     let path = match path_obj {
         MontyObject::String(s) => s,
         other => bail!("dp_has() path must be a string, got {other:?}"),
     };
 
-    Ok(MontyObject::Bool(get_at_path(&data_json, &path).is_some()))
+    Ok(MontyObject::Bool(
+        get_at_path_monty(&data_obj, &path).is_some(),
+    ))
 }
 
 /// dp_delete(data, path)
