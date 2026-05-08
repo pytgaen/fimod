@@ -623,31 +623,53 @@ fn run_pipeline_core(
 // CLI wrapper: output writing + process::exit
 // ---------------------------------------------------------------------------
 
+/// Pre-computed inputs for `process_single_input`. Bundled into a struct so the
+/// CLI-facing signature stays manageable as new pipeline-wide options are
+/// added (the alternative was a 16-argument function).
+pub struct SingleRunOptions<'a> {
+    pub input_path: Option<&'a str>,
+    pub no_input: bool,
+    pub slurp: bool,
+    pub effective_input_format: Option<&'a str>,
+    pub csv_opts: &'a CsvOptions,
+    pub scripts: &'a [MoldStep],
+    pub extra_args: &'a [(String, String)],
+    pub env_value: &'a Value,
+    pub debug: bool,
+    pub msg_level: u8,
+    pub output_path: Option<&'a str>,
+    pub effective_output_format: Option<&'a str>,
+    pub in_place: bool,
+    pub check: bool,
+    pub http_opts: &'a HttpOptions,
+    pub policy: &'a SandboxPolicy,
+}
+
 /// Process a single input through the full pipeline: read → parse → execute chain → serialize → write.
 ///
 /// Handles output writing and returns a `CliResult` describing whether the
 /// invocation completed normally or requests the process to exit with a code
 /// (from `set_exit()` or `--check`). For library usage, prefer `run_pipeline`,
 /// which returns the result without writing or signalling exits.
-#[allow(clippy::too_many_arguments)]
-pub fn process_single_input(
-    input_path: Option<&str>,
-    no_input: bool,
-    slurp: bool,
-    effective_input_format: Option<&str>,
-    csv_opts: &CsvOptions,
-    scripts: &[MoldStep],
-    extra_args: &[(String, String)],
-    env_value: &Value,
-    debug: bool,
-    msg_level: u8,
-    output_path: Option<&str>,
-    effective_output_format: Option<&str>,
-    in_place: bool,
-    check: bool,
-    http_opts: &HttpOptions,
-    policy: &SandboxPolicy,
-) -> Result<CliResult> {
+pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
+    let SingleRunOptions {
+        input_path,
+        no_input,
+        slurp,
+        effective_input_format,
+        csv_opts,
+        scripts,
+        extra_args,
+        env_value,
+        debug,
+        msg_level,
+        output_path,
+        effective_output_format,
+        in_place,
+        check,
+        http_opts,
+        policy,
+    } = opts;
     let total_start = Instant::now();
     let context_base = serde_json::json!({
         "input": input_path,

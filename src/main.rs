@@ -9,7 +9,7 @@ use std::process;
 use fimod::pipeline::{
     build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
     path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    CliResult, HttpOptions, ScriptRef,
+    CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
 use fimod::MONTY_VERSION;
 use fimod::sandbox::SandboxPolicy;
@@ -1183,24 +1183,24 @@ fn run_shape_pipeline(
             };
 
             // Propagate the first per-file CliResult::Exit; otherwise continue.
-            if let CliResult::Exit(code) = process_single_input(
-                Some(input_path.as_str()),
-                false, // no_input always false in batch
-                shape.slurp,
+            if let CliResult::Exit(code) = process_single_input(SingleRunOptions {
+                input_path: Some(input_path.as_str()),
+                no_input: false, // no_input always false in batch
+                slurp: shape.slurp,
                 effective_input_format,
-                &csv_opts,
-                &scripts,
-                &extra_args,
-                &env_value,
+                csv_opts: &csv_opts,
+                scripts: &scripts,
+                extra_args: &extra_args,
+                env_value: &env_value,
                 debug,
                 msg_level,
-                Some(per_file_output.as_str()),
+                output_path: Some(per_file_output.as_str()),
                 effective_output_format,
-                shape.in_place,
-                shape.check,
-                &http_opts,
+                in_place: shape.in_place,
+                check: shape.check,
+                http_opts: &http_opts,
                 policy,
-            )? {
+            })? {
                 return Ok(CliResult::Exit(code));
             }
         }
@@ -1228,22 +1228,22 @@ fn run_shape_pipeline(
         shape.output.as_deref()
     };
 
-    process_single_input(
+    process_single_input(SingleRunOptions {
         input_path,
-        shape.no_input,
-        shape.slurp,
+        no_input: shape.no_input,
+        slurp: shape.slurp,
         effective_input_format,
-        &csv_opts,
-        &scripts,
-        &extra_args,
-        &env_value,
+        csv_opts: &csv_opts,
+        scripts: &scripts,
+        extra_args: &extra_args,
+        env_value: &env_value,
         debug,
         msg_level,
         output_path,
         effective_output_format,
-        shape.in_place,
-        shape.check,
-        &http_opts,
+        in_place: shape.in_place,
+        check: shape.check,
+        http_opts: &http_opts,
         policy,
-    )
+    })
 }
