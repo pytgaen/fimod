@@ -183,6 +183,93 @@ fn test_http_content_type_with_charset_suffix_is_parsed() {
 }
 
 #[test]
+fn test_http_auth_header_kept_on_same_origin_redirect() {
+    let server = MockServer::start();
+
+    let with_auth = server.mock(|when, then| {
+        when.method(httpmock::Method::GET)
+            .path("/target")
+            .header_exists("authorization");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"got_auth":true}"#);
+    });
+    let without_auth = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/target");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"got_auth":false}"#);
+    });
+
+    let target_url = format!("{}/target", server.base_url());
+    let _redir = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/redirect");
+        then.status(302).header("location", &target_url);
+    });
+
+    let url = format!("{}/redirect", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &url,
+            "-e",
+            "data",
+            "--http-header",
+            "Authorization: Bearer secret",
+        ])
+        .assert()
+        .success();
+
+    with_auth.assert_hits(1);
+    without_auth.assert_hits(0);
+}
+
+#[test]
+fn test_http_auth_header_stripped_on_cross_origin_redirect() {
+    let server_a = MockServer::start();
+    let server_b = MockServer::start();
+
+    let with_auth = server_b.mock(|when, then| {
+        when.method(httpmock::Method::GET)
+            .path("/secure")
+            .header_exists("authorization");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"got_auth":true}"#);
+    });
+    let without_auth = server_b.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/secure");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"got_auth":false}"#);
+    });
+
+    let target_url = format!("{}/secure", server_b.base_url());
+    let _redir = server_a.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/redirect");
+        then.status(302).header("location", &target_url);
+    });
+
+    let url = format!("{}/redirect", server_a.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &url,
+            "-e",
+            "data",
+            "--http-header",
+            "Authorization: Bearer secret",
+        ])
+        .assert()
+        .success();
+
+    with_auth.assert_hits(0);
+    without_auth.assert_hits(1);
+}
+
+#[test]
 fn test_http_no_follow_returns_3xx_body_without_following() {
     let server = MockServer::start();
     let target_url = format!("{}/final", server.base_url());
