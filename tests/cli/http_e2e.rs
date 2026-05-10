@@ -289,6 +289,43 @@ fn test_http_malformed_header_rejected_before_request() {
 }
 
 #[test]
+fn test_http_raw_output_passes_bytes_unmodified() {
+    let server = MockServer::start();
+    let bytes: Vec<u8> = vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0xFF, 0x00, 0xCC, 0xFE, 0xED,
+    ];
+    let _mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/binary");
+        then.status(200)
+            .header("content-type", "application/octet-stream")
+            .body(bytes.as_slice());
+    });
+
+    let dir = assert_fs::TempDir::new().unwrap();
+    let output = dir.path().join("out.bin");
+
+    let url = format!("{}/binary", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &url,
+            "--output-format",
+            "raw",
+            "-o",
+            output.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let written = std::fs::read(&output).unwrap();
+    assert_eq!(
+        written, bytes,
+        "raw bytes must arrive unmodified, no UTF-8 re-encoding"
+    );
+}
+
+#[test]
 fn test_http_no_follow_returns_3xx_body_without_following() {
     let server = MockServer::start();
     let target_url = format!("{}/final", server.base_url());
