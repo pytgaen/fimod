@@ -83,3 +83,43 @@ fn poll_until<F: FnMut() -> bool>(mut cond: F, timeout: Duration, description: &
     }
     panic!("timed out after {timeout:?} waiting for {description}");
 }
+
+#[test]
+fn test_watch_missing_input_at_startup_fails_cleanly() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let nonexistent = dir.path().join("does_not_exist.json");
+
+    let bin = assert_cmd::cargo::cargo_bin("fimod");
+    let mut child = Command::new(bin)
+        .arg("shape")
+        .args(["-i", nonexistent.to_str().unwrap(), "-e", "data", "--watch"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn fimod --watch");
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if let Ok(Some(_)) = child.try_wait() {
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                !output.status.success(),
+                "expected failure when input is missing"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("Failed to read")
+                    || stderr.contains("not found")
+                    || stderr.contains("No such")
+                    || stderr.contains("does_not_exist"),
+                "expected clear error in stderr, got: {stderr:?}"
+            );
+            return;
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
+    panic!("fimod --watch hung when input was missing — should bail at startup");
+}

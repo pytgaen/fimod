@@ -27,6 +27,12 @@ pub fn run_watch(
     debug: bool,
     msg_level: u8,
 ) -> Result<CliResult> {
+    if let Some(input) = shape.input.first() {
+        if !std::path::Path::new(input).exists() {
+            anyhow::bail!("Failed to read input file '{input}': file does not exist");
+        }
+    }
+
     let watch_files = collect_watch_files(shape);
 
     eprintln!(
