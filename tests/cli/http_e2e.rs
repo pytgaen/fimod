@@ -75,3 +75,56 @@ fn test_http_500_surfaces_status_code() {
         .failure()
         .stderr(predicate::str::contains("HTTP 500"));
 }
+
+#[test]
+fn test_http_follows_redirect_by_default() {
+    let server = MockServer::start();
+    let target_url = format!("{}/final", server.base_url());
+
+    let target = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/final");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"final":true}"#);
+    });
+    let _redir = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/redirect");
+        then.status(302).header("location", &target_url);
+    });
+
+    let url = format!("{}/redirect", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"final\""));
+    target.assert_hits(1);
+}
+
+#[test]
+fn test_http_no_follow_returns_3xx_body_without_following() {
+    let server = MockServer::start();
+    let target_url = format!("{}/final", server.base_url());
+
+    let target = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/final");
+        then.status(200).body(r#"{"final":true}"#);
+    });
+    let _redir = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/redirect");
+        then.status(302)
+            .header("location", &target_url)
+            .header("content-type", "application/json")
+            .body(r#"{"hint":"go elsewhere"}"#);
+    });
+
+    let url = format!("{}/redirect", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data", "--no-follow"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"hint\""));
+    target.assert_hits(0);
+}
