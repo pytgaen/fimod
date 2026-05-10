@@ -164,6 +164,7 @@ Rules:
 - All entries must use `:` or none must (mixing → error)
 - Auto stem uses the filename without extension; duplicate stems → error (use explicit aliases)
 - Incompatible with `--in-place` and `-o <directory>`
+- **URLs cannot carry a `:alias` suffix** (the `://` scheme separator collides with the alias delimiter, so URLs are always treated as bare entries). When mixing HTTP inputs with local files, **list mode is the only option** — access via `data[0]`, `data[1]`, … in input order.
 
 ```bash
 # ➕ List mode — access by index, cross-format (JSON + YAML)

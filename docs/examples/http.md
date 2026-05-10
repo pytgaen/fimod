@@ -108,3 +108,9 @@ fimod s -i https://jsonplaceholder.typicode.com/todos/1 \
 ```json
 {"id": 1, "done": false}
 ```
+
+---
+
+## Combine an HTTP response with a local config
+
+A live API plus a YAML/JSON/TOML file from disk can be merged in one command via multi-file slurp (`-s` with two or more `-i`). URLs cannot carry the `:alias` suffix, so list mode (`data[0]`, `data[1]`, …) is required when an URL is in the mix. See the [Cookbook → Mixed-Source Merge](../cookbook.md#-mixed-source-merge--http-api--local-yaml--toml) recipe.
