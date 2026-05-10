@@ -26,6 +26,8 @@ mod gatekeeper;
 mod hash;
 #[path = "cli/helpers.rs"]
 mod helpers;
+#[path = "cli/http_e2e.rs"]
+mod http_e2e;
 #[path = "cli/inline.rs"]
 mod inline;
 #[path = "cli/iter_helpers.rs"]
