@@ -6,6 +6,8 @@ mod batch;
 mod chain;
 #[path = "cli/cookbook.rs"]
 mod cookbook;
+#[path = "cli/cross_format.rs"]
+mod cross_format;
 #[path = "cli/csv.rs"]
 mod csv;
 #[path = "cli/dotpath.rs"]
