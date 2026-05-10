@@ -326,6 +326,33 @@ fn test_http_raw_output_passes_bytes_unmodified() {
 }
 
 #[test]
+fn test_http_proxy_env_routes_request_through_proxy() {
+    let proxy = MockServer::start();
+    let mock = proxy.mock(|when, then| {
+        when.method(httpmock::Method::GET);
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"via":"proxy"}"#);
+    });
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", "http://example.invalid/data", "-e", "data"])
+        .env_remove("NO_PROXY")
+        .env_remove("no_proxy")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("https_proxy")
+        .env_remove("ALL_PROXY")
+        .env_remove("all_proxy")
+        .env("HTTP_PROXY", proxy.base_url())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"via\""));
+
+    mock.assert_hits(1);
+}
+
+#[test]
 fn test_http_no_follow_returns_3xx_body_without_following() {
     let server = MockServer::start();
     let target_url = format!("{}/final", server.base_url());
