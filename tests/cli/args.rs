@@ -607,6 +607,51 @@ fn test_in_place_error_with_output() {
 }
 
 #[test]
+fn test_in_place_yaml_preserves_format_via_path_auto_detection() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.yaml", "name: alice\nage: 30\n");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-e",
+            r#"{"name": data["name"].upper(), "age": data["age"]}"#,
+            "--in-place",
+        ])
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&input).unwrap();
+    assert!(
+        content.contains("name: ALICE"),
+        "expected YAML output (bare key: value), got: {content:?}"
+    );
+    assert!(!content.starts_with('{'), "must not be JSON: {content:?}");
+}
+
+#[test]
+fn test_in_place_csv_preserves_format_via_path_auto_detection() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.csv", "name,age\nalice,30\n");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--in-place"])
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&input).unwrap();
+    assert!(
+        content.contains("name,age"),
+        "header preserved: {content:?}"
+    );
+    assert!(content.contains("alice,30"), "row preserved: {content:?}");
+    assert!(!content.starts_with('['), "must not be JSON: {content:?}");
+}
+
+#[test]
 fn test_completions_bash() {
     assert_cmd::cargo_bin_cmd!("fimod")
         .env("COMPLETE", "bash")
