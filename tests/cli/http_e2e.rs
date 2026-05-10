@@ -103,6 +103,86 @@ fn test_http_follows_redirect_by_default() {
 }
 
 #[test]
+fn test_http_content_type_json_is_parsed() {
+    let server = MockServer::start();
+    let _mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/data");
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(r#"{"key":"value"}"#);
+    });
+
+    let url = format!("{}/data", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"key\""))
+        .stdout(predicate::str::contains("\"value\""));
+}
+
+#[test]
+fn test_http_content_type_yaml_is_parsed() {
+    let server = MockServer::start();
+    let _mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/data");
+        then.status(200)
+            .header("content-type", "application/yaml")
+            .body("key: value\n");
+    });
+
+    let url = format!("{}/data", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data", "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"key\""))
+        .stdout(predicate::str::contains("\"value\""));
+}
+
+#[test]
+fn test_http_content_type_csv_is_parsed() {
+    let server = MockServer::start();
+    let _mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/data");
+        then.status(200)
+            .header("content-type", "text/csv")
+            .body("name,age\nalice,30\nbob,42\n");
+    });
+
+    let url = format!("{}/data", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alice"))
+        .stdout(predicate::str::contains("bob"));
+}
+
+#[test]
+fn test_http_content_type_with_charset_suffix_is_parsed() {
+    let server = MockServer::start();
+    let _mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/data");
+        then.status(200)
+            .header("content-type", "application/json; charset=utf-8")
+            .body(r#"{"key":"value"}"#);
+    });
+
+    let url = format!("{}/data", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"key\""))
+        .stdout(predicate::str::contains("\"value\""));
+}
+
+#[test]
 fn test_http_no_follow_returns_3xx_body_without_following() {
     let server = MockServer::start();
     let target_url = format!("{}/final", server.base_url());
