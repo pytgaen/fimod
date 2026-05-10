@@ -44,6 +44,28 @@ fn test_mold_signature_data_args_with_kwargs_catchall() {
 }
 
 #[test]
+fn test_mold_set_output_format_overrides_default_format() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"key":"value"}"#);
+    let mold = setup_mold(
+        &dir,
+        "fmt.py",
+        r#"def transform(data, **_):
+    set_output_format("yaml")
+    return data
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("key: value"))
+        .stdout(predicate::str::contains("\"key\"").not());
+}
+
+#[test]
 fn test_arg_values_passed_as_strings_no_type_coercion() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x":1}"#);
