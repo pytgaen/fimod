@@ -38,6 +38,8 @@ mod iter_helpers;
 mod json;
 #[path = "cli/lines.rs"]
 mod lines;
+#[path = "cli/mold_contract.rs"]
+mod mold_contract;
 #[path = "cli/msg.rs"]
 mod msg;
 #[path = "cli/multi_slurp.rs"]
