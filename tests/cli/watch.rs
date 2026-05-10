@@ -193,3 +193,47 @@ fn read_n(path: &Path) -> Option<i64> {
     let v: serde_json::Value = serde_json::from_str(&content).ok()?;
     v.get("n")?.as_i64()
 }
+
+#[test]
+fn test_watch_detects_atomic_save_via_rename() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = dir.child("in.json");
+    let output = dir.child("out.json");
+    input.write_str(r#"{"n":0}"#).unwrap();
+
+    let bin = assert_cmd::cargo::cargo_bin("fimod");
+    let child = Command::new(bin)
+        .arg("shape")
+        .args([
+            "-i",
+            input.path().to_str().unwrap(),
+            "-o",
+            output.path().to_str().unwrap(),
+            "-e",
+            "data",
+            "--watch",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn fimod --watch");
+    let _guard = ChildGuard(Some(child));
+
+    poll_until(
+        || read_n(output.path()) == Some(0),
+        STARTUP_TIMEOUT,
+        "initial run #1 to write n=0",
+    );
+
+    thread::sleep(DEBOUNCE_GAP);
+
+    let tmp = tempfile::NamedTempFile::new_in(dir.path()).expect("tmp in dir");
+    std::fs::write(tmp.path(), r#"{"n":42}"#).expect("write tmp");
+    tmp.persist(input.path()).expect("atomic rename to in.json");
+
+    poll_until(
+        || read_n(output.path()) == Some(42),
+        RERUN_TIMEOUT,
+        "rerun after atomic save (rename) to write n=42",
+    );
+}
