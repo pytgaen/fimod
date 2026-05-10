@@ -270,6 +270,25 @@ fn test_http_auth_header_stripped_on_cross_origin_redirect() {
 }
 
 #[test]
+fn test_http_malformed_header_rejected_before_request() {
+    let server = MockServer::start();
+    let mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/data");
+        then.status(200).body(r#"{"ok":true}"#);
+    });
+
+    let url = format!("{}/data", server.base_url());
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &url, "-e", "data", "--http-header", "NoColonHere"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid header"));
+
+    mock.assert_hits(0);
+}
+
+#[test]
 fn test_http_no_follow_returns_3xx_body_without_following() {
     let server = MockServer::start();
     let target_url = format!("{}/final", server.base_url());
