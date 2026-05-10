@@ -44,6 +44,47 @@ fn test_mold_signature_data_args_with_kwargs_catchall() {
 }
 
 #[test]
+fn test_arg_values_passed_as_strings_no_type_coercion() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"x":1}"#);
+    let mold = setup_mold(
+        &dir,
+        "m.py",
+        r#"def transform(data, args, **_):
+    return {
+        "n_is_str": args["n"] == "42",
+        "f_is_str": args["f"] == "3.14",
+        "b_is_str": args["b"] == "true",
+        "j_is_str": args["j"] == "[1,2,3]",
+    }
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-m",
+            &mold,
+            "--arg",
+            "n=42",
+            "--arg",
+            "f=3.14",
+            "--arg",
+            "b=true",
+            "--arg",
+            "j=[1,2,3]",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"n_is_str\": true"))
+        .stdout(predicate::str::contains("\"f_is_str\": true"))
+        .stdout(predicate::str::contains("\"b_is_str\": true"))
+        .stdout(predicate::str::contains("\"j_is_str\": true"));
+}
+
+#[test]
 fn test_mold_signature_full_kwargs_data_args_env_headers() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x":1}"#);
