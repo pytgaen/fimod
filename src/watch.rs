@@ -15,11 +15,17 @@ use fimod::mold::MoldSource;
 use fimod::pipeline::CliResult;
 use fimod::sandbox::SandboxPolicy;
 use notify::RecursiveMode;
-use notify_debouncer_mini::new_debouncer;
+use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
 use crate::ShapeArgs;
 
 const DEBOUNCE_MS: u64 = 150;
+/// Second-level debounce: after we receive the first batch from
+/// `notify-debouncer-mini`, wait this long and absorb any further batches
+/// the debouncer flushes during that window. Coalesces the multiple `Any`
+/// events that `notify` emits per `File::create` (truncate + write + close
+/// can produce events arriving > DEBOUNCE_MS apart on Linux/inotify).
+const COALESCE_MS: u64 = 500;
 
 pub fn run_watch(
     shape: &ShapeArgs,
@@ -77,25 +83,34 @@ pub fn run_watch(
     let mut run_n: u32 = 1;
     run_once(shape, policy, debug, msg_level, run_n);
 
-    loop {
-        match rx.recv() {
-            Ok(Ok(events)) => {
-                let triggered = events.iter().any(|e| {
-                    e.path
+    while let Ok(first) = rx.recv() {
+        // Second-level debounce: notify can split a single logical write
+        // into multiple events that the first-level debouncer flushes as
+        // separate batches > DEBOUNCE_MS apart on Linux/inotify. We sleep
+        // COALESCE_MS and drain everything pending so a single trigger
+        // covers the full burst.
+        std::thread::sleep(Duration::from_millis(COALESCE_MS));
+        let mut batches = vec![first];
+        while let Ok(more) = rx.try_recv() {
+            batches.push(more);
+        }
+        let triggered = batches
+            .into_iter()
+            .filter_map(Result::ok)
+            .flatten()
+            .any(|e| {
+                e.kind == DebouncedEventKind::Any
+                    && e.path
                         .file_name()
                         .is_some_and(|n| target_filenames.contains(n))
-                        && e.path
-                            .canonicalize()
-                            .map(|p| canonical_targets.contains(&p))
-                            .unwrap_or(false)
-                });
-                if triggered {
-                    run_n += 1;
-                    run_once(shape, policy, debug, msg_level, run_n);
-                }
-            }
-            Ok(Err(_)) => continue,
-            Err(_) => break,
+                    && e.path
+                        .canonicalize()
+                        .map(|p| canonical_targets.contains(&p))
+                        .unwrap_or(false)
+            });
+        if triggered {
+            run_n += 1;
+            run_once(shape, policy, debug, msg_level, run_n);
         }
     }
 

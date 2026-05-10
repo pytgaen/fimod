@@ -1,7 +1,9 @@
 #![cfg(feature = "watch")]
 
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -122,4 +124,72 @@ fn test_watch_missing_input_at_startup_fails_cleanly() {
     let _ = child.kill();
     let _ = child.wait();
     panic!("fimod --watch hung when input was missing — should bail at startup");
+}
+
+#[test]
+fn test_watch_debounces_rapid_writes_into_single_rerun() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = dir.child("in.json");
+    let output = dir.child("out.json");
+    input.write_str(r#"{"n":0}"#).unwrap();
+
+    let bin = assert_cmd::cargo::cargo_bin("fimod");
+    let mut child = Command::new(bin)
+        .arg("shape")
+        .args([
+            "-i",
+            input.path().to_str().unwrap(),
+            "-o",
+            output.path().to_str().unwrap(),
+            "-e",
+            "data",
+            "--watch",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn fimod --watch");
+
+    let stderr_lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let stderr_pipe = child.stderr.take().expect("stderr piped");
+    let stderr_lines_thread = Arc::clone(&stderr_lines);
+    thread::spawn(move || {
+        for line in BufReader::new(stderr_pipe).lines().map_while(Result::ok) {
+            stderr_lines_thread.lock().unwrap().push(line);
+        }
+    });
+    let _guard = ChildGuard(Some(child));
+
+    poll_until(
+        || read_n(output.path()) == Some(0),
+        STARTUP_TIMEOUT,
+        "run #1 to write n=0",
+    );
+
+    thread::sleep(DEBOUNCE_GAP);
+
+    for i in 1..=5 {
+        input.write_str(&format!(r#"{{"n":{i}}}"#)).unwrap();
+    }
+
+    poll_until(
+        || read_n(output.path()) == Some(5),
+        RERUN_TIMEOUT,
+        "debounced rerun to write n=5",
+    );
+
+    thread::sleep(Duration::from_millis(500));
+
+    let lines = stderr_lines.lock().unwrap();
+    let run_count = lines.iter().filter(|l| l.contains("[watch] run #")).count();
+    assert_eq!(
+        run_count, 2,
+        "expected 1 initial run + 1 debounced rerun, got {run_count} — debounce broken: {lines:?}"
+    );
+}
+
+fn read_n(path: &Path) -> Option<i64> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+    v.get("n")?.as_i64()
 }
