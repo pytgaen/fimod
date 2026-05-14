@@ -120,6 +120,36 @@ pub struct ChainExecCtx<'a> {
     pub msg_level: u8,
 }
 
+/// Chain-exit shape: result already converted to `serde_json::Value` plus the
+/// per-run overrides a caller needs to drive output writing.
+pub struct ChainOutput {
+    pub value: Value,
+    pub exit_code: Option<i32>,
+    pub format_override: Option<String>,
+    pub output_file_override: Option<String>,
+}
+
+/// Run a mold chain and convert the final `MontyObject` to `serde_json::Value`.
+/// Single boundary helper so the run_pipeline_core / cmd::shape slurp paths
+/// share the same conversion + extraction shape.
+pub fn execute_chain_to_value(
+    steps: &[MoldStep],
+    initial_data: MontyObject,
+    metadata: &PipelineMetadata<'_>,
+    headers_value: &Value,
+    ctx: &ChainExecCtx<'_>,
+) -> Result<ChainOutput> {
+    let exec = execute_chain(steps, initial_data, metadata, headers_value, ctx)?;
+    let value = convert::monty_to_json(exec.value)
+        .context("Failed to convert mold chain result to JSON")?;
+    Ok(ChainOutput {
+        value,
+        exit_code: exec.exit_code,
+        format_override: exec.format_override,
+        output_file_override: exec.output_file,
+    })
+}
+
 /// Execute a chain of mold scripts sequentially, with dynamic step insertion.
 ///
 /// Molds can inject new steps via `pipeline.insert_next()` / `pipeline.append()`,
@@ -581,21 +611,16 @@ fn run_pipeline_core(
 
     debug_phase(ctx.debug, "parse", parse_start);
 
-    // Execute the mold chain
+    // Execute the mold chain (converts MontyObject → Value at the boundary).
     let exec_start = Instant::now();
-    let exec = execute_chain(scripts, data, metadata, &headers_value, ctx)?;
+    let out = execute_chain_to_value(scripts, data, metadata, &headers_value, ctx)?;
     debug_phase(ctx.debug, "execute", exec_start);
 
-    // Chain exit boundary: convert the final MontyObject back to a Value so
-    // the rest of the pipeline can serialize it through the I/O layer.
-    let value = convert::monty_to_json(exec.value)
-        .context("Failed to convert mold chain result to JSON")?;
-
     Ok(PipelineResult {
-        value,
-        exit_code: exec.exit_code,
-        format_override: exec.format_override,
-        output_file_override: exec.output_file,
+        value: out.value,
+        exit_code: out.exit_code,
+        format_override: out.format_override,
+        output_file_override: out.output_file_override,
         input_format: in_fmt,
         http_raw_bytes,
     })

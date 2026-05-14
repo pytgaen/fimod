@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use fimod::format::{CsvOptions, DataFormat};
 use fimod::pipeline::{
-    build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
+    build_env, build_scripts, execute_chain_to_value, is_truthy, output_result, parse_input_entry,
     path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
     write_bytes_to, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
@@ -470,12 +470,12 @@ pub fn run_shape_pipeline(
             debug,
             msg_level,
         };
-        let slurp_exec = execute_chain(&scripts, data, &slurp_metadata, &Value::Null, &slurp_ctx)?;
-        let result = convert::monty_to_json(slurp_exec.value)
-            .context("Failed to convert slurp result to JSON")?;
-        let opt_exit_code = slurp_exec.exit_code;
-        let fmt_override = slurp_exec.format_override;
-        let output_file_override = slurp_exec.output_file;
+        let slurp_out =
+            execute_chain_to_value(&scripts, data, &slurp_metadata, &Value::Null, &slurp_ctx)?;
+        let result = slurp_out.value;
+        let opt_exit_code = slurp_out.exit_code;
+        let fmt_override = slurp_out.format_override;
+        let output_file_override = slurp_out.output_file_override;
 
         // set_output_file() overrides the CLI -o path for multi-file slurp output
         let actual_output = output_file_override.as_deref().or(shape.output.as_deref());
