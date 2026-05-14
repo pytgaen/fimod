@@ -7,9 +7,9 @@ use serde_json::Value;
 
 use fimod::format::{CsvOptions, DataFormat};
 use fimod::pipeline::{
-    build_context_base, build_env, build_scripts, execute_chain, is_truthy, output_result,
-    parse_input_entry, path_stem, process_single_input, read_and_parse_for_slurp, read_input_list,
-    url_filename, write_bytes_to, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
+    build_env, build_scripts, execute_chain, is_truthy, output_result, parse_input_entry,
+    path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
+    write_bytes_to, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
 use fimod::sandbox::SandboxPolicy;
 use fimod::{convert, format, http};
@@ -454,26 +454,23 @@ pub fn run_shape_pipeline(
         }
 
         let data = convert::json_into_monty(combined);
-        let slurp_context = build_context_base(
-            None,
-            shape.output.as_deref(),
-            effective_input_format,
-            effective_output_format,
-            false,
-            true,
-            false,
-        );
-        let slurp_exec = execute_chain(
-            &scripts,
-            data,
-            &extra_args,
-            &env_value,
-            &Value::Null,
-            &slurp_context,
+        let slurp_metadata = fimod::pipeline::PipelineMetadata {
+            input: None,
+            output: shape.output.as_deref(),
+            input_format: effective_input_format,
+            output_format: effective_output_format,
+            in_place: false,
+            slurp: true,
+            no_input: false,
+        };
+        let slurp_ctx = fimod::pipeline::ChainExecCtx {
+            extra_args: &extra_args,
+            env_value: &env_value,
+            policy,
             debug,
             msg_level,
-            policy,
-        )?;
+        };
+        let slurp_exec = execute_chain(&scripts, data, &slurp_metadata, &Value::Null, &slurp_ctx)?;
         let result = slurp_exec.value;
         let opt_exit_code = slurp_exec.exit_code;
         let fmt_override = slurp_exec.format_override;

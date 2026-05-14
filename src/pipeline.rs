@@ -106,21 +106,43 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
     Ok(steps)
 }
 
+/// Static pipeline metadata exposed to molds via the `pipeline` Python API.
+///
+/// Used to be a 7-key `serde_json::Value::Object` (built by `build_context_base`)
+/// that `execute_chain` re-extracted into typed values. Carrying the typed
+/// struct end-to-end removes the stringification round-trip.
+pub struct PipelineMetadata<'a> {
+    pub input: Option<&'a str>,
+    pub output: Option<&'a str>,
+    pub input_format: Option<&'a str>,
+    pub output_format: Option<&'a str>,
+    pub in_place: bool,
+    pub slurp: bool,
+    pub no_input: bool,
+}
+
+/// Cross-cutting execution concerns shared by every step in a chain.
+/// (`headers_value` is intentionally separate — it's derived per-input from CSV
+/// state right before `execute_chain` runs, and doesn't belong in a context
+/// constructed earlier by the caller.)
+pub struct ChainExecCtx<'a> {
+    pub extra_args: &'a [(String, String)],
+    pub env_value: &'a Value,
+    pub policy: &'a SandboxPolicy,
+    pub debug: bool,
+    pub msg_level: u8,
+}
+
 /// Execute a chain of mold scripts sequentially, with dynamic step insertion.
 ///
 /// Molds can inject new steps via `pipeline.insert_next()` / `pipeline.append()`,
 /// and mutate future steps via `pipeline.step(i)['key'] = value`.
-#[allow(clippy::too_many_arguments)]
 pub fn execute_chain(
     steps: &[MoldStep],
     initial_data: MontyObject,
-    extra_args: &[(String, String)],
-    env_value: &Value,
+    metadata: &PipelineMetadata<'_>,
     headers_value: &Value,
-    context_base: &Value,
-    debug: bool,
-    msg_level: u8,
-    policy: &SandboxPolicy,
+    ctx: &ChainExecCtx<'_>,
 ) -> MoldResult {
     let mut steps: Vec<MoldStep> = steps.to_vec();
     let mut data = initial_data;
@@ -128,23 +150,15 @@ pub fn execute_chain(
     // Pending mutations keyed by absolute step index → {field → value}.
     let mut mutations: HashMap<usize, HashMap<String, Value>> = HashMap::new();
 
-    // Extract static pipeline metadata from context_base.
-    let input_path = context_base.get("input").and_then(Value::as_str);
-    let output_path = context_base.get("output").and_then(Value::as_str);
-    let in_place = context_base
-        .get("in_place")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let slurp = context_base
-        .get("slurp")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let no_input = context_base
-        .get("no_input")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let base_input_format = context_base.get("input_format").and_then(Value::as_str);
-    let base_output_format = context_base.get("output_format").and_then(Value::as_str);
+    let &PipelineMetadata {
+        input: input_path,
+        output: output_path,
+        input_format: base_input_format,
+        output_format: base_output_format,
+        in_place,
+        slurp,
+        no_input,
+    } = metadata;
 
     let mut i = 0;
     while i < steps.len() {
@@ -157,7 +171,7 @@ pub fn execute_chain(
             .cloned()
             .or_else(|| steps[i].runtime_args.clone());
 
-        if debug {
+        if ctx.debug {
             eprintln!("[debug] {}", steps[i].error_context(i, steps.len()));
         }
 
@@ -200,13 +214,13 @@ pub fn execute_chain(
             .collect();
 
         let opts = engine::MoldOptions {
-            extra_args,
-            env_value,
+            extra_args: ctx.extra_args,
+            env_value: ctx.env_value,
             headers_value,
-            debug,
-            msg_level,
+            debug: ctx.debug,
+            msg_level: ctx.msg_level,
             mold_base_dir: step_base_dir.as_deref(),
-            policy,
+            policy: ctx.policy,
             current_step_idx: i,
             total_steps: steps.len(),
             remaining_steps,
@@ -289,7 +303,7 @@ pub fn execute_chain(
                     "in {step_ctx}: set_output_format(\"raw\") can only be used in the final step of a mold chain"
                 );
             }
-            if debug {
+            if ctx.debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
             let as_string = match &result {
@@ -405,22 +419,18 @@ pub struct PipelineResult {
 ///
 /// This is the single source of truth. Both `process_single_input` (CLI) and
 /// `run_pipeline` (library API) delegate to this function.
-#[allow(clippy::too_many_arguments)]
 fn run_pipeline_core(
-    input_path: Option<&str>,
-    no_input: bool,
-    slurp: bool,
+    metadata: &PipelineMetadata<'_>,
     effective_input_format: Option<&str>,
     csv_opts: &CsvOptions,
     scripts: &[MoldStep],
-    extra_args: &[(String, String)],
-    env_value: &Value,
-    context_base: &Value,
-    debug: bool,
-    msg_level: u8,
     http_opts: &HttpOptions,
-    policy: &SandboxPolicy,
+    ctx: &ChainExecCtx<'_>,
 ) -> Result<PipelineResult> {
+    let input_path = metadata.input;
+    let no_input = metadata.no_input;
+    let slurp = metadata.slurp;
+    let debug = ctx.debug;
     let parse_start = Instant::now();
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
@@ -583,22 +593,12 @@ fn run_pipeline_core(
         None => serde_json::Value::Null,
     };
 
-    debug_phase(debug, "parse", parse_start);
+    debug_phase(ctx.debug, "parse", parse_start);
 
     // Execute the mold chain
     let exec_start = Instant::now();
-    let exec = execute_chain(
-        scripts,
-        data,
-        extra_args,
-        env_value,
-        &headers_value,
-        context_base,
-        debug,
-        msg_level,
-        policy,
-    )?;
-    debug_phase(debug, "execute", exec_start);
+    let exec = execute_chain(scripts, data, metadata, &headers_value, ctx)?;
+    debug_phase(ctx.debug, "execute", exec_start);
 
     Ok(PipelineResult {
         value: exec.value,
@@ -613,29 +613,6 @@ fn run_pipeline_core(
 // ---------------------------------------------------------------------------
 // CLI wrapper: output writing + process::exit
 // ---------------------------------------------------------------------------
-
-/// Build the `context_base` JSON object exposed to molds via the `pipeline`
-/// API. Centralizes the exact shape (key names, value types) that
-/// `execute_chain` reads back via `context_base.get(...)`.
-pub fn build_context_base(
-    input: Option<&str>,
-    output: Option<&str>,
-    input_format: Option<&str>,
-    output_format: Option<&str>,
-    in_place: bool,
-    slurp: bool,
-    no_input: bool,
-) -> Value {
-    serde_json::json!({
-        "input": input,
-        "output": output,
-        "input_format": input_format,
-        "output_format": output_format,
-        "in_place": in_place,
-        "slurp": slurp,
-        "no_input": no_input,
-    })
-}
 
 /// Pre-computed inputs for `process_single_input`. Bundled into a struct so the
 /// CLI-facing signature stays manageable as new pipeline-wide options are
@@ -685,29 +662,29 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
         policy,
     } = opts;
     let total_start = Instant::now();
-    let context_base = build_context_base(
-        input_path,
-        output_path,
-        effective_input_format,
-        effective_output_format,
+    let metadata = PipelineMetadata {
+        input: input_path,
+        output: output_path,
+        input_format: effective_input_format,
+        output_format: effective_output_format,
         in_place,
         slurp,
         no_input,
-    );
+    };
+    let exec_ctx = ChainExecCtx {
+        extra_args,
+        env_value,
+        policy,
+        debug,
+        msg_level,
+    };
     let result = run_pipeline_core(
-        input_path,
-        no_input,
-        slurp,
+        &metadata,
         effective_input_format,
         csv_opts,
         scripts,
-        extra_args,
-        env_value,
-        &context_base,
-        debug,
-        msg_level,
         http_opts,
-        policy,
+        &exec_ctx,
     )?;
 
     // set_output_file() overrides the CLI -o path; otherwise fall back to CLI-provided path
@@ -1099,29 +1076,29 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         .as_deref()
         .or(first_defaults.input_format.as_deref());
 
-    let context_base = build_context_base(
-        input_path,
-        None,
-        effective_input_format,
-        config.output_format.as_deref(),
-        false,
-        config.slurp,
-        config.no_input,
-    );
+    let metadata = PipelineMetadata {
+        input: input_path,
+        output: None,
+        input_format: effective_input_format,
+        output_format: config.output_format.as_deref(),
+        in_place: false,
+        slurp: config.slurp,
+        no_input: config.no_input,
+    };
+    let exec_ctx = ChainExecCtx {
+        extra_args: &config.args,
+        env_value: &env_value,
+        policy: &config.sandbox,
+        debug: config.debug,
+        msg_level: config.msg_level,
+    };
 
     run_pipeline_core(
-        input_path,
-        config.no_input,
-        config.slurp,
+        &metadata,
         effective_input_format,
         &config.csv_opts,
         &scripts,
-        &config.args,
-        &env_value,
-        &context_base,
-        config.debug,
-        config.msg_level,
         &config.http_opts,
-        &config.sandbox,
+        &exec_ctx,
     )
 }
