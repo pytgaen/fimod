@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use minijinja::Environment;
@@ -7,6 +9,13 @@ use monty::MontyObject;
 use crate::convert::monty_to_json;
 use crate::monty_args::expect_string_owned;
 use crate::serde_compat::NativeNumbers;
+
+/// Process-wide cache of compiled `minijinja::Environment`s, keyed by
+/// `(template_source, auto_escape)`. Unbounded by design — same rationale as
+/// `regex.rs::REGEX_CACHE`: CLI runs are short-lived; long-running library
+/// users with data-derived templates should clear the cache themselves.
+type TemplateCache = HashMap<(String, bool), Arc<Environment<'static>>>;
+static TPL_CACHE: OnceLock<Mutex<TemplateCache>> = OnceLock::new();
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["tpl_render_str", "tpl_render_from_mold"];
@@ -54,21 +63,34 @@ fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<Mon
     let ctx_json = monty_to_json(ctx)?;
     let ctx_value = minijinja::Value::from_serialize(NativeNumbers(&ctx_json));
 
-    let mut env = Environment::new();
-    env.set_trim_blocks(true);
-    env.set_lstrip_blocks(true);
-    if auto_escape {
-        env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
-    }
-    env.add_template("__inline__", template_str)
-        .map_err(|e| anyhow::anyhow!("Template syntax error: {e}"))?;
-
+    let env = get_or_compile_env(template_str, auto_escape)?;
     let tmpl = env.get_template("__inline__").unwrap();
     let rendered = tmpl
         .render(ctx_value)
         .map_err(|e| anyhow::anyhow!("Template render error: {e}"))?;
 
     Ok(MontyObject::String(rendered))
+}
+
+fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Environment<'static>>> {
+    let cache = TPL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = (template_str.to_string(), auto_escape);
+    let mut cache = cache.lock().unwrap();
+    if let Some(env) = cache.get(&key) {
+        return Ok(env.clone());
+    }
+
+    let mut env = Environment::new();
+    env.set_trim_blocks(true);
+    env.set_lstrip_blocks(true);
+    if auto_escape {
+        env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
+    }
+    env.add_template_owned("__inline__", template_str.to_string())
+        .map_err(|e| anyhow::anyhow!("Template syntax error: {e}"))?;
+    let env = Arc::new(env);
+    cache.insert(key, env.clone());
+    Ok(env)
 }
 
 /// `tpl_render_str(template, ctx, auto_escape=False)` — Render a Jinja2 template string.
