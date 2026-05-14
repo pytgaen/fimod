@@ -102,8 +102,7 @@ fn tpl_render_str(args: Vec<MontyObject>) -> Result<MontyObject> {
         );
     }
 
-    let template_str =
-        expect_string_owned(&args[0], "tpl_render_str() first argument (template)")?;
+    let template_str = expect_string_owned(&args[0], "tpl_render_str() first argument (template)")?;
 
     let (ctx, auto_escape) = parse_render_args(&args, "tpl_render_str")?;
     render(&template_str, ctx, auto_escape)
