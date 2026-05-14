@@ -2,8 +2,8 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
+use super::catalog::{catalog_url_for, fetch_catalog, github_to_raw};
 use super::config::{load_config, ordered_sources, Source, SourceType, SourcesConfig};
-use super::{catalog_url_for, fetch_catalog, github_to_raw};
 use crate::mold::MoldSource;
 
 // ── FIMOD_REGISTRY env var ────────────────────────────────────────────────────
