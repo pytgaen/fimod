@@ -117,7 +117,25 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
     // This intercepts before the regular batch loop.
     let is_multi_slurp = is_batch && shape.slurp;
 
-    // Validate --no-input
+    validate_post_input_list(&shape, is_batch, is_multi_slurp)?;
+
+    if is_raw_output {
+        return run_raw_passthrough(shape, debug, is_batch);
+    }
+
+    if shape.watch {
+        #[cfg(feature = "watch")]
+        return crate::watch::run_watch(&shape, &policy, debug, msg_level);
+        #[cfg(not(feature = "watch"))]
+        bail!("--watch is not available in this build (compiled without the 'watch' feature)");
+    }
+
+    run_shape_pipeline(&shape, &policy, debug, msg_level)
+}
+
+/// Validation pass after `--input-list` has been resolved into `shape.input`.
+/// Checks `--no-input`, `--in-place`, and batch-mode constraints.
+fn validate_post_input_list(shape: &ShapeArgs, is_batch: bool, is_multi_slurp: bool) -> Result<()> {
     if shape.no_input {
         if shape.in_place {
             bail!("--no-input is incompatible with --in-place");
@@ -130,7 +148,6 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
         }
     }
 
-    // Validate --in-place
     if shape.in_place {
         if shape.input.is_empty() {
             bail!("--in-place requires -i/--input (cannot modify stdin)");
@@ -138,13 +155,12 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
         if shape.output.is_some() {
             bail!("--in-place is incompatible with -o/--output");
         }
-        // Cannot modify a URL in-place
         if shape.input.iter().any(|p| http::is_url(p)) {
             bail!("--in-place is incompatible with HTTP URLs");
         }
     }
 
-    // Validate batch mode (skipped for multi-file slurp which has its own rules)
+    // Batch validation is skipped for multi-file slurp (it has its own rules).
     if is_batch && !is_multi_slurp {
         if !shape.in_place && shape.output.is_none() {
             bail!("Batch mode requires -o/--output directory or --in-place");
@@ -160,96 +176,87 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
         }
     }
 
-    // --output-format raw: short-circuit the entire pipeline (binary pass-through)
-    if is_raw_output {
-        // Validate: raw output is incompatible with molds/expressions
-        if !shape.mold.is_empty() || !shape.expression.is_empty() {
-            bail!("--output-format raw is incompatible with -m/--mold and -e/--expression (raw bypasses the transform pipeline)");
-        }
-        if shape.no_input {
-            bail!("--output-format raw requires input data");
-        }
-        let http_opts = HttpOptions {
-            headers: shape.http_header,
-            timeout: shape.timeout,
-            no_follow: shape.no_follow,
-        };
+    Ok(())
+}
 
-        // Helper: fetch bytes from a URL or read from a file
-        let fetch_bytes = |path: &str| -> Result<Vec<u8>> {
-            if http::is_url(path) {
-                if debug {
-                    eprintln!("[debug] binary mode: HTTP fetch {path}");
-                }
-                http::fetch_url_bytes(
-                    path,
-                    &http_opts.headers,
-                    http_opts.timeout,
-                    http_opts.no_follow,
-                    debug,
-                )
-            } else {
-                if debug {
-                    eprintln!("[debug] binary mode: reading file {path}");
-                }
-                fs::read(path).with_context(|| format!("Failed to read input file: {path}"))
-            }
-        };
+/// `--output-format raw` short-circuit: bypass the transform pipeline and
+/// stream input bytes (file or HTTP) straight to the output destination.
+fn run_raw_passthrough(shape: ShapeArgs, debug: bool, is_batch: bool) -> Result<CliResult> {
+    if !shape.mold.is_empty() || !shape.expression.is_empty() {
+        bail!("--output-format raw is incompatible with -m/--mold and -e/--expression (raw bypasses the transform pipeline)");
+    }
+    if shape.no_input {
+        bail!("--output-format raw requires input data");
+    }
+    let http_opts = HttpOptions {
+        headers: shape.http_header,
+        timeout: shape.timeout,
+        no_follow: shape.no_follow,
+    };
 
-        if is_batch {
-            // Multiple inputs from --input-list: -O required (can't stream multiple binaries to stdout)
-            if !shape.url_filename {
-                bail!("--output-format raw with multiple inputs requires -O (--url-filename)");
+    let fetch_bytes = |path: &str| -> Result<Vec<u8>> {
+        if http::is_url(path) {
+            if debug {
+                eprintln!("[debug] binary mode: HTTP fetch {path}");
             }
-            for input in &shape.input {
-                let bytes = fetch_bytes(input)?;
-                if debug {
-                    eprintln!("[debug] binary mode: {} bytes", bytes.len());
-                }
-                let filename = url_filename(input)?;
-                write_bytes_to(Some(&filename), &bytes)?;
-            }
-            return Ok(CliResult::Done);
-        }
-
-        // Single input
-        let input_path = shape.input.first().map(|s| s.as_str());
-        let bytes = if let Some(path) = input_path {
-            fetch_bytes(path)?
+            http::fetch_url_bytes(
+                path,
+                &http_opts.headers,
+                http_opts.timeout,
+                http_opts.no_follow,
+                debug,
+            )
         } else {
             if debug {
-                eprintln!("[debug] binary mode: reading stdin");
+                eprintln!("[debug] binary mode: reading file {path}");
             }
-            let mut buf = Vec::new();
-            io::stdin()
-                .read_to_end(&mut buf)
-                .context("Failed to read from stdin")?;
-            buf
-        };
-
-        if debug {
-            eprintln!("[debug] binary mode: {} bytes", bytes.len());
+            fs::read(path).with_context(|| format!("Failed to read input file: {path}"))
         }
+    };
 
-        let binary_output_path: Option<String> = if shape.url_filename {
-            Some(url_filename(input_path.unwrap_or(""))?)
-        } else {
-            shape.output.clone()
-        };
-
-        write_bytes_to(binary_output_path.as_deref(), &bytes)?;
-
+    if is_batch {
+        // Streaming multiple binaries to stdout doesn't work — must derive a filename.
+        if !shape.url_filename {
+            bail!("--output-format raw with multiple inputs requires -O (--url-filename)");
+        }
+        for input in &shape.input {
+            let bytes = fetch_bytes(input)?;
+            if debug {
+                eprintln!("[debug] binary mode: {} bytes", bytes.len());
+            }
+            let filename = url_filename(input)?;
+            write_bytes_to(Some(&filename), &bytes)?;
+        }
         return Ok(CliResult::Done);
     }
 
-    if shape.watch {
-        #[cfg(feature = "watch")]
-        return crate::watch::run_watch(&shape, &policy, debug, msg_level);
-        #[cfg(not(feature = "watch"))]
-        bail!("--watch is not available in this build (compiled without the 'watch' feature)");
+    let input_path = shape.input.first().map(|s| s.as_str());
+    let bytes = if let Some(path) = input_path {
+        fetch_bytes(path)?
+    } else {
+        if debug {
+            eprintln!("[debug] binary mode: reading stdin");
+        }
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("Failed to read from stdin")?;
+        buf
+    };
+
+    if debug {
+        eprintln!("[debug] binary mode: {} bytes", bytes.len());
     }
 
-    run_shape_pipeline(&shape, &policy, debug, msg_level)
+    let binary_output_path: Option<String> = if shape.url_filename {
+        Some(url_filename(input_path.unwrap_or(""))?)
+    } else {
+        shape.output.clone()
+    };
+
+    write_bytes_to(binary_output_path.as_deref(), &bytes)?;
+
+    Ok(CliResult::Done)
 }
 
 pub fn run_shape_pipeline(
