@@ -45,18 +45,32 @@ fn parse_header(h: &str) -> Result<(&str, &str)> {
 
 #[cfg(feature = "reqwest")]
 fn build_client(timeout: u64, no_follow: bool) -> Result<reqwest::blocking::Client> {
+    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
+
+    static CLIENT_POOL: OnceLock<Mutex<HashMap<(u64, bool), reqwest::blocking::Client>>> =
+        OnceLock::new();
+
+    let pool = CLIENT_POOL.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = (timeout, no_follow);
+    let mut pool = pool.lock().unwrap();
+    if let Some(client) = pool.get(&key) {
+        return Ok(client.clone());
+    }
+
     let redirect_policy = if no_follow {
         reqwest::redirect::Policy::none()
     } else {
         reqwest::redirect::Policy::default()
     };
-    reqwest::blocking::ClientBuilder::new()
+    let client = reqwest::blocking::ClientBuilder::new()
         .timeout(Duration::from_secs(timeout))
         .redirect(redirect_policy)
         .user_agent(concat!("fimod/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))
+        .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {e}"))?;
+    pool.insert(key, client.clone());
+    Ok(client)
 }
 
 /// Build a client, attach custom headers, and send a GET. Shared scaffold for
