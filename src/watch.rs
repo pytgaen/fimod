@@ -17,7 +17,7 @@ use fimod::sandbox::SandboxPolicy;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
-use crate::ShapeArgs;
+use crate::cli::ShapeArgs;
 
 const DEBOUNCE_MS: u64 = 150;
 /// Second-level debounce default: after we receive the first batch from
