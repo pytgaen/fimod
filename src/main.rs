@@ -16,7 +16,6 @@ use fimod::{convert, format, http, registry, setup, test_runner};
 
 use anyhow::{bail, Context, Result};
 use clap::{CommandFactory, Parser};
-use clap_complete::env::Shells;
 use clap_complete::CompleteEnv;
 use serde_json::Value;
 
@@ -28,8 +27,8 @@ mod cmd;
 mod watch;
 
 use cli::{
-    CacheAction, Cli, Commands, CompletionShell, MoldAction, MontyAction, MsgLevel, RegistryAction,
-    SetupCategory, SetupDefaults, ShapeArgs,
+    CacheAction, Cli, Commands, MoldAction, MontyAction, MsgLevel, RegistryAction, SetupCategory,
+    SetupDefaults, ShapeArgs,
 };
 
 /// Build an ordered vec of ScriptRef by scanning CLI args to preserve -m/-e ordering.
@@ -76,46 +75,6 @@ fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef>
     }
 
     refs
-}
-
-fn print_completion_script(shell: Option<CompletionShell>) -> Result<()> {
-    let shell = shell.map_or_else(detect_shell, Ok)?;
-    let shell_name = match shell {
-        CompletionShell::Bash => "bash",
-        CompletionShell::Zsh => "zsh",
-        CompletionShell::Fish => "fish",
-        CompletionShell::Elvish => "elvish",
-        CompletionShell::Powershell => "powershell",
-    };
-    let shells = Shells::builtins();
-    let completer = shells
-        .completer(shell_name)
-        .with_context(|| format!("unsupported shell: {shell_name}"))?;
-    completer
-        .write_registration("COMPLETE", "fimod", "fimod", "fimod", &mut io::stdout())
-        .context("failed to write completion script")?;
-    Ok(())
-}
-
-fn detect_shell() -> Result<CompletionShell> {
-    let shell_path = std::env::var("SHELL").unwrap_or_default();
-    let basename = Path::new(&shell_path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    match basename {
-        "bash" => Ok(CompletionShell::Bash),
-        "zsh" => Ok(CompletionShell::Zsh),
-        "fish" => Ok(CompletionShell::Fish),
-        "elvish" => Ok(CompletionShell::Elvish),
-        "pwsh" | "powershell" => Ok(CompletionShell::Powershell),
-        "" => bail!(
-            "could not detect shell: $SHELL is empty — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
-        ),
-        other => bail!(
-            "unrecognized shell `{other}` from $SHELL — pass --shell <SHELL> (bash|zsh|fish|elvish|powershell)"
-        ),
-    }
 }
 
 fn main() -> Result<()> {
@@ -217,7 +176,9 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
             SetupCategory::All {
                 action: SetupDefaults::Defaults { yes, force },
             } => setup::all_defaults(yes, force),
-            SetupCategory::Completions { shell } => print_completion_script(shell),
+            SetupCategory::Completions { shell } => {
+                cmd::completions::print_completion_script(shell)
+            }
         },
     }
 }
