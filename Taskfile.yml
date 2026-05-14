@@ -58,7 +58,7 @@ tasks:
   outdated:
     desc: Check root dependencies are up-to-date (cargo-outdated via mise; fails if any are stale)
     cmds:
-      - mise exec -- cargo-outdated --root-deps-only --exit-code 1
+      - mise exec -- cargo outdated --root-deps-only --exit-code 1
 
   install:nextest:
     desc: Install cargo-nextest
