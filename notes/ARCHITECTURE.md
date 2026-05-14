@@ -8,8 +8,10 @@ How the modules fit together. Companion to `DESIGN_NOTES.md` (decisions & ration
 
 ```mermaid
 graph TB
-    subgraph CLI["CLI layer — main.rs"]
-        Main["main.rs<br/>clap parsing<br/>subcommands: shape / registry / mold / monty / completions"]
+    subgraph CLI["CLI layer — main.rs + cli.rs + cmd/"]
+        Main["main.rs<br/>entry + dispatch"]
+        Clidef["cli.rs<br/>clap definitions (Cli, Commands, ShapeArgs)"]
+        Cmd["cmd/*.rs<br/>shape · registry · mold · monty · setup · completions"]
     end
 
     subgraph Orchestration["Orchestration — pipeline.rs"]
@@ -18,7 +20,7 @@ graph TB
 
     subgraph Resolution["Script resolution"]
         Mold["mold.rs<br/>MoldSource: File / Url / Inline<br/>MoldDefaults: fimod directives<br/>URL cache"]
-        Registry["registry.rs<br/>sources.toml<br/>@name / @source/name<br/>catalog.toml"]
+        Registry["registry/<br/>config · resolve · catalog · molds<br/>sources.toml · @name · catalog.toml"]
     end
 
     subgraph Engine["Execution — engine.rs"]
@@ -49,9 +51,11 @@ graph TB
         Tests["test_runner.rs<br/>fimod mold test<br/>input.* / expected.* pairs"]
     end
 
-    Main --> Pipeline
-    Main --> Registry
-    Main --> Tests
+    Main --> Cmd
+    Main --> Clidef
+    Cmd --> Pipeline
+    Cmd --> Registry
+    Cmd --> Tests
     Pipeline --> Mold
     Pipeline --> Format
     Pipeline --> Http
@@ -78,7 +82,7 @@ graph TB
     classDef bi fill:#dcfce7,stroke:#166534,color:#000
     classDef io fill:#f3e8ff,stroke:#6b21a8,color:#000
 
-    class Main cli
+    class Main,Clidef,Cmd cli
     class Pipeline orch
     class Mold,Registry orch
     class Engine0 eng
@@ -91,9 +95,9 @@ graph TB
 
 | Layer | Files | Responsibility |
 |---|---|---|
-| **CLI** | `main.rs` | clap parsing, subcommand dispatch, shell completions, REPL. No business logic. |
+| **CLI** | `main.rs`, `cli.rs`, `cmd/*.rs` | `main.rs` parses and dispatches; `cli.rs` owns the clap definitions; `cmd/<name>.rs` holds one handler per subcommand (`shape`, `registry`, `mold`, `monty`, `setup`, `completions`). No business logic in `main.rs` itself. |
 | **Orchestration** | `pipeline.rs` | The pipeline contract: read → parse → chain execute → serialize → write. `run_pipeline_core()` is the single source of truth; CLI and library API both delegate. |
-| **Script resolution** | `mold.rs`, `registry.rs` | Turn `-m foo.py` / `-m https://…` / `-m @name` into a loaded script + base_dir + mold defaults. Registry manages `sources.toml` and `catalog.toml`. |
+| **Script resolution** | `mold.rs`, `registry/*.rs` | Turn `-m foo.py` / `-m https://…` / `-m @name` into a loaded script + base_dir + mold defaults. `registry/config.rs` owns `sources.toml`, `registry/resolve.rs` does `@name` resolution, `registry/catalog.rs` owns `catalog.toml` + cache, `registry/molds.rs` powers the listing/show queries. |
 | **Engine** | `engine.rs` | `execute_mold()` compiles the script via Monty, then drives `run_loop` — yielding on `FunctionCall` (dispatched to built-ins), `OsCall` (denied for now), `NameLookup` (resolved against the external-function catalog). |
 | **Built-ins** | `regex.rs`, `dotpath.rs`, `iter_helpers.rs`, `hash.rs`, `gatekeeper.rs`, `msg.rs`, `template.rs`, `env_helpers.rs`, `exit_control.rs`, `format_control.rs` | Rust-implemented helpers exposed to molds. Each module exports `EXTERNAL_FUNCTIONS: &[&str]` + `dispatch(name, args, …)`. Adding a new helper = extend both and wire it into `engine::is_external_function` + `engine::dispatch_external`. |
 | **I/O** | `format.rs`, `http.rs`, `convert.rs`, `serde_compat.rs` | Everything that touches bytes. `DataFormat` is the enum; `Value ↔ MontyObject` conversion is centralised. HTTP is feature-gated behind `reqwest`. |
@@ -158,13 +162,14 @@ sequenceDiagram
 |---|---|---|
 | Add a new built-in helper (e.g. `df_diff`) | New `src/<family>.rs` with `EXTERNAL_FUNCTIONS` + `dispatch` + wiring in `engine.rs:is_external_function` and `engine.rs:dispatch_external` | `tests/cli/<family>.rs` + `tests-molds/<family>/` fixtures |
 | Add a new data format (e.g. JSON5) | New variant in `format::DataFormat` + `parse` + `serialize` + extension mapping | `src/format.rs` unit tests + `tests/cli/format.rs` integration |
-| Add a new subcommand (e.g. `fimod setup`) | New `Commands::Setup { action }` in `main.rs`, handler function, wire through `main()` match | `tests/cli/setup.rs` |
+| Add a new subcommand (e.g. `fimod setup`) | New variant in `cli::Commands`, handler in `src/cmd/<name>.rs`, wire through `main::dispatch` / `dispatch_other` | `tests/cli/<name>.rs` |
 | Add a mold defaults directive (e.g. `# fimod: sandbox=`) | Extend `MoldDefaults` struct + `parse_mold_defaults` in `mold.rs` | `tests/cli/mold_defaults.rs` |
-| Add a registry backend (e.g. Bitbucket) | New variant in `registry::SourceType` + resolver function | `tests/cli/registry.rs` |
+| Add a registry backend (e.g. Bitbucket) | New variant in `registry::config::SourceType` + resolver function in `registry::resolve` | `tests/cli/registry.rs` |
 | Extend the sandbox surface | `engine.rs` `OsCall` branch + new schema in the upcoming `sandbox.rs` | `tests/cli/sandbox.rs` |
 
 ## What's NOT in this doc
 
+- **Where every file lives** (full file-by-file map of `src/`, `tests/`, `docs/`, etc.) — see `CODE_LAYOUT.md`.
 - **Why** we chose these boundaries — see `DESIGN_NOTES.md`.
 - **What we refuse to build** — see `VISION.md`.
 - **What's coming next** — see `ROADMAP.md` and the `notes/*.md` design notes.

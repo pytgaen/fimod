@@ -13,6 +13,7 @@ cross-cutting concern, consult these files in `notes/`:
 
 - `notes/VISION.md` — long-term direction and product constraints
 - `notes/ARCHITECTURE.md` — module map, pipeline structure, boundaries
+- `notes/CODE_LAYOUT.md` — where every file lives (src/, tests/, docs/, …) + "where do I put this change?" decisional
 - `notes/DESIGN_NOTES.md` — concrete design decisions, tooling conventions
   (e.g. "Local tooling (mise.toml)" — all build tools managed via mise),
   watchpoints, and known invariants
