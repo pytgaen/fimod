@@ -114,11 +114,11 @@ pub struct MoldOptions<'a> {
     pub no_input: bool,
     pub input_format: Option<&'a str>,
     pub output_format: Option<&'a str>,
-    /// Pre-initialised value for `ctx.output_file` (used when a prior step's
-    /// `pipeline.step(j).set('output_file', ...)` mutation targets this step).
+    /// Set when a prior step's `pipeline.step(j).set('output_file', ...)`
+    /// targets this step — seeds `ctx.output_file` before the script runs.
     pub output_file_override: Option<String>,
-    /// Pre-initialised value for `ctx.format_override` (used when a prior step's
-    /// `pipeline.step(j).set('output_format', ...)` mutation targets this step).
+    /// Set when a prior step's `pipeline.step(j).set('output_format', ...)`
+    /// targets this step — seeds `ctx.format_override` before the script runs.
     pub format_override_init: Option<String>,
     /// Per-step args injected via `Step.create(args={...})`. When `Some`, merged
     /// with `extra_args` (CLI) — step values win on key conflict. `None` =

@@ -108,7 +108,6 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
 
 /// Execute a chain of mold scripts sequentially, with dynamic step insertion.
 ///
-/// The output of each step becomes the input of the next.
 /// Molds can inject new steps via `pipeline.insert_next()` / `pipeline.append()`,
 /// and mutate future steps via `pipeline.step(i)['key'] = value`.
 #[allow(clippy::too_many_arguments)]

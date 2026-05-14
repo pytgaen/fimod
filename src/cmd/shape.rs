@@ -30,13 +30,9 @@ pub fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<Script
                 refs.push(ScriptRef::Mold(v.clone()));
             }
             i += 2;
-        } else if arg.starts_with("--mold=") {
-            if let Some(v) = mold_iter.next() {
-                refs.push(ScriptRef::Mold(v.clone()));
-            }
-            i += 1;
-        } else if arg.starts_with("-m") && arg.len() > 2 && !arg.starts_with("-m-") {
-            // -mFOO (no space)
+        } else if arg.starts_with("--mold=")
+            || (arg.starts_with("-m") && arg.len() > 2 && !arg.starts_with("-m-"))
+        {
             if let Some(v) = mold_iter.next() {
                 refs.push(ScriptRef::Mold(v.clone()));
             }
