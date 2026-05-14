@@ -96,6 +96,22 @@ impl PrintWriterCallback for StderrPrint {
     }
 }
 
+/// Static pipeline metadata exposed to molds via the `pipeline` Python API.
+///
+/// Created once per pipeline run (or per slurp invocation) and shared by every
+/// step in the chain via `MoldOptions::metadata`. Lives here next to
+/// `MoldOptions` so a future field stays in one place instead of having to be
+/// added to both structs.
+pub struct PipelineMetadata<'a> {
+    pub input: Option<&'a str>,
+    pub output: Option<&'a str>,
+    pub input_format: Option<&'a str>,
+    pub output_format: Option<&'a str>,
+    pub in_place: bool,
+    pub slurp: bool,
+    pub no_input: bool,
+}
+
 /// Runtime options for mold execution.
 pub struct MoldOptions<'a> {
     pub extra_args: &'a [(String, String)],
@@ -105,18 +121,16 @@ pub struct MoldOptions<'a> {
     pub msg_level: u8,
     pub mold_base_dir: Option<&'a str>,
     pub policy: &'a SandboxPolicy,
+    pub metadata: &'a PipelineMetadata<'a>,
     // Pipeline state — used to build the `pipeline` parameter.
     pub current_step_idx: usize,
     pub total_steps: usize,
     /// Serialized specs of steps after the current one (for `pipeline.step(i)`).
     pub remaining_steps: Vec<Value>,
-    // Step metadata exposed through `pipeline.current_step()`.
-    pub input_path: Option<&'a str>,
-    pub output_path: Option<&'a str>,
-    pub in_place: bool,
-    pub slurp: bool,
-    pub no_input: bool,
+    /// Per-step override of the input format (when a prior step called
+    /// `set_input_format`); falls back to `metadata.input_format` otherwise.
     pub input_format: Option<&'a str>,
+    /// Per-step override of the output format (`set_output_format` mutation).
     pub output_format: Option<&'a str>,
     /// Set when a prior step's `pipeline.step(j).set('output_file', ...)`
     /// targets this step — seeds `ctx.output_file` before the script runs.
@@ -670,11 +684,11 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         current_step_idx: opts.current_step_idx,
         total_steps: opts.total_steps,
         remaining_steps: &opts.remaining_steps,
-        input_path: opts.input_path,
-        output_path: opts.output_path,
-        in_place: opts.in_place,
-        slurp: opts.slurp,
-        no_input: opts.no_input,
+        input_path: opts.metadata.input,
+        output_path: opts.metadata.output,
+        in_place: opts.metadata.in_place,
+        slurp: opts.metadata.slurp,
+        no_input: opts.metadata.no_input,
         input_format: opts.input_format,
         output_format: opts.output_format,
         args_value: merged_args,

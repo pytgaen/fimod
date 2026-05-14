@@ -8,6 +8,8 @@ use anyhow::{bail, Context, Result};
 use monty::MontyObject;
 use serde_json::Value;
 
+pub use crate::engine::PipelineMetadata;
+
 use crate::engine::{MoldExecResult, MoldResult, PendingOp};
 use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep, StepOrigin};
@@ -106,21 +108,6 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
     Ok(steps)
 }
 
-/// Static pipeline metadata exposed to molds via the `pipeline` Python API.
-///
-/// Used to be a 7-key `serde_json::Value::Object` (built by `build_context_base`)
-/// that `execute_chain` re-extracted into typed values. Carrying the typed
-/// struct end-to-end removes the stringification round-trip.
-pub struct PipelineMetadata<'a> {
-    pub input: Option<&'a str>,
-    pub output: Option<&'a str>,
-    pub input_format: Option<&'a str>,
-    pub output_format: Option<&'a str>,
-    pub in_place: bool,
-    pub slurp: bool,
-    pub no_input: bool,
-}
-
 /// Cross-cutting execution concerns shared by every step in a chain.
 /// (`headers_value` is intentionally separate — it's derived per-input from CSV
 /// state right before `execute_chain` runs, and doesn't belong in a context
@@ -150,15 +137,9 @@ pub fn execute_chain(
     // Pending mutations keyed by absolute step index → {field → value}.
     let mut mutations: HashMap<usize, HashMap<String, Value>> = HashMap::new();
 
-    let &PipelineMetadata {
-        input: input_path,
-        output: output_path,
-        input_format: base_input_format,
-        output_format: base_output_format,
-        in_place,
-        slurp,
-        no_input,
-    } = metadata;
+    // Step-level format overrides resolve against these as their fallback.
+    let base_input_format = metadata.input_format;
+    let base_output_format = metadata.output_format;
 
     let mut i = 0;
     while i < steps.len() {
@@ -221,14 +202,10 @@ pub fn execute_chain(
             msg_level: ctx.msg_level,
             mold_base_dir: step_base_dir.as_deref(),
             policy: ctx.policy,
+            metadata,
             current_step_idx: i,
             total_steps: steps.len(),
             remaining_steps,
-            input_path,
-            output_path,
-            in_place,
-            slurp,
-            no_input,
             input_format: step_input_format,
             output_format: step_output_format,
             output_file_override: step_output_file_override,
