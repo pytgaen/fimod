@@ -2,6 +2,45 @@
 
 All notable changes to fimod are documented here.
 
+## [0.7.2] — 2026-05-14
+
+### Highlights
+
+- 🔧 **Internal restructure (no user-visible changes)** — `src/main.rs` and `src/registry.rs` had grown to 1261 and 2180 lines respectively. Split into `src/cli.rs` + `src/cmd/{shape,registry,mold,monty,setup,completions}.rs` for the CLI layer, and `src/registry/{config,resolve,catalog,molds}.rs` for the registry. Public library API preserved via `pub use` re-exports in `registry/mod.rs`.
+- 📚 **Code layout documented** — new `notes/CODE_LAYOUT.md` maps every file in the project to its responsibility, with a "where do I put this change?" decisional table. `notes/ARCHITECTURE.md` refreshed to reflect the post-split module map and extension points.
+
+### Bug Fixes
+
+- **cli:** add `value_hint` annotations on path arguments (`-i`, `-o`, `-m`, `--input-list`, `--sandbox-file`) so dynamic shell completion (`COMPLETE=zsh fimod ...`) proposes filesystem paths instead of falling back to defaults.
+
+### Refactoring
+
+- **registry:** scaffold `src/registry/` module and extract `config` submodule (`Source`, `SourceType`, `SourcesConfig`, `sources.toml` CRUD).
+- **registry:** extract `resolve` submodule (`@name` / `@source/name` resolution, env registries, auth headers).
+- **registry:** extract `catalog` submodule (`Catalog`, `fetch_catalog`, `build_catalog`, URL/raw cache, `compute_mold_hash`, `github_to_raw`).
+- **registry:** extract `molds` submodule (`list_molds`, `show_mold`, `MoldMatch`, completion helpers).
+- **registry:** absorb the `setup` wizard into `src/setup.rs`, removing the `registry::setup` trampoline.
+- **registry:** tighten visibility post-split (`pub` → `pub(crate)` for internal items; `pub` reserved for the contract exposed by `registry/mod.rs`).
+- **cli:** extract clap CLI definitions (`Cli`, `Commands`, `ShapeArgs`, all subcommand enums, completion helpers) into `src/cli.rs`. `main.rs` now consumes them as `use cli::*;`.
+- **cmd:** scaffold `src/cmd/` module and extract the `monty` subcommand handler (REPL).
+- **cmd:** extract the `completions` subcommand handler into `cmd/completions.rs`.
+- **cmd:** extract the `shape` subcommand handler (`run_shape`, `run_shape_pipeline`, ~570 lines) into `cmd/shape.rs`.
+- **cmd:** move `src/setup.rs` to `src/cmd/setup.rs` (homing all subcommand handlers under `cmd/`).
+- **cmd:** extract `registry` and `mold` dispatchers as thin `cmd::*` façades that route into `registry::*` and `mold::*`.
+
+### Documentation
+
+- New `notes/CODE_LAYOUT.md` — full project map (top-level, `src/`, `cmd/`, `registry/`, `tests/`, `tests-molds/`, `docs/`, `notes/`, `scripts/`, `.github/`, `molds/`) plus a "where do I put this change?" decisional table.
+- `notes/ARCHITECTURE.md` — mermaid module map, Layers table, and Extension Points table refreshed for the `cli.rs` + `cmd/*` + `registry/*` split. New pointer to `CODE_LAYOUT.md` in the "What's NOT in this doc" section.
+- `CLAUDE.md` — list `notes/CODE_LAYOUT.md` alongside the other notes/ files so future sessions discover it.
+
+### Housekeeping
+
+- **task:** fix `task outdated` invocation — was calling `cargo-outdated` as a standalone binary (which fails parsing the `--root-deps-only` flag); now correctly invokes `cargo outdated` via `mise exec`.
+- **notes:** remove closed `notes/todo-0.7.1.md` cycle (content migrated to user docs in the 0.7.1 release).
+- **deps:** bump `clap_complete` 4.6.4 → 4.6.5 (patch).
+- **deps deferred:** `httpmock` 0.7.0 → 0.8.3 (major dev-dep bump, breaking matcher API `assert_hits` → `assert_calls`, MSRV bumped to 1.88) — migration deferred to 0.7.3 (PR #20). Release cut via `/release-workflow --allow-outdated`.
+
 ## [0.7.1] — 2026-05-14
 
 ### Highlights
