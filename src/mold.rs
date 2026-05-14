@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
@@ -173,6 +173,26 @@ impl MoldSource {
 
 /// Resolve a directory path to a mold script.
 ///
+/// Standard 3-rule local-mold script lookup under `base/`.
+///
+/// Tries in order:
+/// 1. `base/<name>.py`              (flat; nested names → `base/foo/bar.py`)
+/// 2. `base/<name>/<last(name)>.py` (directory, named script)
+/// 3. `base/<name>/__main__.py`     (directory, __main__)
+///
+/// Returns the first existing path or `None`. The caller decides whether
+/// the absence is an error and supplies any error context.
+pub fn find_script(base: &Path, name: &str) -> Option<PathBuf> {
+    let last = name.split('/').next_back().unwrap_or(name);
+    [
+        base.join(format!("{name}.py")),
+        base.join(name).join(format!("{last}.py")),
+        base.join(name).join("__main__.py"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+}
+
 /// Lookup order:
 /// 1. `<dir>/<dirname>.py` (convention: script named after the mold directory)
 /// 2. `<dir>/__main__.py`  (Python package convention)
@@ -341,7 +361,7 @@ impl MoldSource {
             } => {
                 #[cfg(feature = "reqwest")]
                 {
-                    let cache_base = crate::registry::cache_base_dir();
+                    let cache_base = crate::paths::cache_dir();
                     let url_hash = crate::paths::sha256_hex(url.as_bytes());
                     if catalog_hash.is_some() {
                         Some(
@@ -387,7 +407,7 @@ fn load_url_with_cache(
     companion_urls: &[String],
     no_cache: bool,
 ) -> Result<String> {
-    let cache_base = crate::registry::cache_base_dir();
+    let cache_base = crate::paths::cache_dir();
     let url_hash = crate::paths::sha256_hex(url.as_bytes());
 
     // ── hash-based cache (registry molds) ─────────────────────────────────
@@ -630,6 +650,15 @@ fn unquote_desc(s: &str) -> Option<String> {
     } else {
         Some(out)
     }
+}
+
+/// Read the mold script at `path` and parse its `MoldDefaults`.
+///
+/// Errors propagate the IO failure with no extra context; callers add
+/// their own (`.with_context()`, `.unwrap_or_default()`, `.ok()…`).
+pub fn load_defaults(path: &Path) -> Result<MoldDefaults> {
+    let script = fs::read_to_string(path)?;
+    Ok(parse_mold_defaults(&script))
 }
 
 pub fn parse_mold_defaults(script: &str) -> MoldDefaults {

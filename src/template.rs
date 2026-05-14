@@ -1,11 +1,33 @@
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use minijinja::Environment;
 use monty::MontyObject;
 
 use crate::convert::monty_to_json;
+use crate::monty_args::expect_string_owned;
 use crate::serde_compat::NativeNumbers;
+
+/// Process-wide cache of compiled `minijinja::Environment`s, keyed by
+/// `(hash(template_source), auto_escape)` to avoid cloning the source on
+/// every lookup. The stored `Arc<str>` is the original source — compared on
+/// hit to detect collisions (rare but theoretically possible with the std
+/// SipHash). On collision, we recompile (correctness preserved, cache lossy).
+///
+/// Unbounded by design — same rationale as `regex.rs::REGEX_CACHE`: CLI runs
+/// are short-lived; long-running library users with data-derived templates
+/// should clear the cache themselves.
+type TemplateCache = HashMap<(u64, bool), (Arc<str>, Arc<Environment<'static>>)>;
+static TPL_CACHE: OnceLock<Mutex<TemplateCache>> = OnceLock::new();
+
+fn hash_template(s: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["tpl_render_str", "tpl_render_from_mold"];
@@ -53,21 +75,39 @@ fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<Mon
     let ctx_json = monty_to_json(ctx)?;
     let ctx_value = minijinja::Value::from_serialize(NativeNumbers(&ctx_json));
 
-    let mut env = Environment::new();
-    env.set_trim_blocks(true);
-    env.set_lstrip_blocks(true);
-    if auto_escape {
-        env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
-    }
-    env.add_template("__inline__", template_str)
-        .map_err(|e| anyhow::anyhow!("Template syntax error: {e}"))?;
-
+    let env = get_or_compile_env(template_str, auto_escape)?;
     let tmpl = env.get_template("__inline__").unwrap();
     let rendered = tmpl
         .render(ctx_value)
         .map_err(|e| anyhow::anyhow!("Template render error: {e}"))?;
 
     Ok(MontyObject::String(rendered))
+}
+
+fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Environment<'static>>> {
+    let cache = TPL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = (hash_template(template_str), auto_escape);
+    let mut cache = cache.lock().unwrap();
+    if let Some((stored, env)) = cache.get(&key) {
+        if stored.as_ref() == template_str {
+            return Ok(env.clone());
+        }
+        // Hash collision: fall through to recompile and overwrite. Correctness
+        // preserved; the previous entry is evicted (acceptable since collisions
+        // are astronomically rare in practice).
+    }
+
+    let mut env = Environment::new();
+    env.set_trim_blocks(true);
+    env.set_lstrip_blocks(true);
+    if auto_escape {
+        env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
+    }
+    env.add_template_owned("__inline__", template_str.to_string())
+        .map_err(|e| anyhow::anyhow!("Template syntax error: {e}"))?;
+    let env = Arc::new(env);
+    cache.insert(key, (Arc::from(template_str), env.clone()));
+    Ok(env)
 }
 
 /// `tpl_render_str(template, ctx, auto_escape=False)` — Render a Jinja2 template string.
@@ -79,10 +119,7 @@ fn tpl_render_str(args: Vec<MontyObject>) -> Result<MontyObject> {
         );
     }
 
-    let template_str = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("tpl_render_str() expects a string as first argument (template)"),
-    };
+    let template_str = expect_string_owned(&args[0], "tpl_render_str() first argument (template)")?;
 
     let (ctx, auto_escape) = parse_render_args(&args, "tpl_render_str")?;
     render(&template_str, ctx, auto_escape)
@@ -107,10 +144,7 @@ fn tpl_render_from_mold(
         )
     })?;
 
-    let rel_path = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("tpl_render_from_mold() expects a string as first argument (path)"),
-    };
+    let rel_path = expect_string_owned(&args[0], "tpl_render_from_mold() first argument (path)")?;
 
     // Security: resolve and check the path stays under base_dir
     let base = Path::new(base_dir)

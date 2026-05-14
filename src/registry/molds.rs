@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -268,23 +267,6 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
     Ok(())
 }
 
-/// Find the script path for a named mold in a local registry directory.
-fn find_local_mold_script(base: &Path, name: &str) -> Option<PathBuf> {
-    let flat = base.join(format!("{name}.py"));
-    if flat.is_file() {
-        return Some(flat);
-    }
-    let named = base.join(name).join(format!("{name}.py"));
-    if named.is_file() {
-        return Some(named);
-    }
-    let main = base.join(name).join("__main__.py");
-    if main.is_file() {
-        return Some(main);
-    }
-    None
-}
-
 /// Format non-default MoldDefaults fields as a human-readable list of strings.
 pub(super) fn format_defaults_options(d: &crate::mold::MoldDefaults) -> Vec<String> {
     let mut opts = Vec::new();
@@ -342,12 +324,11 @@ fn collect_mold_matches(
                 let base = source.path.as_deref().ok_or_else(|| {
                     anyhow::anyhow!("Local registry '{reg_name}' has no path configured")
                 })?;
-                let Some(script_path) = find_local_mold_script(Path::new(base), mold_name) else {
+                let Some(script_path) = crate::mold::find_script(Path::new(base), mold_name) else {
                     continue;
                 };
-                let script = fs::read_to_string(&script_path)
+                let defaults = crate::mold::load_defaults(&script_path)
                     .with_context(|| format!("Cannot read {script_path:?}"))?;
-                let defaults = crate::mold::parse_mold_defaults(&script);
                 matches.push(MoldMatch {
                     reg_name: Some(reg_name.to_string()),
                     prio_label: label,
@@ -564,10 +545,8 @@ pub fn show_mold_by_path(
         .canonicalize()
         .with_context(|| format!("Cannot resolve path: {}", path.display()))?;
 
-    let script = fs::read_to_string(&script_path)
+    let defaults = crate::mold::load_defaults(&script_path)
         .with_context(|| format!("Cannot read {}", script_path.display()))?;
-
-    let defaults = crate::mold::parse_mold_defaults(&script);
 
     let mold_name = name_override.map(str::to_string).unwrap_or_else(|| {
         let stem = script_path

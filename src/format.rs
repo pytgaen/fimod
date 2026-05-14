@@ -142,13 +142,7 @@ impl DataFormat {
                 Ok(Value::Array(values?))
             }
             DataFormat::Yaml => serde_saphyr::from_str(content).context("Failed to parse YAML"),
-            DataFormat::Toml => {
-                let toml_value: toml::Value =
-                    toml::from_str(content).context("Failed to parse TOML")?;
-                let json_str =
-                    serde_json::to_string(&toml_value).context("Failed to convert TOML to JSON")?;
-                serde_json::from_str(&json_str).context("Failed to parse converted TOML")
-            }
+            DataFormat::Toml => toml::from_str(content).context("Failed to parse TOML"),
             DataFormat::Csv => {
                 bail!("Use parse_csv() with CsvOptions for CSV format")
             }

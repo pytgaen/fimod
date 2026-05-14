@@ -178,6 +178,15 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
     }
 
     let policy = crate::sandbox::SandboxPolicy::zero_authorization();
+    let metadata = engine::PipelineMetadata {
+        input: None,
+        output: None,
+        input_format: None,
+        output_format: None,
+        in_place: false,
+        slurp: false,
+        no_input: false,
+    };
     let opts = engine::MoldOptions {
         extra_args: &extra_args,
         env_value: &env_value,
@@ -186,14 +195,10 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         msg_level: 1,
         mold_base_dir,
         policy: &policy,
+        metadata: &metadata,
         current_step_idx: 0,
         total_steps: 1,
         remaining_steps: vec![],
-        input_path: None,
-        output_path: None,
-        in_place: false,
-        slurp: false,
-        no_input: false,
         input_format: None,
         output_format: None,
         output_file_override: None,
@@ -208,7 +213,8 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
     }
 
     let exec = execute_result?;
-    let result = exec.value;
+    let result =
+        convert::monty_to_json(exec.value).context("Failed to convert mold result to JSON")?;
     let exit_code = exec.exit_code;
     let fmt_override = exec.format_override;
 

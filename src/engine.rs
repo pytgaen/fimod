@@ -9,7 +9,7 @@ use monty::{
 };
 use serde_json::Value;
 
-use crate::convert::{json_to_monty, monty_to_json};
+use crate::convert::json_to_monty;
 
 /// What to do with a pending pipeline step (injected by the mold at runtime).
 #[derive(Debug)]
@@ -35,8 +35,12 @@ pub struct PendingMutation {
 }
 
 /// Result of executing a single mold step.
+///
+/// `value` is `MontyObject` (not `serde_json::Value`) so that `execute_chain`
+/// can thread results between steps without paying the round-trip
+/// conversion cost. Convert at the chain boundary via `crate::convert::monty_to_json`.
 pub struct MoldExecResult {
-    pub value: Value,
+    pub value: MontyObject,
     pub exit_code: Option<i32>,
     pub format_override: Option<String>,
     pub output_file: Option<String>,
@@ -92,6 +96,22 @@ impl PrintWriterCallback for StderrPrint {
     }
 }
 
+/// Static pipeline metadata exposed to molds via the `pipeline` Python API.
+///
+/// Created once per pipeline run (or per slurp invocation) and shared by every
+/// step in the chain via `MoldOptions::metadata`. Lives here next to
+/// `MoldOptions` so a future field stays in one place instead of having to be
+/// added to both structs.
+pub struct PipelineMetadata<'a> {
+    pub input: Option<&'a str>,
+    pub output: Option<&'a str>,
+    pub input_format: Option<&'a str>,
+    pub output_format: Option<&'a str>,
+    pub in_place: bool,
+    pub slurp: bool,
+    pub no_input: bool,
+}
+
 /// Runtime options for mold execution.
 pub struct MoldOptions<'a> {
     pub extra_args: &'a [(String, String)],
@@ -101,24 +121,22 @@ pub struct MoldOptions<'a> {
     pub msg_level: u8,
     pub mold_base_dir: Option<&'a str>,
     pub policy: &'a SandboxPolicy,
+    pub metadata: &'a PipelineMetadata<'a>,
     // Pipeline state — used to build the `pipeline` parameter.
     pub current_step_idx: usize,
     pub total_steps: usize,
     /// Serialized specs of steps after the current one (for `pipeline.step(i)`).
     pub remaining_steps: Vec<Value>,
-    // Step metadata exposed through `pipeline.current_step()`.
-    pub input_path: Option<&'a str>,
-    pub output_path: Option<&'a str>,
-    pub in_place: bool,
-    pub slurp: bool,
-    pub no_input: bool,
+    /// Per-step override of the input format (when a prior step called
+    /// `set_input_format`); falls back to `metadata.input_format` otherwise.
     pub input_format: Option<&'a str>,
+    /// Per-step override of the output format (`set_output_format` mutation).
     pub output_format: Option<&'a str>,
-    /// Pre-initialised value for `ctx.output_file` (used when a prior step's
-    /// `pipeline.step(j).set('output_file', ...)` mutation targets this step).
+    /// Set when a prior step's `pipeline.step(j).set('output_file', ...)`
+    /// targets this step — seeds `ctx.output_file` before the script runs.
     pub output_file_override: Option<String>,
-    /// Pre-initialised value for `ctx.format_override` (used when a prior step's
-    /// `pipeline.step(j).set('output_format', ...)` mutation targets this step).
+    /// Set when a prior step's `pipeline.step(j).set('output_format', ...)`
+    /// targets this step — seeds `ctx.format_override` before the script runs.
     pub format_override_init: Option<String>,
     /// Per-step args injected via `Step.create(args={...})`. When `Some`, merged
     /// with `extra_args` (CLI) — step values win on key conflict. `None` =
@@ -334,20 +352,14 @@ fn dispatch_method(
         }
         "set" if args.len() >= 3 => {
             let step_idx = get_step_idx(&args[0])?;
-            let key = match &args[1] {
-                MontyObject::String(s) => s.clone(),
-                _ => anyhow::bail!("Step.set(): key must be a string"),
-            };
+            let key = crate::monty_args::expect_string_owned(&args[1], "Step.set() key")?;
             let value = crate::convert::monty_to_json(args[2].clone())
                 .context("Step.set(): cannot convert value")?;
             set_step_field(step_idx, &key, value, ctx)
         }
         "get" if args.len() >= 2 => {
             let step_idx = get_step_idx(&args[0])?;
-            let key = match &args[1] {
-                MontyObject::String(s) => s.clone(),
-                _ => anyhow::bail!("Step.get(): key must be a string"),
-            };
+            let key = crate::monty_args::expect_string_owned(&args[1], "Step.get() key")?;
             get_step_field(step_idx, &key, ctx)
         }
         "insert_next" | "append" => {
@@ -672,11 +684,11 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         current_step_idx: opts.current_step_idx,
         total_steps: opts.total_steps,
         remaining_steps: &opts.remaining_steps,
-        input_path: opts.input_path,
-        output_path: opts.output_path,
-        in_place: opts.in_place,
-        slurp: opts.slurp,
-        no_input: opts.no_input,
+        input_path: opts.metadata.input,
+        output_path: opts.metadata.output,
+        in_place: opts.metadata.in_place,
+        slurp: opts.metadata.slurp,
+        no_input: opts.metadata.no_input,
         input_format: opts.input_format,
         output_format: opts.output_format,
         args_value: merged_args,
@@ -700,7 +712,11 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
     })
 }
 
-fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -> Result<Value> {
+fn run_loop(
+    runner: MontyRun,
+    inputs: Vec<MontyObject>,
+    ctx: &MoldContext<'_>,
+) -> Result<MontyObject> {
     let mut sp = StderrPrint;
     let tracker = LimitedTracker::new(build_limits(ctx.policy));
     let mut progress = runner
@@ -717,9 +733,7 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
 
     loop {
         match progress {
-            RunProgress::Complete(result) => {
-                return monty_to_json(result).context("Failed to convert Monty result to JSON");
-            }
+            RunProgress::Complete(result) => return Ok(result),
             RunProgress::FunctionCall(mut call) => {
                 let function_name = call.function_name.clone();
                 let method_call = call.method_call;

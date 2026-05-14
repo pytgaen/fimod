@@ -3,7 +3,6 @@ pub mod config;
 pub mod molds;
 pub mod resolve;
 
-pub(crate) use catalog::cache_base_dir;
 pub use catalog::{build_catalog, cache_clear, cache_info};
 pub use config::{
     add, confirm, list, remove, set_priority, show, Source, SourceType, SourcesConfig,

@@ -99,7 +99,7 @@ fn test_http_follows_redirect_by_default() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"final\""));
-    target.assert_hits(1);
+    target.assert_calls(1);
 }
 
 #[test]
@@ -221,8 +221,8 @@ fn test_http_auth_header_kept_on_same_origin_redirect() {
         .assert()
         .success();
 
-    with_auth.assert_hits(1);
-    without_auth.assert_hits(0);
+    with_auth.assert_calls(1);
+    without_auth.assert_calls(0);
 }
 
 #[test]
@@ -265,8 +265,8 @@ fn test_http_auth_header_stripped_on_cross_origin_redirect() {
         .assert()
         .success();
 
-    with_auth.assert_hits(0);
-    without_auth.assert_hits(1);
+    with_auth.assert_calls(0);
+    without_auth.assert_calls(1);
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn test_http_malformed_header_rejected_before_request() {
         .failure()
         .stderr(predicate::str::contains("Invalid header"));
 
-    mock.assert_hits(0);
+    mock.assert_calls(0);
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn test_http_proxy_env_routes_request_through_proxy() {
         .success()
         .stdout(predicate::str::contains("\"via\""));
 
-    mock.assert_hits(1);
+    mock.assert_calls(1);
 }
 
 #[test]
@@ -376,5 +376,5 @@ fn test_http_no_follow_returns_3xx_body_without_following() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"hint\""));
-    target.assert_hits(0);
+    target.assert_calls(0);
 }

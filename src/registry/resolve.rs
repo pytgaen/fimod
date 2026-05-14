@@ -244,28 +244,11 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
         .ok_or_else(|| anyhow::anyhow!("Local registry has no path configured"))?;
     let base = Path::new(base);
 
-    // 1. base/mold_name.py
-    let direct = base.join(format!("{mold_name}.py"));
-    if direct.is_file() {
-        let path = direct.to_string_lossy().into_owned();
-        return Ok(MoldSource::file(path));
+    if let Some(path) = crate::mold::find_script(base, mold_name) {
+        return Ok(MoldSource::file(path.to_string_lossy().into_owned()));
     }
 
-    // 2. base/mold_name/<last_segment>.py
     let last = mold_name.split('/').next_back().unwrap_or(mold_name);
-    let named = base.join(mold_name).join(format!("{last}.py"));
-    if named.is_file() {
-        let path = named.to_string_lossy().into_owned();
-        return Ok(MoldSource::file(path));
-    }
-
-    // 3. base/mold_name/__main__.py
-    let main = base.join(mold_name).join("__main__.py");
-    if main.is_file() {
-        let path = main.to_string_lossy().into_owned();
-        return Ok(MoldSource::file(path));
-    }
-
     bail!(
         "Mold '{}' not found in registry '{}' (tried {}.py, {}/{}.py, {}/__main__.py)",
         mold_name,

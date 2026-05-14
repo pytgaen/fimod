@@ -8,6 +8,8 @@ use anyhow::{bail, Context, Result};
 use monty::MontyObject;
 use serde_json::Value;
 
+pub use crate::engine::PipelineMetadata;
+
 use crate::engine::{MoldExecResult, MoldResult, PendingOp};
 use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep, StepOrigin};
@@ -106,22 +108,58 @@ pub fn build_scripts(refs: &[ScriptRef], no_cache: bool) -> Result<Vec<MoldStep>
     Ok(steps)
 }
 
+/// Cross-cutting execution concerns shared by every step in a chain.
+/// (`headers_value` is intentionally separate — it's derived per-input from CSV
+/// state right before `execute_chain` runs, and doesn't belong in a context
+/// constructed earlier by the caller.)
+pub struct ChainExecCtx<'a> {
+    pub extra_args: &'a [(String, String)],
+    pub env_value: &'a Value,
+    pub policy: &'a SandboxPolicy,
+    pub debug: bool,
+    pub msg_level: u8,
+}
+
+/// Chain-exit shape: result already converted to `serde_json::Value` plus the
+/// per-run overrides a caller needs to drive output writing.
+pub struct ChainOutput {
+    pub value: Value,
+    pub exit_code: Option<i32>,
+    pub format_override: Option<String>,
+    pub output_file_override: Option<String>,
+}
+
+/// Run a mold chain and convert the final `MontyObject` to `serde_json::Value`.
+/// Single boundary helper so the run_pipeline_core / cmd::shape slurp paths
+/// share the same conversion + extraction shape.
+pub fn execute_chain_to_value(
+    steps: &[MoldStep],
+    initial_data: MontyObject,
+    metadata: &PipelineMetadata<'_>,
+    headers_value: &Value,
+    ctx: &ChainExecCtx<'_>,
+) -> Result<ChainOutput> {
+    let exec = execute_chain(steps, initial_data, metadata, headers_value, ctx)?;
+    let value = convert::monty_to_json(exec.value)
+        .context("Failed to convert mold chain result to JSON")?;
+    Ok(ChainOutput {
+        value,
+        exit_code: exec.exit_code,
+        format_override: exec.format_override,
+        output_file_override: exec.output_file,
+    })
+}
+
 /// Execute a chain of mold scripts sequentially, with dynamic step insertion.
 ///
-/// The output of each step becomes the input of the next.
 /// Molds can inject new steps via `pipeline.insert_next()` / `pipeline.append()`,
 /// and mutate future steps via `pipeline.step(i)['key'] = value`.
-#[allow(clippy::too_many_arguments)]
 pub fn execute_chain(
     steps: &[MoldStep],
     initial_data: MontyObject,
-    extra_args: &[(String, String)],
-    env_value: &Value,
+    metadata: &PipelineMetadata<'_>,
     headers_value: &Value,
-    context_base: &Value,
-    debug: bool,
-    msg_level: u8,
-    policy: &SandboxPolicy,
+    ctx: &ChainExecCtx<'_>,
 ) -> MoldResult {
     let mut steps: Vec<MoldStep> = steps.to_vec();
     let mut data = initial_data;
@@ -129,23 +167,9 @@ pub fn execute_chain(
     // Pending mutations keyed by absolute step index → {field → value}.
     let mut mutations: HashMap<usize, HashMap<String, Value>> = HashMap::new();
 
-    // Extract static pipeline metadata from context_base.
-    let input_path = context_base.get("input").and_then(Value::as_str);
-    let output_path = context_base.get("output").and_then(Value::as_str);
-    let in_place = context_base
-        .get("in_place")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let slurp = context_base
-        .get("slurp")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let no_input = context_base
-        .get("no_input")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let base_input_format = context_base.get("input_format").and_then(Value::as_str);
-    let base_output_format = context_base.get("output_format").and_then(Value::as_str);
+    // Step-level format overrides resolve against these as their fallback.
+    let base_input_format = metadata.input_format;
+    let base_output_format = metadata.output_format;
 
     let mut i = 0;
     while i < steps.len() {
@@ -158,7 +182,7 @@ pub fn execute_chain(
             .cloned()
             .or_else(|| steps[i].runtime_args.clone());
 
-        if debug {
+        if ctx.debug {
             eprintln!("[debug] {}", steps[i].error_context(i, steps.len()));
         }
 
@@ -201,21 +225,17 @@ pub fn execute_chain(
             .collect();
 
         let opts = engine::MoldOptions {
-            extra_args,
-            env_value,
+            extra_args: ctx.extra_args,
+            env_value: ctx.env_value,
             headers_value,
-            debug,
-            msg_level,
+            debug: ctx.debug,
+            msg_level: ctx.msg_level,
             mold_base_dir: step_base_dir.as_deref(),
-            policy,
+            policy: ctx.policy,
+            metadata,
             current_step_idx: i,
             total_steps: steps.len(),
             remaining_steps,
-            input_path,
-            output_path,
-            in_place,
-            slurp,
-            no_input,
             input_format: step_input_format,
             output_format: step_output_format,
             output_file_override: step_output_file_override,
@@ -290,10 +310,17 @@ pub fn execute_chain(
                     "in {step_ctx}: set_output_format(\"raw\") can only be used in the final step of a mold chain"
                 );
             }
-            if debug {
+            if ctx.debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
-            let as_string = match &result {
+            // set_input_format always re-parses from a serialized form, so we
+            // pay the MontyObject → Value conversion only here (not every step).
+            let result_value = convert::monty_to_json(result).with_context(|| {
+                format!(
+                    "after {step_ctx}: failed to convert result for set_input_format re-parsing"
+                )
+            })?;
+            let as_string = match &result_value {
                 Value::String(s) => s.clone(),
                 other => serde_json::to_string(other).with_context(|| {
                     format!("after {step_ctx}: failed to serialize result for set_input_format re-parsing")
@@ -319,13 +346,15 @@ pub fn execute_chain(
                 pending_mutations: vec![],
             });
         } else {
-            data = convert::json_into_monty(result);
+            // Hot path: thread MontyObject straight into the next step, no
+            // round-trip through serde_json::Value.
+            data = result;
         }
 
         i += 1;
     }
     Ok(MoldExecResult {
-        value: Value::Null,
+        value: MontyObject::None,
         exit_code: last_exit,
         format_override: None,
         output_file: None,
@@ -406,22 +435,18 @@ pub struct PipelineResult {
 ///
 /// This is the single source of truth. Both `process_single_input` (CLI) and
 /// `run_pipeline` (library API) delegate to this function.
-#[allow(clippy::too_many_arguments)]
 fn run_pipeline_core(
-    input_path: Option<&str>,
-    no_input: bool,
-    slurp: bool,
+    metadata: &PipelineMetadata<'_>,
     effective_input_format: Option<&str>,
     csv_opts: &CsvOptions,
     scripts: &[MoldStep],
-    extra_args: &[(String, String)],
-    env_value: &Value,
-    context_base: &Value,
-    debug: bool,
-    msg_level: u8,
     http_opts: &HttpOptions,
-    policy: &SandboxPolicy,
+    ctx: &ChainExecCtx<'_>,
 ) -> Result<PipelineResult> {
+    let input_path = metadata.input;
+    let no_input = metadata.no_input;
+    let slurp = metadata.slurp;
+    let debug = ctx.debug;
     let parse_start = Instant::now();
     let mut csv_headers: Option<Vec<String>> = None;
     let mut http_raw_bytes: Option<Vec<u8>> = None;
@@ -520,16 +545,7 @@ fn run_pipeline_core(
             } else if let Some(ct_name) = ct_format {
                 format::parse_format_name(ct_name)?
             } else if is_http {
-                // For URLs, try extension from URL path, fallback to JSON
-                let url_path = input_path.unwrap();
-                // Extract path part from URL for extension detection
-                let path_part = url_path
-                    .split('?')
-                    .next()
-                    .unwrap_or(url_path)
-                    .split('#')
-                    .next()
-                    .unwrap_or(url_path);
+                let path_part = url_path_only(input_path.unwrap());
                 DataFormat::from_extension(path_part).unwrap_or(DataFormat::Json)
             } else {
                 format::resolve_format(None, input_path, DataFormat::Json)?
@@ -593,28 +609,18 @@ fn run_pipeline_core(
         None => serde_json::Value::Null,
     };
 
-    debug_phase(debug, "parse", parse_start);
+    debug_phase(ctx.debug, "parse", parse_start);
 
-    // Execute the mold chain
+    // Execute the mold chain (converts MontyObject → Value at the boundary).
     let exec_start = Instant::now();
-    let exec = execute_chain(
-        scripts,
-        data,
-        extra_args,
-        env_value,
-        &headers_value,
-        context_base,
-        debug,
-        msg_level,
-        policy,
-    )?;
-    debug_phase(debug, "execute", exec_start);
+    let out = execute_chain_to_value(scripts, data, metadata, &headers_value, ctx)?;
+    debug_phase(ctx.debug, "execute", exec_start);
 
     Ok(PipelineResult {
-        value: exec.value,
-        exit_code: exec.exit_code,
-        format_override: exec.format_override,
-        output_file_override: exec.output_file,
+        value: out.value,
+        exit_code: out.exit_code,
+        format_override: out.format_override,
+        output_file_override: out.output_file_override,
         input_format: in_fmt,
         http_raw_bytes,
     })
@@ -623,29 +629,6 @@ fn run_pipeline_core(
 // ---------------------------------------------------------------------------
 // CLI wrapper: output writing + process::exit
 // ---------------------------------------------------------------------------
-
-/// Build the `context_base` JSON object exposed to molds via the `pipeline`
-/// API. Centralizes the exact shape (key names, value types) that
-/// `execute_chain` reads back via `context_base.get(...)`.
-pub fn build_context_base(
-    input: Option<&str>,
-    output: Option<&str>,
-    input_format: Option<&str>,
-    output_format: Option<&str>,
-    in_place: bool,
-    slurp: bool,
-    no_input: bool,
-) -> Value {
-    serde_json::json!({
-        "input": input,
-        "output": output,
-        "input_format": input_format,
-        "output_format": output_format,
-        "in_place": in_place,
-        "slurp": slurp,
-        "no_input": no_input,
-    })
-}
 
 /// Pre-computed inputs for `process_single_input`. Bundled into a struct so the
 /// CLI-facing signature stays manageable as new pipeline-wide options are
@@ -695,29 +678,29 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
         policy,
     } = opts;
     let total_start = Instant::now();
-    let context_base = build_context_base(
-        input_path,
-        output_path,
-        effective_input_format,
-        effective_output_format,
+    let metadata = PipelineMetadata {
+        input: input_path,
+        output: output_path,
+        input_format: effective_input_format,
+        output_format: effective_output_format,
         in_place,
         slurp,
         no_input,
-    );
+    };
+    let exec_ctx = ChainExecCtx {
+        extra_args,
+        env_value,
+        policy,
+        debug,
+        msg_level,
+    };
     let result = run_pipeline_core(
-        input_path,
-        no_input,
-        slurp,
+        &metadata,
         effective_input_format,
         csv_opts,
         scripts,
-        extra_args,
-        env_value,
-        &context_base,
-        debug,
-        msg_level,
         http_opts,
-        policy,
+        &exec_ctx,
     )?;
 
     // set_output_file() overrides the CLI -o path; otherwise fall back to CLI-provided path
@@ -742,18 +725,7 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
                 eprintln!("[debug] writing to: {path}");
             }
         }
-        match actual_output {
-            Some(path) => {
-                fs::write(path, &bytes)
-                    .with_context(|| format!("Failed to write binary output to: {path}"))?;
-            }
-            None => {
-                use std::io::Write;
-                io::stdout()
-                    .write_all(&bytes)
-                    .context("Failed to write binary output to stdout")?;
-            }
-        }
+        write_bytes_to(actual_output, &bytes)?;
         if let Some(code) = result.exit_code {
             return Ok(CliResult::Exit(code));
         }
@@ -917,20 +889,39 @@ pub fn parse_input_entry(s: &str) -> (&str, Option<Option<&str>>) {
     (s, None)
 }
 
-/// Derive a filename from a URL path (strip query/fragment, take last segment).
-pub fn url_filename(url: &str) -> Result<String> {
+/// Strip `?query` and `#fragment` from a URL, returning just the path portion.
+/// Used for extension-based format detection and filename derivation.
+pub fn url_path_only(url: &str) -> &str {
     url.split('?')
         .next()
         .unwrap_or(url)
         .split('#')
         .next()
         .unwrap_or(url)
+}
+
+/// Derive a filename from a URL path (strip query/fragment, take last segment).
+pub fn url_filename(url: &str) -> Result<String> {
+    url_path_only(url)
         .trim_end_matches('/')
         .rsplit('/')
         .next()
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow::anyhow!("cannot determine filename from URL '{url}'"))
+}
+
+/// Write `bytes` to either a file at `actual_output` or stdout when `None`.
+/// Used by the binary / raw output paths in `pipeline` and `cmd::shape`.
+pub fn write_bytes_to(actual_output: Option<&str>, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    match actual_output {
+        Some(path) => fs::write(path, bytes)
+            .with_context(|| format!("Failed to write binary output to: {path}")),
+        None => io::stdout()
+            .write_all(bytes)
+            .context("Failed to write binary output to stdout"),
+    }
 }
 
 /// Extract the stem (filename without extension) from a path string.
@@ -969,14 +960,7 @@ pub fn read_and_parse_for_slurp(
         detected_fmt = if let Some(ct_name) = ct {
             format::parse_format_name(ct_name).ok()
         } else {
-            let path_part = path
-                .split('?')
-                .next()
-                .unwrap_or(path)
-                .split('#')
-                .next()
-                .unwrap_or(path);
-            DataFormat::from_extension(path_part)
+            DataFormat::from_extension(url_path_only(path))
         };
         content = resp.body;
     } else {
@@ -1108,29 +1092,29 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         .as_deref()
         .or(first_defaults.input_format.as_deref());
 
-    let context_base = build_context_base(
-        input_path,
-        None,
-        effective_input_format,
-        config.output_format.as_deref(),
-        false,
-        config.slurp,
-        config.no_input,
-    );
+    let metadata = PipelineMetadata {
+        input: input_path,
+        output: None,
+        input_format: effective_input_format,
+        output_format: config.output_format.as_deref(),
+        in_place: false,
+        slurp: config.slurp,
+        no_input: config.no_input,
+    };
+    let exec_ctx = ChainExecCtx {
+        extra_args: &config.args,
+        env_value: &env_value,
+        policy: &config.sandbox,
+        debug: config.debug,
+        msg_level: config.msg_level,
+    };
 
     run_pipeline_core(
-        input_path,
-        config.no_input,
-        config.slurp,
+        &metadata,
         effective_input_format,
         &config.csv_opts,
         &scripts,
-        &config.args,
-        &env_value,
-        &context_base,
-        config.debug,
-        config.msg_level,
         &config.http_opts,
-        &config.sandbox,
+        &exec_ctx,
     )
 }
