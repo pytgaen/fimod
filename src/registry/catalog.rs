@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::config::{load_config, Source, SourceType};
-use super::format_defaults_options;
+use super::molds::format_defaults_options;
 use super::resolve::auth_headers;
 
 // ── catalog data model ────────────────────────────────────────────────────────
