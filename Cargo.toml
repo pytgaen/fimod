@@ -20,7 +20,7 @@ watch = ["dep:notify", "dep:notify-debouncer-mini"]
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
 clap = { version = "4", features = ["derive"] }
-clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
+clap_complete = { version = "4.6.5", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
@@ -75,4 +75,4 @@ assert_cmd = "2"
 assert_fs = "1"
 predicates = "3"
 tempfile = "3"
-httpmock = "0.7"
+httpmock = "0.8"
