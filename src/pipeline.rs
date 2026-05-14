@@ -519,16 +519,7 @@ fn run_pipeline_core(
             } else if let Some(ct_name) = ct_format {
                 format::parse_format_name(ct_name)?
             } else if is_http {
-                // For URLs, try extension from URL path, fallback to JSON
-                let url_path = input_path.unwrap();
-                // Extract path part from URL for extension detection
-                let path_part = url_path
-                    .split('?')
-                    .next()
-                    .unwrap_or(url_path)
-                    .split('#')
-                    .next()
-                    .unwrap_or(url_path);
+                let path_part = url_path_only(input_path.unwrap());
                 DataFormat::from_extension(path_part).unwrap_or(DataFormat::Json)
             } else {
                 format::resolve_format(None, input_path, DataFormat::Json)?
@@ -741,18 +732,7 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
                 eprintln!("[debug] writing to: {path}");
             }
         }
-        match actual_output {
-            Some(path) => {
-                fs::write(path, &bytes)
-                    .with_context(|| format!("Failed to write binary output to: {path}"))?;
-            }
-            None => {
-                use std::io::Write;
-                io::stdout()
-                    .write_all(&bytes)
-                    .context("Failed to write binary output to stdout")?;
-            }
-        }
+        write_bytes_to(actual_output, &bytes)?;
         if let Some(code) = result.exit_code {
             return Ok(CliResult::Exit(code));
         }
@@ -916,20 +896,39 @@ pub fn parse_input_entry(s: &str) -> (&str, Option<Option<&str>>) {
     (s, None)
 }
 
-/// Derive a filename from a URL path (strip query/fragment, take last segment).
-pub fn url_filename(url: &str) -> Result<String> {
+/// Strip `?query` and `#fragment` from a URL, returning just the path portion.
+/// Used for extension-based format detection and filename derivation.
+pub fn url_path_only(url: &str) -> &str {
     url.split('?')
         .next()
         .unwrap_or(url)
         .split('#')
         .next()
         .unwrap_or(url)
+}
+
+/// Derive a filename from a URL path (strip query/fragment, take last segment).
+pub fn url_filename(url: &str) -> Result<String> {
+    url_path_only(url)
         .trim_end_matches('/')
         .rsplit('/')
         .next()
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow::anyhow!("cannot determine filename from URL '{url}'"))
+}
+
+/// Write `bytes` to either a file at `actual_output` or stdout when `None`.
+/// Used by the binary / raw output paths in `pipeline` and `cmd::shape`.
+pub fn write_bytes_to(actual_output: Option<&str>, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    match actual_output {
+        Some(path) => fs::write(path, bytes)
+            .with_context(|| format!("Failed to write binary output to: {path}")),
+        None => io::stdout()
+            .write_all(bytes)
+            .context("Failed to write binary output to stdout"),
+    }
 }
 
 /// Extract the stem (filename without extension) from a path string.
@@ -968,14 +967,7 @@ pub fn read_and_parse_for_slurp(
         detected_fmt = if let Some(ct_name) = ct {
             format::parse_format_name(ct_name).ok()
         } else {
-            let path_part = path
-                .split('?')
-                .next()
-                .unwrap_or(path)
-                .split('#')
-                .next()
-                .unwrap_or(path);
-            DataFormat::from_extension(path_part)
+            DataFormat::from_extension(url_path_only(path))
         };
         content = resp.body;
     } else {

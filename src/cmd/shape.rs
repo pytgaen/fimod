@@ -9,7 +9,7 @@ use fimod::format::{CsvOptions, DataFormat};
 use fimod::pipeline::{
     build_context_base, build_env, build_scripts, execute_chain, is_truthy, output_result,
     parse_input_entry, path_stem, process_single_input, read_and_parse_for_slurp, read_input_list,
-    url_filename, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
+    url_filename, write_bytes_to, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
 };
 use fimod::sandbox::SandboxPolicy;
 use fimod::{convert, format, http};
@@ -207,8 +207,7 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
                     eprintln!("[debug] binary mode: {} bytes", bytes.len());
                 }
                 let filename = url_filename(input)?;
-                fs::write(&filename, &bytes)
-                    .with_context(|| format!("Failed to write output file: {filename}"))?;
+                write_bytes_to(Some(&filename), &bytes)?;
             }
             return Ok(CliResult::Done);
         }
@@ -238,18 +237,7 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
             shape.output.clone()
         };
 
-        match binary_output_path.as_deref() {
-            Some(path) => {
-                fs::write(path, &bytes)
-                    .with_context(|| format!("Failed to write output file: {path}"))?;
-            }
-            None => {
-                use std::io::Write;
-                io::stdout()
-                    .write_all(&bytes)
-                    .context("Failed to write to stdout")?;
-            }
-        }
+        write_bytes_to(binary_output_path.as_deref(), &bytes)?;
 
         return Ok(CliResult::Done);
     }
