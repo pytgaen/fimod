@@ -286,7 +286,7 @@ fn find_local_mold_script(base: &Path, name: &str) -> Option<PathBuf> {
 }
 
 /// Format non-default MoldDefaults fields as a human-readable list of strings.
-pub(crate) fn format_defaults_options(d: &crate::mold::MoldDefaults) -> Vec<String> {
+pub(super) fn format_defaults_options(d: &crate::mold::MoldDefaults) -> Vec<String> {
     let mut opts = Vec::new();
     if d.no_follow {
         opts.push("no-follow".to_string());

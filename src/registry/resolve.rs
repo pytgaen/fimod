@@ -9,9 +9,9 @@ use crate::mold::MoldSource;
 // ── FIMOD_REGISTRY env var ────────────────────────────────────────────────────
 
 /// A parsed FIMOD_REGISTRY entry: either named (`ci=/path`) or anonymous (`/path`).
-pub(crate) struct EnvRegistry {
+pub(super) struct EnvRegistry {
     name: Option<String>,
-    pub(crate) source: Source,
+    pub(super) source: Source,
 }
 
 /// Build a Source from a location string (path or URL).
@@ -49,7 +49,7 @@ fn is_registry_name(s: &str) -> bool {
 ///
 /// A named entry is detected when the part before the first `=` is a simple
 /// identifier (`[a-zA-Z0-9_-]+`). Otherwise the whole string is the location.
-pub(crate) fn parse_env_registries() -> Vec<EnvRegistry> {
+pub(super) fn parse_env_registries() -> Vec<EnvRegistry> {
     let Ok(val) = std::env::var("FIMOD_REGISTRY") else {
         return Vec::new();
     };
@@ -88,7 +88,7 @@ fn env_anonymous_name(anon_index: usize) -> String {
 }
 
 /// Generate a display name for a FIMOD_REGISTRY entry.
-pub(crate) fn env_display_name(entry: &EnvRegistry, anon_index: &mut usize) -> String {
+pub(super) fn env_display_name(entry: &EnvRegistry, anon_index: &mut usize) -> String {
     match &entry.name {
         Some(n) => n.clone(),
         None => {

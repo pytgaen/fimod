@@ -244,7 +244,7 @@ pub fn remove(name: &str) -> Result<()> {
 /// List all registered sources.
 pub fn list(output_format: &str) -> Result<()> {
     let cfg = load_config()?;
-    let env_entries = super::parse_env_registries();
+    let env_entries = super::resolve::parse_env_registries();
 
     if output_format == "json" {
         #[derive(Serialize)]
@@ -273,7 +273,7 @@ pub fn list(output_format: &str) -> Result<()> {
             .collect();
         let mut anon_index = 0;
         for entry in &env_entries {
-            let display_name = super::env_display_name(entry, &mut anon_index);
+            let display_name = super::resolve::env_display_name(entry, &mut anon_index);
             let name_ref: &str = Box::leak(display_name.into_boxed_str());
             entries.push(RegistryInfo {
                 name: name_ref,
@@ -300,7 +300,7 @@ pub fn list(output_format: &str) -> Result<()> {
     // Show FIMOD_REGISTRY entries first (they are always P0)
     let mut anon_index = 0;
     for entry in &env_entries {
-        let display_name = super::env_display_name(entry, &mut anon_index);
+        let display_name = super::resolve::env_display_name(entry, &mut anon_index);
         let marker = if display_name == "env-default" {
             "P0 (FIMOD_REGISTRY)"
         } else {

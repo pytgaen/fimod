@@ -12,5 +12,4 @@ pub use molds::{
     complete_mold_names, complete_source_names, list_molds, show_mold, show_mold_by_path,
     MoldListFormat, MoldShowFormat,
 };
-pub(super) use resolve::{env_display_name, parse_env_registries};
 pub use resolve::{resolve, token_for_url};

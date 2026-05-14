@@ -12,45 +12,45 @@ use super::resolve::auth_headers;
 // ── catalog data model ────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Default)]
-pub(crate) struct Catalog {
+pub(super) struct Catalog {
     #[serde(default)]
-    pub(crate) molds: BTreeMap<String, CatalogEntry>,
+    pub(super) molds: BTreeMap<String, CatalogEntry>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub(crate) struct CatalogEntry {
-    pub(crate) description: Option<String>,
+pub(super) struct CatalogEntry {
+    pub(super) description: Option<String>,
     /// Free-form documentation extracted from the mold's module-level docstring.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) docs: Option<String>,
+    pub(super) docs: Option<String>,
     /// Relative path to the mold script from the registry base (e.g. `gh_latest/gh_latest.py`).
     /// Stored in catalog.toml to avoid probing multiple URL patterns at resolution time.
-    pub(crate) path: Option<String>,
+    pub(super) path: Option<String>,
     /// Relative path to the mold's README from the registry base (e.g. `gh_latest/README.md`).
     /// Only present when the README exists at catalog build time.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) readme: Option<String>,
+    pub(super) readme: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) input_format: Option<String>,
+    pub(super) input_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) output_format: Option<String>,
+    pub(super) output_format: Option<String>,
     /// Options like `no-follow`, `csv-delimiter=,` etc.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) options: Vec<String>,
+    pub(super) options: Vec<String>,
     /// Documented --arg parameters: name → description (empty string if undocumented).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub(crate) args: BTreeMap<String, String>,
+    pub(super) args: BTreeMap<String, String>,
     /// Documented ENV variables: name → description (empty string if undocumented).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub(crate) envs: BTreeMap<String, String>,
+    pub(super) envs: BTreeMap<String, String>,
     /// Deterministic content hash of the mold directory (SHA-256, truncated to 16 hex chars).
     /// Computed by `build-catalog`; used by the client cache to detect mold changes.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) hash: Option<String>,
+    pub(super) hash: Option<String>,
     /// Companion files (templates, data, etc.) relative to the registry base.
     /// Downloaded alongside the main script into the mold cache directory.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) files: Vec<String>,
+    pub(super) files: Vec<String>,
 }
 
 // ── local mold scanning ───────────────────────────────────────────────────────
@@ -60,18 +60,18 @@ pub(crate) struct CatalogEntry {
 /// Fetch a remote mold script and extract its docstring.
 /// Returns `None` silently on any error (network, parse, etc.).
 #[cfg(feature = "reqwest")]
-pub(crate) fn fetch_script_docs(url: &str) -> Option<String> {
+pub(super) fn fetch_script_docs(url: &str) -> Option<String> {
     let resp = crate::http::fetch_url(url, &[], 30, false, false).ok()?;
     let defaults = crate::mold::parse_mold_defaults(&resp.body);
     defaults.docs
 }
 
 #[cfg(not(feature = "reqwest"))]
-pub(crate) fn fetch_script_docs(_url: &str) -> Option<String> {
+pub(super) fn fetch_script_docs(_url: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn effective_description(d: &crate::mold::MoldDefaults) -> Option<String> {
+pub(super) fn effective_description(d: &crate::mold::MoldDefaults) -> Option<String> {
     d.docs
         .as_deref()?
         .lines()
@@ -88,7 +88,7 @@ pub(crate) fn effective_description(d: &crate::mold::MoldDefaults) -> Option<Str
 ///
 /// A name is only returned once (directory layout takes priority over a
 /// same-named flat file if both exist, which should not happen in practice).
-pub(crate) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, String)> {
+pub(super) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, String)> {
     let mut results = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
 
@@ -145,7 +145,7 @@ pub(crate) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, Stri
 
 // ── catalog URL helper ────────────────────────────────────────────────────────
 
-pub(crate) fn catalog_url_for(source: &Source) -> Result<String> {
+pub(super) fn catalog_url_for(source: &Source) -> Result<String> {
     match &source.kind {
         SourceType::Github => {
             let raw_base = github_to_raw(source.url.as_deref().unwrap_or(""))?;
@@ -187,7 +187,7 @@ const CATALOG_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60
 /// - `Ok(Some(catalog))` — catalog found and parsed
 /// - `Ok(None)`          — catalog does not exist (HTTP 404)
 /// - `Err(_)`            — network error, bad TOML, etc.
-pub(crate) fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Catalog>> {
+pub(super) fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Catalog>> {
     let catalog_url = catalog_url_for(source)?;
     let mut headers = auth_headers(source);
 
@@ -567,7 +567,7 @@ fn looks_like_version_tag(r: &str) -> bool {
 }
 
 /// Convert a `https://github.com/org/repo[/tree/<branch>/<path>]` URL to a raw content base URL.
-pub(crate) fn github_to_raw(url: &str) -> Result<String> {
+pub(super) fn github_to_raw(url: &str) -> Result<String> {
     let url = url.trim_end_matches('/');
     for prefix in &["https://github.com/", "http://github.com/"] {
         if let Some(path) = url.strip_prefix(prefix) {
