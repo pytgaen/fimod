@@ -45,7 +45,7 @@ pub struct Cli {
 #[derive(Args, Debug)]
 pub struct ShapeArgs {
     /// Input file(s) — supports multiple files for batch mode (shell glob expansion)
-    #[arg(short, long, num_args = 1..)]
+    #[arg(short, long, num_args = 1.., value_hint = clap::ValueHint::FilePath)]
     pub input: Vec<String>,
 
     /// Mold scripts applied in order (repeatable, can be mixed with -e)
@@ -57,7 +57,7 @@ pub struct ShapeArgs {
     pub expression: Vec<String>,
 
     /// Output file or directory (writes to stdout if not provided; directory required for batch)
-    #[arg(short, long)]
+    #[arg(short, long, value_hint = clap::ValueHint::AnyPath)]
     pub output: Option<String>,
 
     /// Modify input file(s) in-place (requires -i, incompatible with -o)
@@ -77,6 +77,7 @@ pub struct ShapeArgs {
         short = 'I',
         long = "input-list",
         value_name = "FILE|-",
+        value_hint = clap::ValueHint::FilePath,
         conflicts_with = "input"
     )]
     pub input_list: Option<String>,
@@ -160,7 +161,7 @@ pub struct ShapeArgs {
     pub no_cache: bool,
 
     /// Sandbox policy file (TOML). Empty (`--sandbox-file=""`) forces zero authorization.
-    #[arg(long = "sandbox-file", value_name = "PATH")]
+    #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
     pub sandbox_file: Option<String>,
 }
 
