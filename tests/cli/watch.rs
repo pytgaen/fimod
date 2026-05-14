@@ -169,7 +169,9 @@ fn test_watch_debounces_rapid_writes_into_single_rerun() {
     thread::sleep(DEBOUNCE_GAP);
 
     for i in 1..=5 {
-        input.write_str(&format!(r#"{{"n":{i}}}"#)).unwrap();
+        let tmp = tempfile::NamedTempFile::new_in(dir.path()).expect("tmp in dir");
+        std::fs::write(tmp.path(), format!(r#"{{"n":{i}}}"#)).expect("write tmp");
+        tmp.persist(input.path()).expect("atomic rename to in.json");
     }
 
     poll_until(

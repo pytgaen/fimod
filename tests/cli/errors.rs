@@ -51,7 +51,7 @@ fn test_malformed_json_fails_cleanly() {
         .args(["-i", &input, "-e", "data"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("panic").not());
+        .stderr(predicate::str::contains("panicked at").not());
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn test_malformed_yaml_fails_cleanly() {
         .args(["-i", &input, "-e", "data"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("panic").not());
+        .stderr(predicate::str::contains("panicked at").not());
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_malformed_toml_fails_cleanly() {
         .args(["-i", &input, "-e", "data"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("panic").not());
+        .stderr(predicate::str::contains("panicked at").not());
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_malformed_ndjson_fails_cleanly() {
         .args(["-i", &input, "-e", "data"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("panic").not());
+        .stderr(predicate::str::contains("panicked at").not());
 }
 
 #[test]
@@ -102,5 +102,6 @@ fn test_malformed_csv_unclosed_quote_fails_cleanly() {
         .arg("shape")
         .args(["-i", &input, "-e", "data"])
         .assert()
-        .stderr(predicate::str::contains("panic").not());
+        .failure()
+        .stderr(predicate::str::contains("panicked at").not());
 }
