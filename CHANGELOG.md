@@ -2,6 +2,29 @@
 
 All notable changes to fimod are documented here.
 
+## [0.7.1] — 2026-05-14
+
+### Highlights
+
+- 👁️ **Watch hardening** — input-removal warning, second-level event coalescing, atomic-save (rename) detection. New env var `FIMOD_WATCH_QUIET_MS=<ms>` to tune the debounce window.
+- 🧪 **E2E coverage expansion** — full HTTP module (timeout, 4xx/5xx, redirects, content-type auto-detect, auth across redirects, proxy, raw bytes), CSV/NDJSON/TXT cross-format, mold contract pinning (`transform` kwargs, `--arg`, `--env`, `set_output_format`), watch failure modes (delete/recreate, mold panic, malformed input mid-watch, SIGINT/SIGTERM).
+
+### Bug Fixes
+
+- **watch:** bail at startup when input file is missing — was hanging silently.
+- **watch:** coalesce notify event bursts via second-level debounce (default 500 ms) to absorb cross-process inotify latency. Configurable via `FIMOD_WATCH_QUIET_MS=<ms>`.
+- **watch:** surface input removal mid-watch with `[watch] warn: input removed, waiting for it to reappear...`. Atomic saves (rename via tmp + persist) stay silent — only sustained absence triggers the warning.
+
+### Documentation
+
+- `docs/guides/cli-reference.md` — watch section: two-level debounce, `FIMOD_WATCH_QUIET_MS` env var, input-removal UX.
+
+### Housekeeping
+
+- task `outdated` + `cargo-outdated` via mise (root-deps freshness check). Note: the Taskfile entry currently invokes `cargo-outdated` as a standalone binary instead of via `cargo outdated`, which fails with clap; to be fixed in a follow-up `chore` PR.
+- **deps:** bump `assert_cmd` 2.2.2, `clap_complete` 4.6.4 (patch).
+- **deps deferred:** `reqwest` 0.13 (major bump, HTTP surface to re-validate), `httpmock` 0.8 (dev dep, breaking matcher API), `clap_complete` 4.6.5 (patch) deferred to dedicated `chore(deps)` PRs in a later cycle.
+
 ## [0.7.0] — 2026-05-08
 
 ### Highlights
