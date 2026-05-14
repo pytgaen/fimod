@@ -306,7 +306,14 @@ pub fn execute_chain(
             if ctx.debug {
                 eprintln!("[debug] set_input_format(\"{fmt_name}\") — re-parsing between steps");
             }
-            let as_string = match &result {
+            // set_input_format always re-parses from a serialized form, so we
+            // pay the MontyObject → Value conversion only here (not every step).
+            let result_value = convert::monty_to_json(result).with_context(|| {
+                format!(
+                    "after {step_ctx}: failed to convert result for set_input_format re-parsing"
+                )
+            })?;
+            let as_string = match &result_value {
                 Value::String(s) => s.clone(),
                 other => serde_json::to_string(other).with_context(|| {
                     format!("after {step_ctx}: failed to serialize result for set_input_format re-parsing")
@@ -332,13 +339,15 @@ pub fn execute_chain(
                 pending_mutations: vec![],
             });
         } else {
-            data = convert::json_into_monty(result);
+            // Hot path: thread MontyObject straight into the next step, no
+            // round-trip through serde_json::Value.
+            data = result;
         }
 
         i += 1;
     }
     Ok(MoldExecResult {
-        value: Value::Null,
+        value: MontyObject::None,
         exit_code: last_exit,
         format_override: None,
         output_file: None,
@@ -600,8 +609,13 @@ fn run_pipeline_core(
     let exec = execute_chain(scripts, data, metadata, &headers_value, ctx)?;
     debug_phase(ctx.debug, "execute", exec_start);
 
+    // Chain exit boundary: convert the final MontyObject back to a Value so
+    // the rest of the pipeline can serialize it through the I/O layer.
+    let value = convert::monty_to_json(exec.value)
+        .context("Failed to convert mold chain result to JSON")?;
+
     Ok(PipelineResult {
-        value: exec.value,
+        value,
         exit_code: exec.exit_code,
         format_override: exec.format_override,
         output_file_override: exec.output_file,

@@ -208,7 +208,8 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
     }
 
     let exec = execute_result?;
-    let result = exec.value;
+    let result =
+        convert::monty_to_json(exec.value).context("Failed to convert mold result to JSON")?;
     let exit_code = exec.exit_code;
     let fmt_override = exec.format_override;
 

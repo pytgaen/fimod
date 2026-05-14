@@ -471,7 +471,8 @@ pub fn run_shape_pipeline(
             msg_level,
         };
         let slurp_exec = execute_chain(&scripts, data, &slurp_metadata, &Value::Null, &slurp_ctx)?;
-        let result = slurp_exec.value;
+        let result = convert::monty_to_json(slurp_exec.value)
+            .context("Failed to convert slurp result to JSON")?;
         let opt_exit_code = slurp_exec.exit_code;
         let fmt_override = slurp_exec.format_override;
         let output_file_override = slurp_exec.output_file;

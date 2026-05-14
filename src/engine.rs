@@ -9,7 +9,7 @@ use monty::{
 };
 use serde_json::Value;
 
-use crate::convert::{json_to_monty, monty_to_json};
+use crate::convert::json_to_monty;
 
 /// What to do with a pending pipeline step (injected by the mold at runtime).
 #[derive(Debug)]
@@ -35,8 +35,12 @@ pub struct PendingMutation {
 }
 
 /// Result of executing a single mold step.
+///
+/// `value` is `MontyObject` (not `serde_json::Value`) so that `execute_chain`
+/// can thread results between steps without paying the round-trip
+/// conversion cost. Convert at the chain boundary via `crate::convert::monty_to_json`.
 pub struct MoldExecResult {
-    pub value: Value,
+    pub value: MontyObject,
     pub exit_code: Option<i32>,
     pub format_override: Option<String>,
     pub output_file: Option<String>,
@@ -694,7 +698,11 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
     })
 }
 
-fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -> Result<Value> {
+fn run_loop(
+    runner: MontyRun,
+    inputs: Vec<MontyObject>,
+    ctx: &MoldContext<'_>,
+) -> Result<MontyObject> {
     let mut sp = StderrPrint;
     let tracker = LimitedTracker::new(build_limits(ctx.policy));
     let mut progress = runner
@@ -711,9 +719,7 @@ fn run_loop(runner: MontyRun, inputs: Vec<MontyObject>, ctx: &MoldContext<'_>) -
 
     loop {
         match progress {
-            RunProgress::Complete(result) => {
-                return monty_to_json(result).context("Failed to convert Monty result to JSON");
-            }
+            RunProgress::Complete(result) => return Ok(result),
             RunProgress::FunctionCall(mut call) => {
                 let function_name = call.function_name.clone();
                 let method_call = call.method_call;
