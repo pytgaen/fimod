@@ -13,3 +13,13 @@ pub(crate) fn expect_string<'a>(obj: &'a MontyObject, label: &str) -> Result<&'a
         _ => bail!("{label} must be a string, got {obj:?}"),
     }
 }
+
+/// Like [`expect_string`] but returns an owned `String` (clones from the
+/// underlying `MontyObject::String` storage). For callers that need to store
+/// the value past the lifetime of the `args` slice.
+pub(crate) fn expect_string_owned(obj: &MontyObject, label: &str) -> Result<String> {
+    match obj {
+        MontyObject::String(s) => Ok(s.clone()),
+        _ => bail!("{label} must be a string, got {obj:?}"),
+    }
+}

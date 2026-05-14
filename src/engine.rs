@@ -334,20 +334,14 @@ fn dispatch_method(
         }
         "set" if args.len() >= 3 => {
             let step_idx = get_step_idx(&args[0])?;
-            let key = match &args[1] {
-                MontyObject::String(s) => s.clone(),
-                _ => anyhow::bail!("Step.set(): key must be a string"),
-            };
+            let key = crate::monty_args::expect_string_owned(&args[1], "Step.set() key")?;
             let value = crate::convert::monty_to_json(args[2].clone())
                 .context("Step.set(): cannot convert value")?;
             set_step_field(step_idx, &key, value, ctx)
         }
         "get" if args.len() >= 2 => {
             let step_idx = get_step_idx(&args[0])?;
-            let key = match &args[1] {
-                MontyObject::String(s) => s.clone(),
-                _ => anyhow::bail!("Step.get(): key must be a string"),
-            };
+            let key = crate::monty_args::expect_string_owned(&args[1], "Step.get() key")?;
             get_step_field(step_idx, &key, ctx)
         }
         "insert_next" | "append" => {

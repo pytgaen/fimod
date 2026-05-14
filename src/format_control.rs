@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 use anyhow::{bail, Result};
 use monty::MontyObject;
 
+use crate::monty_args::expect_string_owned;
+
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &[
     "set_input_format",
@@ -41,10 +43,7 @@ fn dispatch_set_input_format(
             args.len()
         );
     }
-    let name = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("set_input_format() expects a string argument"),
-    };
+    let name = expect_string_owned(&args[0], "set_input_format() argument")?;
 
     crate::format::InputMode::parse(&name)?;
 
@@ -69,10 +68,7 @@ fn dispatch_cast_input_format(
             args.len()
         );
     }
-    let name = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("cast_input_format() expects a string as first argument"),
-    };
+    let name = expect_string_owned(&args[0], "cast_input_format() first argument")?;
 
     crate::format::InputMode::parse(&name)?;
 
@@ -96,10 +92,7 @@ fn dispatch_set_output_format(
             args.len()
         );
     }
-    let name = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("set_output_format() expects a string argument"),
-    };
+    let name = expect_string_owned(&args[0], "set_output_format() argument")?;
 
     crate::format::OutputMode::parse(&name)?;
 
@@ -122,10 +115,7 @@ fn dispatch_set_output_file(
             args.len()
         );
     }
-    let path = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("set_output_file() expects a string argument"),
-    };
+    let path = expect_string_owned(&args[0], "set_output_file() argument")?;
     if path.is_empty() {
         bail!("set_output_file() path must not be empty");
     }

@@ -5,6 +5,7 @@ use minijinja::Environment;
 use monty::MontyObject;
 
 use crate::convert::monty_to_json;
+use crate::monty_args::expect_string_owned;
 use crate::serde_compat::NativeNumbers;
 
 /// Names of external functions exposed to Python molds.
@@ -79,10 +80,8 @@ fn tpl_render_str(args: Vec<MontyObject>) -> Result<MontyObject> {
         );
     }
 
-    let template_str = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("tpl_render_str() expects a string as first argument (template)"),
-    };
+    let template_str =
+        expect_string_owned(&args[0], "tpl_render_str() first argument (template)")?;
 
     let (ctx, auto_escape) = parse_render_args(&args, "tpl_render_str")?;
     render(&template_str, ctx, auto_escape)
@@ -107,10 +106,7 @@ fn tpl_render_from_mold(
         )
     })?;
 
-    let rel_path = match &args[0] {
-        MontyObject::String(s) => s.clone(),
-        _ => bail!("tpl_render_from_mold() expects a string as first argument (path)"),
-    };
+    let rel_path = expect_string_owned(&args[0], "tpl_render_from_mold() first argument (path)")?;
 
     // Security: resolve and check the path stays under base_dir
     let base = Path::new(base_dir)
