@@ -101,8 +101,8 @@ pub(super) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, Stri
         let stem = path
             .file_stem()
             .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_string();
+            .unwrap_or_default()
+            .to_owned();
 
         if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("py") {
             if seen.contains(&stem) {
