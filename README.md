@@ -430,7 +430,11 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune. Override per-
 
 ## ⚠️ Project Status
 
-**fimod is young software - built with AI-assisted development ("vibe coding").**
+> 🧠 **Designed by humans — built by AI.**
+
+**fimod is young software.** AI accelerates the velocity; humans own the architecture.
+
+Design decisions, invariants, and architectural boundaries stay explicit — see [`notes/`](notes/) for the vision, architecture map, and design log. The discipline you see in the code (`cargo deny`, `#[must_use]`, layered serde/Monty boundary, conventional commits, ~500 tests + e2e fixtures) is intentional; the speed is the AI.
 
 - **Monty** (the embedded Python runtime) is an early-stage project by Pydantic. Its API is unstable and may change between releases.
 - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
@@ -455,4 +459,4 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune. Override per-
 
 ## 📄 License
 
-GNU Lesser General Public License v3.0 - see [LICENSE.txt](LICENSE.txt).
+Apache License 2.0 - see [LICENSE.txt](LICENSE.txt).

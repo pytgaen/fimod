@@ -183,3 +183,56 @@ fn test_csv_delimiter_tab() {
         .success()
         .stdout(predicate::str::contains("\"greeting\": \"Hello Alice\""));
 }
+
+#[test]
+fn test_csv_output_delimiter_diverges_from_input_delimiter() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.csv", "name;age\nAlice;30\nBob;25\n");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-e",
+            "data",
+            "--csv-delimiter",
+            ";",
+            "--csv-output-delimiter",
+            "\t",
+            "--output-format",
+            "csv",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("name\tage"))
+        .stdout(predicate::str::contains("Alice\t30"));
+}
+
+#[test]
+fn test_csv_quoted_field_preserves_internal_comma() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "test.csv", "name,desc\n\"smith, alice\",hello\n");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"name\": \"smith, alice\""))
+        .stdout(predicate::str::contains("\"desc\": \"hello\""));
+}
+
+#[test]
+fn test_csv_utf8_bom_is_stripped_from_first_header() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let content = format!("{bom}name,age\nAlice,30\n", bom = "\u{FEFF}");
+    let input = setup_input(&dir, "test.csv", &content);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"name\": \"Alice\""));
+}

@@ -436,10 +436,39 @@ cat config-dev.json config-prod.json | fimod s --slurp -e 'data'
 ```bash
 # base.yaml (defaults) + prod.toml (overrides) → merged JSON
 fimod s -i base.yaml -i prod.toml --slurp -e '
-def transform(data):
+def transform(data, **_):
     data[0].update(data[1])
     return data[0]
 ' --output-format json
 ```
 
-> **Note:** `{**a, **b}` and `a | b` are not supported in Monty. Use `a.update(b)` for dict merging.
+> **Note:** `a | b` (dict-merge operator) is not supported in Monty. Use either `{**a, **b}` (works) or `a.update(b)` (mutates `a` in place).
+
+### 🔀 Mixed-Format Merge — JSON + YAML → TOML
+
+Each `-i` file is parsed in its own format. Use `:alias` for clear access:
+
+```bash
+# api.json (service metadata) + config.yaml (env overrides) → TOML
+fimod s -i api.json:api -i config.yaml:cfg -s \
+  -e '{**data["cfg"], "remote": data["api"]}' \
+  -o merged.toml
+```
+
+> **TOML caveat:** the result must be a dict at the root. Returning a list or scalar fails with `Error: Failed to serialize to TOML / Caused by: unsupported array type`. Wrap it: `{"items": data["api"]["endpoints"]}`.
+
+### 🌐 Mixed-Source Merge — HTTP API + Local YAML → TOML
+
+Typical CI pattern: enrich a local config with live data from an API, write a single TOML artifact, no temp files.
+
+```bash
+# Live API (JSON) + repo config (YAML) → deployment TOML
+fimod s \
+  -i https://jsonplaceholder.typicode.com/users/1 \
+  -i config.yaml \
+  -s \
+  -e '{**data[1], "owner_name": data[0]["name"], "owner_email": data[0]["email"]}' \
+  -o deploy.toml
+```
+
+> **HTTP caveat:** URLs cannot carry the `:alias` suffix (the `://` collides with the alias separator). When mixing HTTP and local files, **list mode** is the only option — access via `data[0]`, `data[1]`, … in input order.

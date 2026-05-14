@@ -6,6 +6,8 @@ mod batch;
 mod chain;
 #[path = "cli/cookbook.rs"]
 mod cookbook;
+#[path = "cli/cross_format.rs"]
+mod cross_format;
 #[path = "cli/csv.rs"]
 mod csv;
 #[path = "cli/dotpath.rs"]
@@ -26,6 +28,8 @@ mod gatekeeper;
 mod hash;
 #[path = "cli/helpers.rs"]
 mod helpers;
+#[path = "cli/http_e2e.rs"]
+mod http_e2e;
 #[path = "cli/inline.rs"]
 mod inline;
 #[path = "cli/iter_helpers.rs"]
@@ -34,6 +38,8 @@ mod iter_helpers;
 mod json;
 #[path = "cli/lines.rs"]
 mod lines;
+#[path = "cli/mold_contract.rs"]
+mod mold_contract;
 #[path = "cli/msg.rs"]
 mod msg;
 #[path = "cli/multi_slurp.rs"]

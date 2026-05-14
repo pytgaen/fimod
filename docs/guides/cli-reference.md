@@ -164,6 +164,7 @@ Rules:
 - All entries must use `:` or none must (mixing → error)
 - Auto stem uses the filename without extension; duplicate stems → error (use explicit aliases)
 - Incompatible with `--in-place` and `-o <directory>`
+- **URLs cannot carry a `:alias` suffix** (the `://` scheme separator collides with the alias delimiter, so URLs are always treated as bare entries). When mixing HTTP inputs with local files, **list mode is the only option** — access via `data[0]`, `data[1]`, … in input order.
 
 ```bash
 # ➕ List mode — access by index, cross-format (JSON + YAML)
@@ -787,7 +788,30 @@ A run that fails (Python error, parse error, missing file) is reported but **doe
 | `--watch` + `--in-place`                | feedback loop (we'd watch the file we write)    |
 | `--watch` + `--output-format raw`       | raw mode bypasses the transform pipeline        |
 
-**Implementation details**: events are debounced (150 ms) so a single `:w` in your editor produces one re-run, not several. Parent directories are watched so atomic-rename editors (vim, VSCode) work correctly. The mold script is reloaded from disk on every iteration; no in-memory cache to invalidate.
+**If the input is removed mid-watch** (e.g. `git checkout` of a branch that
+deletes it, or a `rm` between two `cp` commands), the watcher logs:
+
+```text
+[watch] warn: input removed, waiting for it to reappear...
+```
+
+and keeps running. The next time the file reappears, a normal re-run fires.
+Atomic saves (`vim`, VSCode `tmp + rename` pattern) stay silent — only
+sustained absence triggers the warning.
+
+**Implementation details**: events go through a two-level debounce. The
+first level (150 ms, hard-coded) absorbs the multiple `notify` events a
+single `:w` produces. The second level (default 500 ms, override via
+`FIMOD_WATCH_QUIET_MS=<ms>`) waits for the filesystem to be quiet before
+firing the re-run — needed under WSL2 / inotify cross-process latency
+where event bursts can stretch beyond 400 ms. Parent directories are
+watched so atomic-rename editors (vim, VSCode) work correctly. The mold
+script is reloaded from disk on every iteration; no in-memory cache to
+invalidate.
+
+| Env var                  | Default | Purpose                                               |
+|--------------------------|---------|-------------------------------------------------------|
+| `FIMOD_WATCH_QUIET_MS`   | `500`   | Quiet window before firing a re-run after an event.   |
 
 The feature can be disabled at compile time with `cargo build --no-default-features --features=reqwest` (omits `notify` and ~25 transitive crates). A binary built without `watch` rejects the flag with a clear error.
 

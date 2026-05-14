@@ -213,3 +213,29 @@ fn test_env_comma_separated_patterns() {
     assert!(stdout.contains("\"a\": \"val_a\""));
     assert!(stdout.contains("\"b\": \"val_b\""));
 }
+
+#[test]
+fn test_env_pattern_no_match_yields_empty_dict() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"x":1}"#);
+
+    let stdout = assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "--env",
+            "FIMOD_NEVER_EXISTS_*",
+            "-e",
+            r#"{"n": len(env), "fallback": env.get("KEY", "no_var")}"#,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8(stdout).unwrap();
+    assert!(stdout.contains("\"n\": 0"), "{stdout:?}");
+    assert!(stdout.contains("\"fallback\": \"no_var\""), "{stdout:?}");
+}
