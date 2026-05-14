@@ -5,3 +5,4 @@
 
 pub mod completions;
 pub mod monty;
+pub mod shape;
