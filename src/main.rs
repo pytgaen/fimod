@@ -15,10 +15,7 @@ mod cmd;
 #[cfg(feature = "watch")]
 mod watch;
 
-use cli::{
-    CacheAction, Cli, Commands, MoldAction, MontyAction, RegistryAction, SetupCategory,
-    SetupDefaults,
-};
+use cli::{Cli, Commands, MoldAction, MontyAction, SetupCategory, SetupDefaults};
 
 fn main() -> Result<()> {
     CompleteEnv::with_factory(Cli::command).complete();
@@ -59,53 +56,8 @@ fn dispatch(cli: Cli) -> Result<CliResult> {
 fn dispatch_other(cmd: Commands) -> Result<()> {
     match cmd {
         Commands::Shape(_) => unreachable!("handled by dispatch()"),
-        Commands::Registry { action } => match action {
-            RegistryAction::List { output_format } => registry::list(&output_format),
-            RegistryAction::Add {
-                name,
-                location,
-                token_env,
-            } => registry::add(&name, &location, token_env.as_deref()),
-            RegistryAction::Show { name } => registry::show(&name),
-            RegistryAction::Remove { name } => registry::remove(&name),
-            RegistryAction::SetPriority {
-                name,
-                rank,
-                clear,
-                cascade,
-            } => registry::set_priority(&name, rank, clear, cascade),
-            RegistryAction::BuildCatalog { path, registry } => {
-                registry::build_catalog(registry.as_deref(), path.as_deref())
-            }
-            RegistryAction::Setup { yes } => {
-                eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
-                cmd::setup::registry_defaults(yes, false)
-            }
-            RegistryAction::Cache { action } => match action {
-                CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
-                CacheAction::Info => registry::cache_info(),
-            },
-        },
-        Commands::Mold { action } => match action {
-            MoldAction::List {
-                registry,
-                output_format,
-            } => registry::list_molds(registry.as_deref(), output_format),
-            MoldAction::Show {
-                name,
-                path,
-                registry,
-                output_format,
-            } => match path {
-                Some(p) => registry::show_mold_by_path(&p, name.as_deref(), output_format),
-                None => registry::show_mold(
-                    &name.expect("clap: --name is required when --path is absent"),
-                    registry.as_deref(),
-                    output_format,
-                ),
-            },
-            MoldAction::Test { .. } => unreachable!("handled by dispatch()"),
-        },
+        Commands::Registry { action } => cmd::registry::dispatch(action),
+        Commands::Mold { action } => cmd::mold::dispatch(action),
         Commands::Monty { action } => match action {
             MontyAction::Repl => cmd::monty::run_monty_repl(),
         },
