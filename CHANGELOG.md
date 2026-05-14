@@ -2,6 +2,42 @@
 
 All notable changes to fimod are documented here.
 
+## [0.7.3] — 2026-05-14
+
+Internal-only release: hot-path caches (`reqwest::Client`, compiled minijinja `Environment`s), zero-copy `MontyObject` threading between chain steps, and a broad helper/pipeline-metadata cleanup. No user-facing CLI or mold-API changes.
+
+### Bug Fixes
+
+- **format:** parse TOML directly into `serde_json::Value` — was needlessly round-tripping through a JSON-string intermediate.
+
+### Performance
+
+- **http:** cache `reqwest::blocking::Client` per `(timeout, no_follow)` tuple. Builds an internal connection pool that was previously discarded between calls. Wins on `fimod registry build-catalog` (N source fetches) and chain molds with multiple `--input-format http` steps.
+- **template:** cache compiled minijinja `Environment` process-wide, keyed by `(template_source, auto_escape)`. Eliminates N×compile work on per-row template rendering. Cache is unbounded (same rationale as `regex.rs::REGEX_CACHE`); LRU bound deferred to follow-up if it bites.
+- **template:** switch template cache key to `(u64 hash, bool)` with original `Arc<str>` stored as part of the value for collision verification. Lookup allocates zero bytes on the common path; insertion clones once into `Arc<str>` (O(1)-cloneable thereafter).
+- **engine:** thread `MontyObject` between chain steps instead of converting to `serde_json::Value` and back. Only chain-exit (I/O serialize boundary) and `set_input_format` mid-chain still pay the round-trip.
+
+### Refactoring
+
+- **pipeline:** introduce `PipelineMetadata` and `ChainExecCtx`; drop the ad-hoc `context_base` `serde_json::Object`. `execute_chain` arg count drops from 9 to 5; `run_pipeline_core` from 13 to 6.
+- **engine:** embed `PipelineMetadata` by reference into `MoldOptions` so the 5 chain-wide fields (`input`, `output`, `in_place`, `slurp`, `no_input`) live in one place instead of being duplicated.
+- **pipeline:** add `execute_chain_to_value(...) -> ChainOutput` helper for the chain-exit `MontyObject → Value` boundary, deduplicating the conversion between `run_pipeline_core` and `cmd::shape` slurp.
+- **pipeline:** extract `url_path_only` (strip `?query`/`#fragment` from URL — 3 call sites) and `write_bytes_to` (raw output path — 3 call sites) helpers.
+- **cmd/shape:** extract `validate_post_input_list` and `run_raw_passthrough` from `run_shape`. Function drops from 200+ to ~110 lines and reads linearly.
+- **mold:** add `find_script(name, base)` helper as the single source of truth for the 3-rule local-mold lookup (`name.py` → `name/last.py` → `name/__main__.py`); deduplicate `resolve_local` and `find_local_mold_script`.
+- **mold:** add `load_defaults(path)` helper (returns `Result<MoldDefaults>`); 5 call sites in `registry/catalog.rs` and `registry/molds.rs` collapse from inlined `fs::read_to_string + parse_mold_defaults` dances.
+- **monty_args:** add `expect_string_owned(obj, label)` helper. Eight call sites in `format_control.rs`, `template.rs`, `engine.rs` collapse from 4-line match blocks to 1 line each.
+- **paths:** promote `cache_dir()` to `paths.rs` so the `HOME` / `USERPROFILE` / `.` fallback convention lives in one place. Drop `registry::cache_base_dir` re-export.
+- **registry:** use `unwrap_or_default()` in path-stem extraction (standard idiom).
+
+### Housekeeping
+
+- **deps:** bump `httpmock` 0.7.0 → 0.8.3 (major dev-dep bump pre-announced as deferred in 0.7.2) and migrate the 8 call sites in `tests/cli/http_e2e.rs` from `assert_hits` to `assert_calls` (deprecated in 0.8). Unblocks `task outdated` for this release cycle.
+- **comments:** trim WHAT-comments per project rule (`pipeline.rs::execute_chain`, `engine.rs::MoldOptions`, `cmd/shape.rs::build_script_refs`).
+- **notes:** close `notes/todo-0.7.2.md` cycle backlog (content shipped); open `notes/todo-0.7.3.md` cycle backlog.
+- **style:** rustfmt cleanup in `template.rs` (cargo fmt joined a 2-line `let template_str = expect_string_owned(...)` after surrounding-file modifications).
+- **deps deferred:** `reqwest` 0.12 → 0.13 (major bump, full HTTP surface to re-validate including timeout/redirect/proxy/auth-across-redirects/raw bytes paths covered by `tests/cli/http_e2e.rs`) — deferred to a dedicated `chore(deps)` PR in a later cycle. Release cut via `/release-workflow --allow-outdated`.
+
 ## [0.7.2] — 2026-05-14
 
 ### Highlights
