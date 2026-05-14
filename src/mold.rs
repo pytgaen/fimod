@@ -652,6 +652,15 @@ fn unquote_desc(s: &str) -> Option<String> {
     }
 }
 
+/// Read the mold script at `path` and parse its `MoldDefaults`.
+///
+/// Errors propagate the IO failure with no extra context; callers add
+/// their own (`.with_context()`, `.unwrap_or_default()`, `.ok()…`).
+pub fn load_defaults(path: &Path) -> Result<MoldDefaults> {
+    let script = fs::read_to_string(path)?;
+    Ok(parse_mold_defaults(&script))
+}
+
 pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
     let mut defaults = MoldDefaults::default();
     let lines: Vec<&str> = script.lines().collect();

@@ -109,9 +109,8 @@ pub(super) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, Stri
                 continue;
             }
             seen.insert(stem.clone());
-            let desc = fs::read_to_string(&path)
+            let desc = crate::mold::load_defaults(&path)
                 .ok()
-                .map(|s| crate::mold::parse_mold_defaults(&s))
                 .and_then(|d| effective_description(&d));
             let rel = format!("{stem}.py");
             results.push((stem, desc, rel));
@@ -130,9 +129,8 @@ pub(super) fn scan_local_molds(base: &Path) -> Vec<(String, Option<String>, Stri
             };
             if let Some((script, rel)) = script {
                 seen.insert(stem.clone());
-                let desc = fs::read_to_string(&script)
+                let desc = crate::mold::load_defaults(&script)
                     .ok()
-                    .map(|s| crate::mold::parse_mold_defaults(&s))
                     .and_then(|d| effective_description(&d));
                 results.push((stem, desc, rel));
             }
@@ -463,9 +461,7 @@ pub fn build_catalog(registry_name: Option<&str>, direct_path: Option<&str>) -> 
     let mut catalog = Catalog::default();
     for (name, _description, rel_path) in &molds {
         let script_path = Path::new(base).join(rel_path);
-        let defaults = fs::read_to_string(&script_path)
-            .map(|s| crate::mold::parse_mold_defaults(&s))
-            .unwrap_or_default();
+        let defaults = crate::mold::load_defaults(&script_path).unwrap_or_default();
 
         let readme = Path::new(rel_path)
             .parent()

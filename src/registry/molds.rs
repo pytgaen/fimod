@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -328,9 +327,8 @@ fn collect_mold_matches(
                 let Some(script_path) = crate::mold::find_script(Path::new(base), mold_name) else {
                     continue;
                 };
-                let script = fs::read_to_string(&script_path)
+                let defaults = crate::mold::load_defaults(&script_path)
                     .with_context(|| format!("Cannot read {script_path:?}"))?;
-                let defaults = crate::mold::parse_mold_defaults(&script);
                 matches.push(MoldMatch {
                     reg_name: Some(reg_name.to_string()),
                     prio_label: label,
@@ -547,10 +545,8 @@ pub fn show_mold_by_path(
         .canonicalize()
         .with_context(|| format!("Cannot resolve path: {}", path.display()))?;
 
-    let script = fs::read_to_string(&script_path)
+    let defaults = crate::mold::load_defaults(&script_path)
         .with_context(|| format!("Cannot read {}", script_path.display()))?;
-
-    let defaults = crate::mold::parse_mold_defaults(&script);
 
     let mold_name = name_override.map(str::to_string).unwrap_or_else(|| {
         let stem = script_path
