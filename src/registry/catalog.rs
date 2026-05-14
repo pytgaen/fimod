@@ -161,21 +161,10 @@ pub(super) fn catalog_url_for(source: &Source) -> Result<String> {
 
 // ── catalog cache (ETag) ─────────────────────────────────────────────────────
 
-/// Base directory for all fimod caches: `~/.cache/fimod/` (respects `FIMOD_CACHE_DIR`).
-pub(crate) fn cache_base_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("FIMOD_CACHE_DIR") {
-        return PathBuf::from(dir);
-    }
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".cache").join("fimod")
-}
-
 /// Catalog cache directory for a specific source URL.
 fn catalog_cache_dir(catalog_url: &str) -> PathBuf {
     let hash = crate::paths::sha256_hex(catalog_url.as_bytes());
-    cache_base_dir().join("catalog").join(&hash[..16])
+    crate::paths::cache_dir().join("catalog").join(&hash[..16])
 }
 
 /// TTL for cached catalogs: skip HTTP entirely if the cache file is younger than this.
@@ -265,7 +254,7 @@ pub(super) fn fetch_catalog(source: &Source, no_cache: bool) -> Result<Option<Ca
 /// - `None` → wipe the entire cache directory
 /// - `Some(name)` → wipe a specific mold's cache (not yet implemented, clears all)
 pub fn cache_clear(name: Option<&str>) -> Result<()> {
-    let base = cache_base_dir();
+    let base = crate::paths::cache_dir();
     if let Some(_name) = name {
         // TODO: resolve name to URL hash and remove only that entry.
         // For now, clear everything.
@@ -283,7 +272,7 @@ pub fn cache_clear(name: Option<&str>) -> Result<()> {
 
 /// Show cache directory location and disk usage.
 pub fn cache_info() -> Result<()> {
-    let base = cache_base_dir();
+    let base = crate::paths::cache_dir();
     println!("Cache directory: {}", base.display());
 
     if !base.exists() {

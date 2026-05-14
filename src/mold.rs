@@ -341,7 +341,7 @@ impl MoldSource {
             } => {
                 #[cfg(feature = "reqwest")]
                 {
-                    let cache_base = crate::registry::cache_base_dir();
+                    let cache_base = crate::paths::cache_dir();
                     let url_hash = crate::paths::sha256_hex(url.as_bytes());
                     if catalog_hash.is_some() {
                         Some(
@@ -387,7 +387,7 @@ fn load_url_with_cache(
     companion_urls: &[String],
     no_cache: bool,
 ) -> Result<String> {
-    let cache_base = crate::registry::cache_base_dir();
+    let cache_base = crate::paths::cache_dir();
     let url_hash = crate::paths::sha256_hex(url.as_bytes());
 
     // ── hash-based cache (registry molds) ─────────────────────────────────
