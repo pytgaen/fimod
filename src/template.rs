@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -11,11 +12,22 @@ use crate::monty_args::expect_string_owned;
 use crate::serde_compat::NativeNumbers;
 
 /// Process-wide cache of compiled `minijinja::Environment`s, keyed by
-/// `(template_source, auto_escape)`. Unbounded by design — same rationale as
-/// `regex.rs::REGEX_CACHE`: CLI runs are short-lived; long-running library
-/// users with data-derived templates should clear the cache themselves.
-type TemplateCache = HashMap<(String, bool), Arc<Environment<'static>>>;
+/// `(hash(template_source), auto_escape)` to avoid cloning the source on
+/// every lookup. The stored `Arc<str>` is the original source — compared on
+/// hit to detect collisions (rare but theoretically possible with the std
+/// SipHash). On collision, we recompile (correctness preserved, cache lossy).
+///
+/// Unbounded by design — same rationale as `regex.rs::REGEX_CACHE`: CLI runs
+/// are short-lived; long-running library users with data-derived templates
+/// should clear the cache themselves.
+type TemplateCache = HashMap<(u64, bool), (Arc<str>, Arc<Environment<'static>>)>;
 static TPL_CACHE: OnceLock<Mutex<TemplateCache>> = OnceLock::new();
+
+fn hash_template(s: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["tpl_render_str", "tpl_render_from_mold"];
@@ -74,10 +86,15 @@ fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<Mon
 
 fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Environment<'static>>> {
     let cache = TPL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let key = (template_str.to_string(), auto_escape);
+    let key = (hash_template(template_str), auto_escape);
     let mut cache = cache.lock().unwrap();
-    if let Some(env) = cache.get(&key) {
-        return Ok(env.clone());
+    if let Some((stored, env)) = cache.get(&key) {
+        if stored.as_ref() == template_str {
+            return Ok(env.clone());
+        }
+        // Hash collision: fall through to recompile and overwrite. Correctness
+        // preserved; the previous entry is evicted (acceptable since collisions
+        // are astronomically rare in practice).
     }
 
     let mut env = Environment::new();
@@ -89,7 +106,7 @@ fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Envir
     env.add_template_owned("__inline__", template_str.to_string())
         .map_err(|e| anyhow::anyhow!("Template syntax error: {e}"))?;
     let env = Arc::new(env);
-    cache.insert(key, env.clone());
+    cache.insert(key, (Arc::from(template_str), env.clone()));
     Ok(env)
 }
 
