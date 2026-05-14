@@ -12,13 +12,12 @@ pub mod iter_helpers;
 pub mod mold;
 pub(crate) mod monty_args;
 pub mod msg;
-pub(crate) mod paths;
+pub mod paths;
 pub mod pipeline;
 pub mod regex;
 pub mod registry;
 pub mod sandbox;
 pub mod serde_compat;
-pub mod setup;
 pub mod template;
 pub mod test_runner;
 

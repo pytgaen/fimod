@@ -4,7 +4,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use std::process;
 
 use fimod::pipeline::CliResult;
-use fimod::{registry, setup, test_runner};
+use fimod::{registry, test_runner};
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
@@ -79,7 +79,7 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
             }
             RegistryAction::Setup { yes } => {
                 eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
-                setup::registry_defaults(yes, false)
+                cmd::setup::registry_defaults(yes, false)
             }
             RegistryAction::Cache { action } => match action {
                 CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),
@@ -112,13 +112,13 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
         Commands::Setup { category } => match category {
             SetupCategory::Registry {
                 action: SetupDefaults::Defaults { yes, force },
-            } => setup::registry_defaults(yes, force),
+            } => cmd::setup::registry_defaults(yes, force),
             SetupCategory::Sandbox {
                 action: SetupDefaults::Defaults { yes, force },
-            } => setup::sandbox_defaults(yes, force),
+            } => cmd::setup::sandbox_defaults(yes, force),
             SetupCategory::All {
                 action: SetupDefaults::Defaults { yes, force },
-            } => setup::all_defaults(yes, force),
+            } => cmd::setup::all_defaults(yes, force),
             SetupCategory::Completions { shell } => {
                 cmd::completions::print_completion_script(shell)
             }

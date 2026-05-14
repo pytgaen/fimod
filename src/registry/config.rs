@@ -99,7 +99,7 @@ pub struct SourcesConfig {
 
 // ── persistence ───────────────────────────────────────────────────────────────
 
-pub(crate) fn load_config() -> Result<SourcesConfig> {
+pub fn load_config() -> Result<SourcesConfig> {
     let path = config_path()?;
     if !path.exists() {
         return Ok(SourcesConfig::default());
@@ -120,7 +120,7 @@ pub(crate) fn load_config() -> Result<SourcesConfig> {
     Ok(cfg)
 }
 
-pub(crate) fn save_config(cfg: &SourcesConfig) -> Result<()> {
+pub fn save_config(cfg: &SourcesConfig) -> Result<()> {
     let path = config_path()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)

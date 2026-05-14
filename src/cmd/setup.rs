@@ -213,5 +213,5 @@ pub fn all_defaults(yes: bool, force: bool) -> Result<()> {
 }
 
 fn sandbox_config_path() -> Result<PathBuf> {
-    Ok(crate::paths::config_dir()?.join("sandbox.toml"))
+    Ok(fimod::paths::config_dir()?.join("sandbox.toml"))
 }
