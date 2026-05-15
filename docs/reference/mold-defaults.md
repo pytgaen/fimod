@@ -8,7 +8,7 @@ A mold script can embed default CLI options via `# fimod:` comment directives. T
 ```python
 # fimod: input-format=csv, output-format=json
 # fimod: csv-delimiter=;
-def transform(data, args, env, headers):
+def transform(data, **_):
     return [{"name": row["name"], "age": int(row["age"])} for row in data]
 ```
 
@@ -86,7 +86,7 @@ Here `input-format` is locked to `csv`; `output-format` is a suggestion that the
 # fimod: output-format=json
 # fimod: csv-delimiter=;
 # fimod: csv-no-input-header
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     # data = [{"col0": ..., "col1": ...}, ...]
     return [{"name": row["col0"], "value": int(row["col1"])} for row in data]
 ```

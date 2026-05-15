@@ -240,7 +240,7 @@ The classic `yq`/`jq` slurp use case — merge a base config with environment ov
 ```bash
 # Merge base.yaml with prod overrides in TOML — impossible with yq
 fimod s -i base.yaml -i prod.toml -s -e '
-def transform(data):
+def transform(data, **_):
     data[0].update(data[1])
     return data[0]
 '
@@ -255,7 +255,7 @@ def transform(data):
 ```bash
 # Merge base with prod overrides — role is explicit, no need to count -i flags
 fimod s -i base.yaml: -i prod.yaml: -s -e '
-def transform(data):
+def transform(data, **_):
     data["base"].update(data["prod"])
     return data["base"]
 '
@@ -301,11 +301,11 @@ fimod s -i data.json \
 
 ### 📦 Reusable molds & registries
 
-A **mold** is a Python file with a `transform(data, args, env, headers)` function. Inline `-e` expressions are great for one-liners, molds are for transforms you want to name, test, and share.
+A **mold** is a Python file with a `transform(data, **_)` function. Add named context parameters before `**_` when needed, for example `args` or `pipeline`. Keeping `**_` is the recommended convention for reusable molds because fimod passes context as keyword arguments.
 
 ```python
 # normalize.py
-def transform(data, args, env, headers):
+def transform(data, **_):
     return [{"name": u["name"].strip().title(), "email": u["email"].lower()} for u in data]
 ```
 

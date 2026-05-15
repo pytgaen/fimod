@@ -162,7 +162,7 @@ Data→text generation using [Jinja2](https://jinja.palletsprojects.com/) templa
 **`tpl_render_str(template, ctx, auto_escape=False)`** — Render a Jinja2 template string with a context dict. All built-in Jinja2 filters (`upper`, `join`, `tojson`, …), loops, conditions, and macros are available.
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return tpl_render_str("""
 FROM python:{{ python_version }}-slim
 {% for pkg in packages %}
@@ -180,7 +180,7 @@ echo '{"python_version":"3.12","packages":["flask","requests"]}' \
 
 ```python
 # my_mold/my_mold.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     tpl = args.get("template", "Dockerfile.j2")
     return tpl_render_from_mold(f"templates/{tpl}", data)
 ```
@@ -212,7 +212,7 @@ Which functions produce output depends on the `--quiet` / `--msg-level` flags:
 | `msg_trace` | `[TRACE] text` | — | — | — | ✓ |
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     msg_verbose(f"Input has {len(data)} records")
     missing = [r for r in data if not r.get("email")]
     if missing:
@@ -236,7 +236,7 @@ Validation helpers for asserting conditions and controlling pipeline failure. Wo
 `gk_assert` and `gk_warn` use **Python-style truthiness**: `None`, `False`, `0`, `0.0`, `""`, `[]` are falsy.
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     gk_assert(data.get("version"), "missing 'version' field")
     gk_warn(len(data.get("items", [])) > 0, "items list is empty")
     if data.get("coverage", 0) < 80:
@@ -258,7 +258,7 @@ def transform(data, args, env, headers):
 Unknown variables are left as-is (standard `envsubst` behavior). Only `${VAR}` syntax is supported (`$VAR` without braces is not substituted).
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     url = env_subst("https://${HOST}:${PORT}/api", env)
     return {"url": url, "data": data}
 ```
@@ -310,14 +310,21 @@ Supported format names for `set_input_format`: `json`, `ndjson`, `yaml`, `toml`,
 
 ## 🧩 Transform parameters
 
-All mold scripts receive four parameters: `def transform(data, args, env, headers)`.
+Reusable molds should include `**_` in their `transform` signature:
+
+```python
+def transform(data, **_):
+    return data
+```
+
+Fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments. Declare the ones you need before `**_`; keep `**_` so unused or future keywords do not break the mold.
 
 ### `args`
 
 Dict of `--arg name=value` pairs. Empty dict `{}` when no `--arg` is passed:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     limit  = int(args["threshold"])
     prefix = args.get("prefix", "")   # with default
     return [u for u in data if u["name"].startswith(prefix) and u["age"] > limit]
@@ -345,7 +352,7 @@ Carol,95,true
 ```
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     # headers = ["name", "score", "passed"] for CSV, None otherwise
     if headers and "score" in headers:
         return it_sort_by(data, "score")

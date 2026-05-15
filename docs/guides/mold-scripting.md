@@ -4,7 +4,10 @@ Mold scripts are written in the Python subset supported by [Monty](https://githu
 
 ## 🎯 The `transform` function
 
-Your script must define a function named `transform` that receives `data` and returns the result. Only declare the parameters you need — `args`, `env`, and `headers` are passed as keyword arguments:
+Your script must define a function named `transform` that receives `data` and returns the result. Fimod passes extra context (`args`, `env`, `headers`, `pipeline`) as keyword arguments.
+
+!!! tip "Always keep `**_` in reusable molds"
+    `**_` is the recommended convention and should be treated as mandatory for reusable molds. It lets your script ignore context it does not need, and it keeps the mold compatible when fimod adds new keyword parameters.
 
 ```python
 # Minimal — data only
@@ -15,8 +18,8 @@ def transform(data, **_):
 def transform(data, args, **_):
     return [item for item in data if item["age"] > int(args["min_age"])]
 
-# Full signature — all parameters
-def transform(data, args, env, headers, pipeline):
+# Full signature — all current parameters
+def transform(data, args, env, headers, pipeline, **_):
     # process data
     return data
 ```
@@ -34,7 +37,7 @@ Multi-statement expressions need an explicit `def transform`:
 
 ```bash
 fimod s -i data.json -e '
-def transform(data, args, env, headers):
+def transform(data, **_):
     result = []
     for item in data:
         result.append(item["name"].upper())
@@ -65,38 +68,38 @@ Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — support
 
 ```python
 # 📧 Find all email addresses
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_findall(r"\w+@\w+\.\w+", data["text"])
 
 # 🧹 Clean whitespace
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"cleaned": re_sub(r"\s+", " ", data["text"])}
 
 # ✂️ Split on multiple delimiters
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_split(r"[,;]\s*", data["tags"])
 
 # 👤 Lookahead — extract usernames from emails
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_findall(r"\w+(?=@)", data["text"])
 
 # 📋 Capture groups — extract structured data
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     m = re_search(r"(?P<user>\w+)@(?P<domain>\w+)", data["email"])
     if m:
         return {"user": m["groups"][0], "domain": m["named"]["domain"]}
     return None
 
 # 🔄 Replacement with group references — Python syntax (\1, \g<name>)
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_sub(r"(\w+)@(\w+)", r"\2/\1", data["text"])
 
 # 🔄 Named group replacement
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_sub(r"(?P<user>\w+)@(?P<domain>\w+)", r"\g<domain>/\g<user>", data["text"])
 
 # 🔢 Replace only first N occurrences (count argument)
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return re_sub(r"\d+", "X", data["text"], 1)   # replace first match only
 ```
 
@@ -114,14 +117,14 @@ And their `_fancy` counterparts: `re_search_fancy` · `re_match_fancy` · `re_fi
 Navigate and mutate nested structures without chained dict/array accesses:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     city    = dp_get(data, "user.address.city")
     country = dp_get(data, "user.address.country", "unknown")  # with default
     last    = dp_get(data, "items.-1")   # 🔢 negative index = from end
     return {"city": city, "country": country}
 
 # dp_set returns a new deep copy — original unchanged
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data = dp_set(data, "meta.processed", True)
     data = dp_set(data, "config.db.host", "localhost")
     return data
@@ -133,23 +136,23 @@ Convenience functions for common list/dict operations:
 
 ```python
 # 📂 Group by field name (string, not lambda!)
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_group_by(data, "department")
 
 # 🔼 Sort by field
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_sort_by(data, "age")
 
 # 🧹 Deduplicate by field (keeps first occurrence)
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_unique_by(data, "email")
 
 # 🌀 Recursive flatten: [1, [2, [3, 4]]] → [1, 2, 3, 4]
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_flatten(data["nested_lists"])
 
 # 🔑 Unique primitives
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_unique(data["tags"])
 ```
 
@@ -160,13 +163,13 @@ def transform(data, args, env, headers):
 
 ```python
 # 🔒 Anonymize PII
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for user in data:
         user["email"] = hs_sha256(user["email"])
     return data
 
 # 🔑 Stable ID from composite key
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         row["id"] = hs_md5(f"{row['name']}|{row['dob']}")
     return data
@@ -181,7 +184,7 @@ Generate **any text file** from data using [Jinja2](https://jinja.palletsproject
 **Inline templates** with `tpl_render_str` — great for one-liners and small molds:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return tpl_render_str("""
 FROM python:{{ python_version }}-slim
 {% for pkg in packages %}
@@ -207,7 +210,7 @@ my_mold/
 """Generate Dockerfile from project config."""
 # fimod: output-format=txt
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     tpl = args.get("template", "Dockerfile.j2")
     return tpl_render_from_mold(f"templates/{tpl}", data)
 ```
@@ -224,7 +227,7 @@ Available: `tpl_render_str(template, ctx)` · `tpl_render_from_mold(path, ctx)` 
 Output diagnostic messages to stderr — useful for progress, warnings, and debugging without polluting stdout:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     msg_info(f"Processing {len(data)} records")
     for row in data:
         if not row.get("email"):
@@ -239,7 +242,7 @@ Available: `msg_print` (no prefix) · `msg_info` (`[INFO]`) · `msg_warn` (`[WAR
 Assert conditions and fail the pipeline with a non-zero exit code:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     gk_assert(data.get("version"), "missing 'version' field")
     gk_warn(len(data.get("items", [])) > 0, "items list is empty")
     if data.get("coverage", 0) < 80:
@@ -285,7 +288,7 @@ Bootstrap the canonical sandbox file with `fimod setup sandbox defaults --yes`, 
 `env_subst(template, dict)` replaces `${VAR}` placeholders using a dict:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return env_subst("https://${HOST}:${PORT}/api", env)
 ```
 
@@ -298,7 +301,7 @@ fimod s -i data.json --env 'HOST,PORT' -e 'env_subst("${HOST}:${PORT}", env)' --
 `set_exit(code)` sets the process exit code without stopping execution:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     if not data.get("valid"):
         set_exit(1)
     return data
@@ -313,12 +316,12 @@ When combined with `--check`, `set_exit` takes priority for the exit code — se
 When the input is CSV with a header row, fimod injects a `headers` global (list of column names in file order):
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     # headers = ["name", "age", "email"]  ← auto-injected by fimod
     return {"columns": headers, "count": len(data)}
 
 # 🔢 Generic numeric column processing
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     numeric_cols = [h for h in headers if h.endswith("_amount")]
     for row in data:
         row["total"] = sum(float(row[c]) for c in numeric_cols)
@@ -453,7 +456,7 @@ Scripts can embed default CLI options via `# fimod:` directives at the very top 
 ```python
 # fimod: input-format=csv, output-format=json
 # fimod: csv-delimiter=;
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return [{"name": row["name"], "age": int(row["age"])} for row in data]
 ```
 
@@ -467,10 +470,10 @@ See [Mold Defaults](../reference/mold-defaults.md) for all supported directives.
 
 ## 📎 The `args` dict
 
-`--arg name=value` populates the `args` parameter of `transform(data, args, env, headers)`:
+`--arg name=value` populates the `args` parameter of `transform(data, args, **_)`:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, **_):
     limit  = int(args["threshold"])
     prefix = args.get("prefix", "")
     return [u for u in data if u["name"].startswith(prefix) and u["age"] > limit]

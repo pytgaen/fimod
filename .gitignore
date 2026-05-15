@@ -25,7 +25,9 @@ venv/
 # ─── Outils AI / Serena ─────────────────────────────────
 .serena/
 .cache/
-.claude/
+.claude
+.agents/
+!.agents/skills/fimod
 
 # ─── IDE & Editors ─────────────────────────────────────
 .vscode/

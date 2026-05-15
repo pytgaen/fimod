@@ -203,7 +203,7 @@ fimod s --no-input -m generate.py --arg count=5
 
 ```python
 # generate.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     n = int(args["count"])
     return [{"id": i, "value": i * i} for i in range(n)]
 ```
@@ -474,7 +474,7 @@ Mold descriptions come from the module-level docstring at the top of each script
 
 ```python
 """Normalise field names to snake_case."""
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     ...
 ```
 
@@ -604,7 +604,7 @@ When the input CSV has a header row, a `headers` global is automatically availab
 
     ```python
     # cleanup.py
-    def transform(data, args, env, headers):
+    def transform(data, args, env, headers, **_):
         for row in data:
             row["name"] = row["name"].strip().title()
         return data
@@ -657,7 +657,7 @@ fimod s -i users.json --arg threshold=30 -e '
 fimod s -i data.json -m filter.py --arg threshold=30 --arg prefix="A"
 ```
 
-Access via `args["key"]` in the `transform(data, args, env, headers)` function.
+Access via `args["key"]` in a mold signature such as `def transform(data, args, **_):`.
 
 ---
 

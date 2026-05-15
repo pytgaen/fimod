@@ -93,7 +93,7 @@ Validate the status before processing the body:
 
 ```bash
 cat > /tmp/check_api.py << 'EOF'
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     if data["status"] != 200:
         gk_fail(f"API returned {data['status']}")
     set_input_format("json")

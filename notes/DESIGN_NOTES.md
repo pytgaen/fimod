@@ -26,19 +26,20 @@ The single source of truth is `run_pipeline_core()` in `pipeline.rs`. `process_s
 
 All parsing/serialization (serde) remains entirely in Rust. Monty only manipulates Python dicts. This is a deliberate security boundary: user scripts never have access to the filesystem or the network.
 
-Concretely, `engine.rs` enforces this at the VM boundary: every `RunProgress::OsCall` yielded by Monty (`Path.*`, `os.getenv`, `os.environ`, `datetime.now`, `date.today`) is resumed with `MontyObject::None`. This is a blanket deny-all today — it keeps the security story simple but has ergonomic cost (`datetime.now()` silently returns `None`). See `notes/monty-default-sandboxing.md` for the 0.5.0 plan to make this configurable via `sandbox.toml`.
+Concretely, `engine.rs` enforces this at the VM boundary: every `RunProgress::OsCall` yielded by Monty is routed through `dispatch_os_call()` and checked against the resolved `SandboxPolicy`. Clock access (`datetime.now`, `date.today`) is opt-in via `allow_clock`; `os.getenv` only returns values allowed by `allow_env`; `os.environ` returns an empty dict when denied; filesystem calls still return `None` until mount-based access exists. Resource limits are applied by default (`2m` / `1GB`) unless the policy explicitly changes them.
 
-### `transform(data, args, env, headers)` with kwargs
+### `transform(data, **_)` with kwargs
 
-Molds define `transform(data, args, env, headers)`. fimod passes `args`, `env`, and `headers` as **keyword arguments**, so molds only declare what they actually use — `def transform(data, **_)`, `def transform(data, args, **_)`, or the full signature all work. Inline `-e` expressions are auto-wrapped into this form.
+Molds define `transform(data, **_)`. fimod passes `args`, `env`, `headers`, and `pipeline` as **keyword arguments**, so reusable molds should keep `**_` and only declare the named parameters they actually use — `def transform(data, **_)`, `def transform(data, args, **_)`, `def transform(data, pipeline, **_)`, etc. Inline `-e` expressions are auto-wrapped into a `transform(..., **_)` function.
 
 - `args` dict ← `--arg name=value` (explicit `args["threshold"]`, no magic globals)
 - `env` dict ← `--env PATTERN` filtered environment (empty `{}` without `--env`)
 - `headers` list ← CSV column names (`None` for non-CSV)
+- `pipeline` object ← current/future pipeline state for dynamic molds
 
 ### Mold chaining
 
-Multiple `-m` and `-e` arguments execute sequentially; the output of each step becomes the input of the next (`execute_chain` in `main.rs`). Between steps, if `set_input_format()` was called, the result is re-serialized then re-parsed with the new format. The `"raw"` output format is restricted to the final step only.
+Multiple `-m` and `-e` arguments execute sequentially; the output of each step becomes the input of the next (`execute_chain` in `pipeline.rs`). Between steps, the hot path threads `MontyObject` directly. If `set_input_format()` was called, the result is converted, serialized, and re-parsed with the new format. The `"raw"` output format is restricted to the final step only.
 
 ### Batch mode (multiple inputs)
 
@@ -80,9 +81,9 @@ Convention: 2-letter prefix to avoid collisions with Python builtins and make th
 | — | `exit_control.rs` | `set_exit(code)` |
 | — | `format_control.rs` | `set_input_format`, `set_output_format`, `set_output_file`, `cast_input_format` |
 
-### `fancy-regex` rather than `regex`
+### `fancy-regex` rather than Rust `regex`
 
-Monty does not support `import re`. Rust's `regex` crate is not PCRE2-compatible (no backreferences, lookahead, lookbehind). `fancy-regex` offers the best compromise: pure Rust, no C dependency, covers the most used PCRE2 features. ReDoS protection via `FIMOD_REGEX_BACKTRACK_LIMIT` (default: 100k). Python replacement syntax (`\1`, `\g<name>`) is auto-converted.
+Fimod's `re_*` built-ins predate Monty's `import re` support and remain useful because they expose structured results, explicit replacement modes, and ReDoS protection via `FIMOD_REGEX_BACKTRACK_LIMIT` (default: 100k). Rust's standard `regex` crate is not PCRE2-compatible (no backreferences, lookahead, lookbehind), so the built-ins use `fancy-regex`. Python replacement syntax (`\1`, `\g<name>`) is auto-converted for `re_sub`; `re_sub_fancy` exposes `$1` / `${name}` directly.
 
 ### Message levels
 
@@ -100,7 +101,7 @@ Four external functions let a mold override pipeline behavior at runtime:
 - `set_output_file(path)` — dynamically redirect output (override `-o`)
 - `cast_input_format(name, value)` — single-expression combo of set + re-parse
 
-`execute_mold` returns a 4-tuple: `(Value, Option<i32>, Option<String>, Option<String>)` — result, exit code, format override, output file override.
+`execute_mold` returns `MoldExecResult`: the step result as `MontyObject`, optional exit code, output format/file overrides, plus pending dynamic pipeline steps and mutations.
 
 ### Environment variable filtering (`--env`)
 
@@ -153,8 +154,8 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 - `@name` resolves via the default registry; `@source/name` resolves via a specific source.
 - Auto-token detection for GitHub (`GITHUB_TOKEN`) and GitLab (`GITLAB_TOKEN`).
 - Remote registries publish a `catalog.toml` for discovery.
-- `fimod registry setup` handles first-run onboarding.
-- Subcommands: `list`, `add`, `show`, `remove`, `set-priority`, `build-catalog`, `setup`.
+- `fimod setup registry defaults` handles first-run onboarding; `fimod registry setup` is only a deprecated compatibility alias.
+- Subcommands: `list`, `add`, `show`, `remove`, `set-priority`, `build-catalog`, `cache`.
 
 ### Mold test runner
 
@@ -170,11 +171,11 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 
 ### Shell completions
 
-Dynamic shell completions via `clap_complete` `CompleteEnv`. When the `COMPLETE=<shell>` env var is set, the binary generates a shell-specific completion script and exits. The `fimod completions <shell>` subcommand prints the activation instruction. Custom `ArgValueCompleter`s provide dynamic completion for `--input/output-format` (format names), `-m @<TAB>` (registry mold names), and registry source name arguments.
+Dynamic shell completions via `clap_complete` `CompleteEnv`. When the `COMPLETE=<shell>` env var is set, the binary generates a shell-specific completion script and exits. `fimod setup completions --shell <shell>` prints an activation script suitable for `eval`. Custom `ArgValueCompleter`s provide dynamic completion for `--input/output-format` (format names), `-m @<TAB>` (registry mold names), and registry source name arguments.
 
 ### Optional subcommand
 
-CLI uses `Option<Commands>`: `None` = shape mode (default pipeline), `Some(Registry{..})` = registry management, `Some(Mold{..})` = mold browsing/testing, `Some(Monty{..})` = REPL.
+CLI uses `Option<Commands>`: `Some(Shape(..))` = pipeline, `Some(Registry{..})` = registry management, `Some(Mold{..})` = mold browsing/testing, `Some(Monty{..})` = REPL, `Some(Setup{..})` = setup helpers. `None` prints help and exits with code 2.
 
 ## CI / Build
 
@@ -210,5 +211,5 @@ All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `rust-toolchain
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.14` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.17` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.

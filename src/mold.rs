@@ -342,7 +342,7 @@ impl MoldSource {
                 } else {
                     // Auto-wrap: the expression becomes the return value
                     Ok(format!(
-                        "def transform(data, args, env, headers, pipeline):\n    return {expr}"
+                        "def transform(data, args, env, headers, pipeline, **_):\n    return {expr}"
                     ))
                 }
             }
@@ -578,7 +578,7 @@ pub struct MoldDefaults {
 /// """Free-form docs (multi-line)."""
 /// # fimod: input-format=csv
 /// # fimod: arg=name  Description
-/// def transform(data, args, env, headers): ...
+/// def transform(data, args, **_): ...
 /// ```
 ///
 /// Directives are scanned in contiguous comment lines that follow the docstring
@@ -848,7 +848,7 @@ mod tests {
     fn test_inline_auto_wrap() {
         let src = MoldSource::Inline("data['x'] + 1".to_string());
         let script = src.load(false).unwrap();
-        assert!(script.contains("def transform(data, args, env, headers, pipeline):"));
+        assert!(script.contains("def transform(data, args, env, headers, pipeline, **_):"));
         assert!(script.contains("return data['x'] + 1"));
     }
 

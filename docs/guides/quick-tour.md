@@ -24,7 +24,7 @@ For multi-statement transforms, write `def transform` inside `-e`:
 
 ```bash
 fimod s -i data.json -e '
-def transform(data, args, env, headers):
+def transform(data, **_):
     result = {}
     for item in data:
         result[item["id"]] = item["name"]
@@ -34,11 +34,11 @@ def transform(data, args, env, headers):
 
 ## 📜 Reusable scripts (`-m`)
 
-For reusable transforms, write a `transform(data, args, env, headers)` function in a `.py` file:
+For reusable transforms, write a `transform(data, **_)` function in a `.py` file. Add `args`, `env`, `headers`, or `pipeline` before `**_` only when the mold uses them:
 
 ```python
 # cleanup.py
-def transform(data, args, env, headers):
+def transform(data, **_):
     for row in data:
         row["name"] = row["name"].strip().title()
         row["email"] = row["email"].strip().lower()
@@ -230,7 +230,7 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 ```python
 # anonymize.py
 # fimod: input-format=csv, output-format=csv
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         row["email"] = hs_sha256(row["email"])
         row["phone"] = hs_sha256(row["phone"])
@@ -339,7 +339,7 @@ my_mold/
 """Generate nginx config from a service descriptor."""
 # fimod: output-format=txt
 
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return tpl_render_from_mold("templates/nginx.conf.j2", data)
 ```
 

@@ -616,7 +616,8 @@ fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyOb
 
 /// Execute a mold Python script against input data using Monty.
 ///
-/// The script must define a `transform(data, args, env, headers, pipeline)` function.
+/// The script must define a `transform(data, **_)` function.
+/// `args`, `env`, `headers`, and `pipeline` are passed as keyword arguments.
 /// All parameters are always passed explicitly — no global variable injection.
 ///
 /// Takes `data` as an owned `MontyObject` to avoid the json_to_monty conversion

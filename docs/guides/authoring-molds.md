@@ -18,7 +18,7 @@ fimod s -i data.json -e '[u for u in data if u["active"]]'
 
 ```python
 # cleanup.py
-def transform(data, args, env, headers):
+def transform(data, **_):
     return [u for u in data if u["active"] and u.get("role") == "admin"]
 ```
 
@@ -52,7 +52,7 @@ fimod s -i data.json -m cleanup.py --debug
 [debug] input format:  json
 [debug] output format: json
 [debug] script:
-  def transform(data, args, env, headers):
+  def transform(data, **_):
       return [u for u in data if u["active"]]
 [debug] input data:
   [{"name": "Alice", "active": true}, {"name": "Bob", "active": false}]
@@ -171,7 +171,7 @@ Avoid hardcoding values — use `args` to make your mold reusable:
 
 ```python
 # filter.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     field = args["field"]
     value = args["value"]
     return [row for row in data if row.get(field) == value]
@@ -193,7 +193,7 @@ If your mold always expects CSV input or compact JSON output, declare it at the 
 ```python
 """Convert CSV scores to JSON."""
 # fimod: input-format=csv, output-format=json
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return [{"name": row["name"], "score": int(row["score"])} for row in data]
 ```
 

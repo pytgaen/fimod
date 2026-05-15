@@ -57,7 +57,7 @@ The intermediate representation between formats is always `serde_json::Value`. M
 
 **Key design decisions:**
 - All parsing/serialization stays in Rust (serde). Monty only manipulates Python dicts — this is a security boundary.
-- Mold scripts must define a `transform(data, ...)` function. `args`, `env`, and `headers` are passed as keyword arguments, so molds only need to declare what they use (e.g. `def transform(data, args, **_):`). Inline expressions (`-e`) are auto-wrapped into this form.
+- Mold scripts must define a `transform(data, **_)` function. `args`, `env`, `headers`, and `pipeline` are passed as keyword arguments, so molds only need to declare what they use before `**_` (e.g. `def transform(data, args, **_):`). Inline expressions (`-e`) are auto-wrapped into this form.
 - `--arg name=value` populates the `args` parameter — explicit access via `args["key"]`.
 - `--env PATTERN` populates the `env` parameter with filtered environment variables (glob patterns: `*`, `PREFIX_*`, `EXACT`, comma-separated). Without `--env`, `env` is `{}`.
 - CSV column names are passed as the `headers` parameter (list of strings, or `None` for non-CSV).
@@ -65,8 +65,8 @@ The intermediate representation between formats is always `serde_json::Value`. M
 - `--debug` outputs to stderr with `[debug]` prefix; in debug mode Monty's print() also goes to stderr via custom `StderrPrint` (implements `PrintWriter`).
 - `--in-place` rewrites the input file; output format auto-detection uses the input path.
 - `--csv-output-delimiter` is separate from `--csv-delimiter` via `CsvOptions::effective_output_delimiter()`.
-- Dynamic shell completions use `clap_complete` `CompleteEnv` (activated via `COMPLETE=<shell>` env var). `fimod completions <shell>` prints activation instructions. Custom completers provide contextual completion for format names, `@mold` references, and registry source names.
-- CLI uses `Option<Commands>` for subcommands: `None` = shape mode, `Some(Registry{..})` = registry management (list/add/show/remove/set-priority/build-catalog/setup), `Some(Mold{..})` = mold browsing/testing.
+- Dynamic shell completions use `clap_complete` `CompleteEnv` (activated via `COMPLETE=<shell>` env var). `fimod setup completions --shell <shell>` prints the activation script. Custom completers provide contextual completion for format names, `@mold` references, and registry source names.
+- CLI uses `Option<Commands>` for subcommands: `Some(Shape(..))` = pipeline, `Some(Registry{..})` = registry management (list/add/show/remove/set-priority/build-catalog/cache), `Some(Mold{..})` = mold browsing/testing, `None` prints help and exits 2.
 - Mold description is extracted from the module-level docstring (`"""..."""`) by `parse_mold_defaults()` into `MoldDefaults.docs`, used by `fimod mold list` (local scan) and `catalog.toml` (remote registries). `# fimod: description=` is no longer supported.
 - `--output-format raw` short-circuits the entire transform pipeline (no mold allowed): fetches URL bytes directly or reads a file as binary and writes to `-o`. `set_output_format("raw")` from within a mold triggers the same binary pass-through but requires `--input-format http` to have populated `http_raw_bytes`.
 - `DataFormat::Txt` serializes `Value::String` as a bare string (no JSON quotes); non-strings fall back to compact JSON. Use `--output-format txt` when piping a mold's string output to another command or to `-i`.
