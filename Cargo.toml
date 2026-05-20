@@ -15,7 +15,17 @@ rust-version = "1.75"
 default = ["reqwest", "watch"]
 full = ["reqwest", "watch"]
 slim = []
-watch = ["dep:notify", "dep:notify-debouncer-mini"]
+ffimod = []
+watch = ["dep:notify"]
+
+[[bin]]
+name = "fimod"
+path = "src/main.rs"
+
+[[bin]]
+name = "ffimod"
+path = "src/main.rs"
+required-features = ["ffimod"]
 
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
@@ -40,7 +50,6 @@ minijinja = { version = "2", features = ["json", "loop_controls", "preserve_orde
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 notify = { version = "8", optional = true }
-notify-debouncer-mini = { version = "0.7", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
@@ -48,6 +57,10 @@ opt-level = "z"  # Optimize for size.
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[profile.release-fast]
+inherits = "release"
+opt-level = 3  # Speed over size (used by ffimod)
 
 
 [lints.rust]

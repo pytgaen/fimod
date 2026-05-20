@@ -6,25 +6,24 @@
 
 use std::collections::HashSet;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc;
+use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use fimod::mold::MoldSource;
 use fimod::pipeline::CliResult;
 use fimod::sandbox::SandboxPolicy;
-use notify::RecursiveMode;
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+use notify::event::{AccessKind, AccessMode, ModifyKind};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 
 use crate::cli::ShapeArgs;
 
-const DEBOUNCE_MS: u64 = 150;
-/// Second-level debounce default: after we receive the first batch from
-/// `notify-debouncer-mini`, wait this long and absorb any further batches
-/// the debouncer flushes during that window. Coalesces the multiple `Any`
-/// events that `notify` emits per `File::create` (truncate + write + close
-/// can produce events arriving > DEBOUNCE_MS apart on Linux/inotify).
+/// Debounce default: after we receive the first relevant filesystem event,
+/// wait this long and absorb any further events in that window. Coalesces
+/// the multiple events that `notify` emits per `File::create` (truncate +
+/// write + close) and rapid editor atomic-save bursts.
 /// Override via `FIMOD_WATCH_QUIET_MS=<ms>`.
 const DEFAULT_QUIET_MS: u64 = 500;
 
@@ -58,20 +57,10 @@ pub fn run_watch(
             .join(", ")
     );
 
-    let canonical_targets: HashSet<PathBuf> = watch_files
-        .iter()
-        .filter_map(|p| p.canonicalize().ok())
-        .collect();
-
-    // Pre-compute target filenames so noisy sibling events (.swp, .tmp, etc.)
-    // can be rejected without a canonicalize() syscall on every event.
-    let target_filenames: HashSet<OsString> = watch_files
-        .iter()
-        .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
-        .collect();
+    let targets = WatchTargets::new(&watch_files)?;
 
     let (tx, rx) = mpsc::channel();
-    let mut debouncer = new_debouncer(Duration::from_millis(DEBOUNCE_MS), tx)?;
+    let mut watcher = notify::recommended_watcher(tx)?;
 
     // Watch parent dirs (atomic-rename safe), filter events by filename.
     let mut watched_dirs: HashSet<PathBuf> = HashSet::new();
@@ -82,9 +71,7 @@ pub fn run_watch(
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
         if watched_dirs.insert(parent.clone()) {
-            debouncer
-                .watcher()
-                .watch(&parent, RecursiveMode::NonRecursive)?;
+            watcher.watch(&parent, RecursiveMode::NonRecursive)?;
         }
     }
 
@@ -96,30 +83,17 @@ pub fn run_watch(
     run_once(shape, policy, debug, msg_level, run_n);
 
     while let Ok(first) = rx.recv() {
-        // Second-level debounce: notify can split a single logical write
-        // into multiple events that the first-level debouncer flushes as
-        // separate batches > DEBOUNCE_MS apart on Linux/inotify. We sleep
-        // for the quiet window and drain everything pending so a single
-        // trigger covers the full burst.
-        std::thread::sleep(quiet);
-        let mut batches = vec![first];
-        while let Ok(more) = rx.try_recv() {
-            batches.push(more);
+        // Debounce: notify can split a single logical write into multiple
+        // events. Wait until the stream is quiet so one trigger covers the
+        // full burst.
+        let Some(event) = first.ok() else {
+            continue;
+        };
+        if !event_triggers_rerun(&event, &targets) {
+            continue;
         }
-        let triggered = batches
-            .into_iter()
-            .filter_map(Result::ok)
-            .flatten()
-            .any(|e| {
-                e.kind == DebouncedEventKind::Any
-                    && e.path
-                        .file_name()
-                        .is_some_and(|n| target_filenames.contains(n))
-                    && e.path
-                        .canonicalize()
-                        .map(|p| canonical_targets.contains(&p))
-                        .unwrap_or(false)
-            });
+
+        drain_quiet_period(&rx, &targets, quiet);
 
         // Track input file existence transitions across batches. An atomic
         // save (rename) resolves within the quiet window — fichier existe
@@ -133,10 +107,8 @@ pub fn run_watch(
             input_present = now_present;
         }
 
-        if triggered {
-            run_n += 1;
-            run_once(shape, policy, debug, msg_level, run_n);
-        }
+        run_n += 1;
+        run_once(shape, policy, debug, msg_level, run_n);
     }
 
     Ok(CliResult::Done)
@@ -157,6 +129,100 @@ fn run_once(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u
     }
 }
 
+fn drain_quiet_period(
+    rx: &mpsc::Receiver<notify::Result<Event>>,
+    targets: &WatchTargets,
+    quiet: Duration,
+) {
+    let mut deadline = Instant::now() + quiet;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(remaining) {
+            Ok(Ok(event)) if event_triggers_rerun(&event, targets) => {
+                deadline = Instant::now() + quiet;
+            }
+            Ok(_) => {}
+            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
+        }
+    }
+}
+
+struct WatchTargets {
+    filenames: HashSet<OsString>,
+    canonical_paths: HashSet<PathBuf>,
+    absolute_paths: HashSet<PathBuf>,
+}
+
+impl WatchTargets {
+    fn new(files: &[PathBuf]) -> Result<Self> {
+        let filenames = files
+            .iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
+            .collect();
+        let canonical_paths = files.iter().filter_map(|p| p.canonicalize().ok()).collect();
+        let absolute_paths = files
+            .iter()
+            .map(|p| absolute_normalized_path(p))
+            .collect::<Result<_>>()?;
+
+        Ok(Self {
+            filenames,
+            canonical_paths,
+            absolute_paths,
+        })
+    }
+
+    fn contains_event_path(&self, path: &Path) -> bool {
+        path.file_name().is_some_and(|n| self.filenames.contains(n))
+            && (path
+                .canonicalize()
+                .is_ok_and(|p| self.canonical_paths.contains(&p))
+                || absolute_normalized_path(path).is_ok_and(|p| self.absolute_paths.contains(&p)))
+    }
+}
+
+fn event_triggers_rerun(event: &Event, targets: &WatchTargets) -> bool {
+    is_write_like_event(&event.kind) && event.paths.iter().any(|p| targets.contains_event_path(p))
+}
+
+fn is_write_like_event(kind: &EventKind) -> bool {
+    match kind {
+        EventKind::Create(_)
+        | EventKind::Remove(_)
+        | EventKind::Access(AccessKind::Close(AccessMode::Write))
+        | EventKind::Modify(ModifyKind::Data(_))
+        | EventKind::Modify(ModifyKind::Name(_))
+        | EventKind::Modify(ModifyKind::Any)
+        | EventKind::Modify(ModifyKind::Other)
+        | EventKind::Any
+        | EventKind::Other => true,
+        EventKind::Access(_) | EventKind::Modify(ModifyKind::Metadata(_)) => false,
+    }
+}
+
+fn absolute_normalized_path(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    Ok(normalize_path(&absolute))
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
 fn collect_watch_files(shape: &ShapeArgs) -> Vec<PathBuf> {
     let mut files = Vec::new();
     if let Some(input) = shape.input.first() {
@@ -171,4 +237,51 @@ fn collect_watch_files(shape: &ShapeArgs) -> Vec<PathBuf> {
         }
     }
     files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{DataChange, MetadataKind, RenameMode};
+
+    #[test]
+    fn write_like_filter_ignores_read_access() {
+        assert!(!is_write_like_event(&EventKind::Access(AccessKind::Open(
+            AccessMode::Read
+        ))));
+        assert!(!is_write_like_event(&EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+    }
+
+    #[test]
+    fn write_like_filter_accepts_real_changes() {
+        assert!(is_write_like_event(&EventKind::Modify(ModifyKind::Data(
+            DataChange::Content
+        ))));
+        assert!(is_write_like_event(&EventKind::Modify(ModifyKind::Name(
+            RenameMode::Both
+        ))));
+        assert!(is_write_like_event(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+    }
+
+    #[test]
+    fn write_like_filter_ignores_metadata_only_changes() {
+        assert!(!is_write_like_event(&EventKind::Modify(
+            ModifyKind::Metadata(MetadataKind::Any)
+        )));
+    }
+
+    #[test]
+    fn target_matching_survives_deleted_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.json");
+        std::fs::write(&input, "{}").unwrap();
+        let targets = WatchTargets::new(std::slice::from_ref(&input)).unwrap();
+        std::fs::remove_file(&input).unwrap();
+
+        assert!(targets.contains_event_path(&input));
+    }
 }

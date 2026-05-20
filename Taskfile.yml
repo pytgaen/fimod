@@ -36,6 +36,11 @@ tasks:
     cmds:
       - cargo test --test cli
 
+  test:performance:
+    desc: Run opt-in performance smoke tests in release mode
+    cmds:
+      - mise exec -- cargo test --release --test performance -- --ignored --nocapture
+
   test:ci:
     desc: Run tests with JUnit XML report (requires cargo-nextest)
     cmds:
@@ -100,6 +105,13 @@ tasks:
       - tar cvfJ dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.gz -C target/release {{.BINARY}}
       - upx --best --lzma ~/.local/bin/fimod
 
+  build:fast:
+    desc: Build speed-optimized ffimod binary (opt-level=3) and install to ~/.local/bin
+    cmds:
+      - cargo build --profile release-fast --features ffimod
+      - cp target/release-fast/ffimod ~/.local/bin/ffimod
+      - chmod +x ~/.local/bin/ffimod
+
   # ─── Documentation ──────────────────────────────
 
   doc:build:
@@ -152,6 +164,28 @@ tasks:
   #   ✅ aarch64-unknown-linux-musl  (standard + full)
   #   ✅ x86_64-pc-windows-gnu       (standard + full)
   #   ❌ aarch64-apple-darwin        (requires macOS SDK)
+
+  dist:fast:linux:x86_64:
+    desc: Build speed-optimized ffimod for x86_64-unknown-linux-musl (opt-level=3, no UPX)
+    vars:
+      TARGET: x86_64-unknown-linux-musl
+    cmds:
+      - mkdir -p dist /tmp/fimod-pkg
+      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features ffimod
+      - cp target/{{.TARGET}}/release-fast/ffimod /tmp/fimod-pkg/ffimod
+      - tar czf "dist/ffimod-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg ffimod
+      - rm -rf /tmp/fimod-pkg
+
+  dist:fast:linux:aarch64:
+    desc: Build speed-optimized ffimod for aarch64-unknown-linux-musl (opt-level=3, no UPX)
+    vars:
+      TARGET: aarch64-unknown-linux-musl
+    cmds:
+      - mkdir -p dist /tmp/fimod-pkg
+      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features ffimod
+      - cp target/{{.TARGET}}/release-fast/ffimod /tmp/fimod-pkg/ffimod
+      - tar czf "dist/ffimod-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg ffimod
+      - rm -rf /tmp/fimod-pkg
 
   dist:linux:x86_64:
     desc: Build x86_64-unknown-linux-musl — standard + full (zigbuild + upx)
