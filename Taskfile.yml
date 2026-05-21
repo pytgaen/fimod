@@ -160,9 +160,9 @@ tasks:
   # Requires: cargo-zigbuild (cargo install cargo-zigbuild), zig + upx via mise (mise install)
   #
   # Targets covered:
-  #   ✅ x86_64-unknown-linux-musl   (standard + full)
-  #   ✅ aarch64-unknown-linux-musl  (standard + full)
-  #   ✅ x86_64-pc-windows-gnu       (standard + full)
+  #   ✅ x86_64-unknown-linux-musl   (standard + slim + fast)
+  #   ✅ aarch64-unknown-linux-musl  (standard + slim + fast)
+  #   ✅ x86_64-pc-windows-gnu       (standard + slim + fast)
   #   ❌ aarch64-apple-darwin        (requires macOS SDK)
 
   dist:fast:linux:x86_64:
@@ -188,43 +188,43 @@ tasks:
       - rm -rf /tmp/fimod-pkg
 
   dist:linux:x86_64:
-    desc: Build x86_64-unknown-linux-musl — standard + full (zigbuild + upx)
+    desc: Build x86_64-unknown-linux-musl — standard + slim (zigbuild + upx)
     vars:
       TARGET: x86_64-unknown-linux-musl
     cmds:
       - mkdir -p dist /tmp/fimod-pkg
       # standard
-      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cargo zigbuild --release --target {{.TARGET}}
       - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
       - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
       - tar czf "dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
-      # full
-      - cargo zigbuild --release --target {{.TARGET}} --features full
-      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
-      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
-      - tar czf "dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      # slim
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}-slim
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}-slim
+      - tar czf "dist/{{.BINARY}}-slim-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}-slim
       - rm -rf /tmp/fimod-pkg
 
   dist:linux:aarch64:
-    desc: Build aarch64-unknown-linux-musl — standard + full (zigbuild + upx)
+    desc: Build aarch64-unknown-linux-musl — standard + slim (zigbuild + upx)
     vars:
       TARGET: aarch64-unknown-linux-musl
     cmds:
       - mkdir -p dist /tmp/fimod-pkg
       # standard
-      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cargo zigbuild --release --target {{.TARGET}}
       - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
       - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
       - tar czf "dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
-      # full
-      - cargo zigbuild --release --target {{.TARGET}} --features full
-      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}
-      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}
-      - tar czf "dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}
+      # slim
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}} /tmp/fimod-pkg/{{.BINARY}}-slim
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}-slim
+      - tar czf "dist/{{.BINARY}}-slim-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg {{.BINARY}}-slim
       - rm -rf /tmp/fimod-pkg
 
   dist:windows:
-    desc: Build x86_64-pc-windows-gnu — standard + full (zigbuild)
+    desc: Build x86_64-pc-windows-gnu — standard + slim + fast (zigbuild)
     vars:
       TARGET: x86_64-pc-windows-gnu
     env:
@@ -232,15 +232,19 @@ tasks:
     cmds:
       - mkdir -p dist /tmp/fimod-pkg
       # standard
-      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cargo zigbuild --release --target {{.TARGET}}
       - cp target/{{.TARGET}}/release/{{.BINARY}}.exe /tmp/fimod-pkg/{{.BINARY}}.exe
       - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}.exe
       - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}.exe','{{.BINARY}}.exe'); z.close()"
-      # full
-      - cargo zigbuild --release --target {{.TARGET}} --features full
-      - cp target/{{.TARGET}}/release/{{.BINARY}}.exe /tmp/fimod-pkg/{{.BINARY}}.exe
-      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}.exe
-      - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-full-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}.exe','{{.BINARY}}.exe'); z.close()"
+      # slim
+      - cargo zigbuild --release --target {{.TARGET}} --no-default-features
+      - cp target/{{.TARGET}}/release/{{.BINARY}}.exe /tmp/fimod-pkg/{{.BINARY}}-slim.exe
+      - upx --best --lzma /tmp/fimod-pkg/{{.BINARY}}-slim.exe
+      - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-slim-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}-slim.exe','{{.BINARY}}-slim.exe'); z.close()"
+      # fast
+      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features fast --bin {{.BINARY}}-fast
+      - cp target/{{.TARGET}}/release-fast/{{.BINARY}}-fast.exe /tmp/fimod-pkg/{{.BINARY}}-fast.exe
+      - uv run python3 -c "import zipfile; z=zipfile.ZipFile('dist/{{.BINARY}}-fast-{{.VERSION}}-{{.TARGET}}.zip','w',zipfile.ZIP_DEFLATED); z.write('/tmp/fimod-pkg/{{.BINARY}}-fast.exe','{{.BINARY}}-fast.exe'); z.close()"
       - rm -rf /tmp/fimod-pkg
 
   dist:checksums:
@@ -254,6 +258,8 @@ tasks:
     cmds:
       - task: dist:linux:x86_64
       - task: dist:linux:aarch64
+      - task: dist:fast:linux:x86_64
+      - task: dist:fast:linux:aarch64
       - task: dist:windows
       - task: dist:checksums
 

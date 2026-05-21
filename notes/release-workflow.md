@@ -133,8 +133,8 @@ Utilisée **avant** une release majeure (typiquement X.Y.0) pour valider le pipe
 | **CHANGELOG.md** | Non modifié | Section générée par git-cliff |
 | **Commit** | `chore(prerelease): X.Y.Z-rc.N` | `chore(release): X.Y.Z` |
 | **Plateformes** | Linux x86_64 (musl) | Toutes (Linux x86/ARM, macOS ARM, Windows x64) |
-| **Variants** | `standard` uniquement | `standard` + `slim` |
-| **Binaire compressé (UPX)** | Non | Oui |
+| **Variants** | `standard` + `fast` | `standard` + `slim` + `fast` |
+| **Binaire compressé (UPX)** | Non | `standard` + `slim` oui, `fast` non |
 | **CI** | `.github/workflows/prerelease.yml` | `.github/workflows/release.yml` |
 | **GitHub Release** | Marquée `prerelease: true` | Stable |
 | **Branche** | Quelconque (y compris non-main) | `main` uniquement |

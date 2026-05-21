@@ -124,8 +124,8 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod/releases/latest \
 !!! info "`http` is input-only"
     Using `--output-format http` will produce an error. HTTP is only meaningful as an input format.
 
-!!! tip "Requires the default build variant"
-    HTTP input needs reqwest, which is included in the default build. Use `FIMOD_VARIANT=slim` (or `cargo build --no-default-features`) if you want to opt out.
+!!! tip "Requires the standard or fast build variant"
+    HTTP input needs reqwest, which is included in the `standard` and `fast` release variants. Use `FIMOD_VARIANT=slim` (or `cargo build --no-default-features`) if you want to opt out.
 
 ---
 

@@ -89,10 +89,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - variant: default
+          - variant: standard
             features: ""
           - variant: slim
             features: "--no-default-features"
+          - variant: fast
+            features: "--features fast --bin fimod-fast"
     steps:
       - uses: actions/checkout@v4
 
@@ -113,4 +115,9 @@ jobs:
         run: cargo install cargo-zigbuild --locked
 
       - name: Build
+        if: matrix.variant != 'fast'
         run: cargo zigbuild --release --target x86_64-unknown-linux-musl ${{ matrix.features }}
+
+      - name: Build fast
+        if: matrix.variant == 'fast'
+        run: cargo zigbuild --profile release-fast --target x86_64-unknown-linux-musl ${{ matrix.features }}

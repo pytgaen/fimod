@@ -21,16 +21,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── default (avec reqwest, chargement HTTP des molds) ───────────────
-          - { target: x86_64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: default, features: "" }
-          - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: default, features: "" }
-          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: default, features: "" }
-          - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: default, features: "" }
+          # ── standard (avec reqwest, chargement HTTP des molds) ───────────────
+          - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: standard, features: "" }
+          - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: standard, features: "" }
+          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: standard, features: "" }
+          - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: standard, features: "" }
           # ── slim (sans reqwest, binaire léger) ───────────────────────────
-          - { target: x86_64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
+          - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
           - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
           - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: slim, features: "--no-default-features" }
           - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: slim, features: "--no-default-features" }
+          # ── fast (speed optimized, no UPX) ───────────────────────────────
+          - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
+          - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
+          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
+          - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: fast, features: "--features fast --bin fimod-fast" }
 
     steps:
       - uses: actions/checkout@v4
@@ -83,39 +88,77 @@ jobs:
           Copy-Item $exe "$env:SystemRoot\System32\upx.exe"
 
       - name: Build with cargo zigbuild
-        if: matrix.cross
+        if: ${{ matrix.cross && matrix.variant != 'fast' }}
         run: cargo zigbuild --release --target ${{ matrix.target }} ${{ matrix.features }}
 
+      - name: Build fast with cargo zigbuild
+        if: ${{ matrix.cross && matrix.variant == 'fast' }}
+        run: cargo zigbuild --profile release-fast --target ${{ matrix.target }} ${{ matrix.features }}
+
       - name: Build with cargo
-        if: ${{ !matrix.cross }}
+        if: ${{ !matrix.cross && matrix.variant != 'fast' }}
         run: cargo build --release --target ${{ matrix.target }} ${{ matrix.features }}
+
+      - name: Build fast with cargo
+        if: ${{ !matrix.cross && matrix.variant == 'fast' }}
+        run: cargo build --profile release-fast --target ${{ matrix.target }} ${{ matrix.features }}
 
       - name: Set binary metadata
         id: bin
         shell: bash
         run: |
           EXT=$([[ "${{ matrix.target }}" == *windows* ]] && echo ".exe" || echo "")
-          PREFIX=$([[ "${{ matrix.variant }}" == "slim" ]] && echo "fimod-slim" || echo "fimod")
-          echo "path=target/${{ matrix.target }}/release/fimod${EXT}"                       >> "$GITHUB_OUTPUT"
-          echo "asset=${PREFIX}-${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.ext }}" >> "$GITHUB_OUTPUT"
+          case "${{ matrix.variant }}" in
+            standard)
+              PROFILE="release"
+              BUILD_BIN="fimod"
+              PACKAGE_BIN="fimod"
+              PREFIX="fimod"
+              ;;
+            slim)
+              PROFILE="release"
+              BUILD_BIN="fimod"
+              PACKAGE_BIN="fimod-slim"
+              PREFIX="fimod-slim"
+              ;;
+            fast)
+              PROFILE="release-fast"
+              BUILD_BIN="fimod-fast"
+              PACKAGE_BIN="fimod-fast"
+              PREFIX="fimod-fast"
+              ;;
+          esac
+          PACKAGE_DIR="package-${{ matrix.variant }}-${{ matrix.target }}"
+          echo "path=target/${{ matrix.target }}/${PROFILE}/${BUILD_BIN}${EXT}"             >> "$GITHUB_OUTPUT"
+          echo "package_dir=${PACKAGE_DIR}"                                                  >> "$GITHUB_OUTPUT"
+          echo "package_bin=${PACKAGE_BIN}${EXT}"                                            >> "$GITHUB_OUTPUT"
+          echo "package_path=${PACKAGE_DIR}/${PACKAGE_BIN}${EXT}"                            >> "$GITHUB_OUTPUT"
+          echo "asset=${PREFIX}-${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.ext }}"   >> "$GITHUB_OUTPUT"
 
       # UPX — Linux et Windows (skippé macOS : support ARM expérimental instable)
       - name: Compress binary with UPX
-        if: runner.os != 'macOS'
+        if: ${{ runner.os != 'macOS' && matrix.variant != 'fast' }}
         shell: bash
         run: upx --best --lzma "${{ steps.bin.outputs.path }}"
+
+      - name: Prepare package binary
+        shell: bash
+        run: |
+          mkdir -p "${{ steps.bin.outputs.package_dir }}"
+          cp "${{ steps.bin.outputs.path }}" "${{ steps.bin.outputs.package_path }}"
 
       - name: Package (tar.gz)
         if: matrix.ext == 'tar.gz'
         shell: bash
         run: |
-          SRC="${{ steps.bin.outputs.path }}"
-          tar czf "${{ steps.bin.outputs.asset }}" -C "$(dirname $SRC)" "$(basename $SRC)"
+          tar czf "${{ steps.bin.outputs.asset }}" \
+            -C "${{ steps.bin.outputs.package_dir }}" \
+            "${{ steps.bin.outputs.package_bin }}"
 
       - name: Package (zip, Windows)
         if: matrix.ext == 'zip'
         shell: pwsh
-        run: Compress-Archive -Path "${{ steps.bin.outputs.path }}" -DestinationPath "${{ steps.bin.outputs.asset }}"
+        run: Compress-Archive -Path "${{ steps.bin.outputs.package_path }}" -DestinationPath "${{ steps.bin.outputs.asset }}"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -212,7 +255,7 @@ jobs:
       - name: Download binary
         uses: actions/download-artifact@v4
         with:
-          name: binary-default-${{ matrix.target }}
+          name: binary-standard-${{ matrix.target }}
           path: docker-bin/
 
       - name: Extract binary

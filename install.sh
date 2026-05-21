@@ -5,7 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 #
 # Options (environment variables):
-#   FIMOD_VARIANT   standard (default, includes HTTP mold loading) or slim (without HTTP)
+#   FIMOD_VARIANT   standard (default), slim (without HTTP), or fast (speed optimized)
+#   FIMOD_SET_DEFAULT yes=also install slim/fast as the default `fimod` command, no=skip, unset=interactive prompt
 #   FIMOD_INSTALL   install directory (default: /usr/local/bin, falls back to ~/.local/bin)
 #   FIMOD_VERSION   specific version to install (default: latest)
 #   FIMOD_SOURCE    github (default) or gitlab
@@ -122,15 +123,29 @@ else
   esac
 fi
 
-echo "Installing fimod ${VERSION} (${VARIANT}) for ${OS}/${ARCH}..."
-
 # ── Build asset name ─────────────────────────────────────────────────
 
-if [ "$VARIANT" = "slim" ]; then
-  PREFIX="fimod-slim"
-else
-  PREFIX="fimod"
-fi
+case "$VARIANT" in
+  standard)
+    PREFIX="fimod"
+    BIN_BASENAME="fimod"
+    ;;
+  slim)
+    PREFIX="fimod-slim"
+    BIN_BASENAME="fimod-slim"
+    ;;
+  fast)
+    PREFIX="fimod-fast"
+    BIN_BASENAME="fimod-fast"
+    ;;
+  *)
+    echo "Error: unsupported FIMOD_VARIANT=${VARIANT}" >&2
+    echo "Supported variants: standard, slim, fast" >&2
+    exit 1
+    ;;
+esac
+
+echo "Installing fimod ${VERSION} (${VARIANT}) for ${OS}/${ARCH}..."
 
 ASSET="${PREFIX}-${VERSION}-${TARGET}.${EXT}"
 
@@ -156,13 +171,20 @@ fi
 
 # ── Download and install ─────────────────────────────────────────────
 
-BIN_NAME="fimod"
-[ "$OS" = "windows" ] && BIN_NAME="fimod.exe"
+BIN_NAME="$BIN_BASENAME"
+CANONICAL_BIN="fimod"
+if [ "$OS" = "windows" ]; then
+  BIN_NAME="${BIN_BASENAME}.exe"
+  CANONICAL_BIN="fimod.exe"
+fi
+TARGET_BIN="${INSTALL_DIR}/${BIN_NAME}"
+CANONICAL_TARGET="${INSTALL_DIR}/${CANONICAL_BIN}"
+DEFAULT_INSTALLED=0
 
 if [ "${FIMOD_SKIP_DOWNLOAD:-}" = "1" ]; then
   echo "Skipping download (FIMOD_SKIP_DOWNLOAD=1)"
-  if [ ! -x "${INSTALL_DIR}/${BIN_NAME}" ]; then
-    echo "Error: ${INSTALL_DIR}/${BIN_NAME} not found — cannot skip download" >&2
+  if [ ! -x "$TARGET_BIN" ]; then
+    echo "Error: ${TARGET_BIN} not found — cannot skip download" >&2
     exit 1
   fi
 else
@@ -210,27 +232,77 @@ else
       ;;
   esac
 
-  chmod +x "${TMPDIR}/${BIN_NAME}"
-  mv "${TMPDIR}/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
+  EXTRACTED_BIN="${TMPDIR}/${BIN_NAME}"
+  if [ ! -f "$EXTRACTED_BIN" ] && [ -f "${TMPDIR}/${CANONICAL_BIN}" ]; then
+    # Backward compatibility for older slim archives that contained `fimod`.
+    EXTRACTED_BIN="${TMPDIR}/${CANONICAL_BIN}"
+  fi
+  if [ ! -f "$EXTRACTED_BIN" ]; then
+    echo "Error: archive did not contain ${BIN_NAME}" >&2
+    exit 1
+  fi
+
+  chmod +x "$EXTRACTED_BIN"
+  mv "$EXTRACTED_BIN" "$TARGET_BIN"
+fi
+
+# ── Optional default command copy for slim/fast ──────────────────────
+
+set_default_pref() {
+  case "${FIMOD_SET_DEFAULT:-}" in
+    yes|no) echo "${FIMOD_SET_DEFAULT}"; return ;;
+  esac
+  echo "ask"
+}
+
+copy_as_default() {
+  cp "$TARGET_BIN" "$CANONICAL_TARGET"
+  chmod +x "$CANONICAL_TARGET"
+  DEFAULT_INSTALLED=1
+}
+
+if [ "$VARIANT" != "standard" ]; then
+  DEFAULT_PREF=$(set_default_pref)
+  case "$DEFAULT_PREF" in
+    yes)
+      copy_as_default
+      ;;
+    no)
+      ;;
+    ask)
+      if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
+        echo ""
+        echo "Install the ${VARIANT} variant as the default 'fimod' command too? [y/N]"
+        printf "  > "
+        read -r REPLY </dev/tty
+        case "$REPLY" in
+          [yY]*)
+            copy_as_default
+            ;;
+        esac
+      fi
+      ;;
+  esac
 fi
 
 # ── Verify ───────────────────────────────────────────────────────────
 
-if command -v fimod >/dev/null 2>&1; then
-  INSTALLED=$("${INSTALL_DIR}/${BIN_NAME}" --version 2>/dev/null || echo "unknown")
-  echo ""
-  echo "✅ fimod installed to ${INSTALL_DIR}/${BIN_NAME}"
-  echo "   ${INSTALLED}"
+INSTALLED=$("$TARGET_BIN" --version 2>/dev/null || echo "unknown")
+echo ""
+echo "✅ ${BIN_BASENAME} installed to ${TARGET_BIN}"
+echo "   ${INSTALLED}"
+if [ "$DEFAULT_INSTALLED" -eq 1 ]; then
+  DEFAULT_VERSION=$("$CANONICAL_TARGET" --version 2>/dev/null || echo "unknown")
+  echo "✅ fimod installed to ${CANONICAL_TARGET}"
+  echo "   ${DEFAULT_VERSION}"
+fi
+
+if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+  : # already in PATH
 else
   echo ""
-  echo "✅ fimod installed to ${INSTALL_DIR}/${BIN_NAME}"
-  if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
-    : # already in PATH
-  else
-    echo ""
-    echo "⚠️  ${INSTALL_DIR} is not in your PATH. Add it:"
-    echo "   export PATH=\"${INSTALL_DIR}:\$PATH\""
-  fi
+  echo "⚠️  ${INSTALL_DIR} is not in your PATH. Add it:"
+  echo "   export PATH=\"${INSTALL_DIR}:\$PATH\""
 fi
 
 echo ""
@@ -245,10 +317,10 @@ echo ""
 #   4. otherwise skip with a hint
 #
 # The command path depends on the installed fimod version:
-#   >= 0.5.0  → `fimod setup registry defaults` and `fimod setup sandbox defaults`
-#   <  0.5.0  → only `fimod registry setup` (sandbox unavailable)
+#   >= 0.5.0  → `<installed-command> setup registry defaults` and sandbox defaults
+#   <  0.5.0  → `<installed-command> registry setup` (sandbox unavailable)
 
-INSTALLED_VERSION=$("${INSTALL_DIR}/${BIN_NAME}" --version 2>/dev/null \
+INSTALLED_VERSION=$("$TARGET_BIN" --version 2>/dev/null \
   | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
   | head -n 1)
 : "${INSTALLED_VERSION:=0.0.0}"
@@ -258,11 +330,11 @@ INSTALLED_NUM=$(echo "$INSTALLED_VERSION" \
 
 if [ "$INSTALLED_NUM" -ge 500 ]; then
   REGISTRY_CMD_ARGS="setup registry defaults"
-  REGISTRY_HINT="fimod setup registry defaults"
+  REGISTRY_HINT="${BIN_BASENAME} setup registry defaults"
   SANDBOX_AVAILABLE=1
 else
   REGISTRY_CMD_ARGS="registry setup"
-  REGISTRY_HINT="fimod registry setup"
+  REGISTRY_HINT="${BIN_BASENAME} registry setup"
   SANDBOX_AVAILABLE=0
 fi
 
@@ -285,7 +357,7 @@ case "$REG_PREF" in
   yes)
     echo "  Installing community registries..."
     # shellcheck disable=SC2086
-    "${INSTALL_DIR}/${BIN_NAME}" $REGISTRY_CMD_ARGS --yes
+    "$TARGET_BIN" $REGISTRY_CMD_ARGS --yes
     ;;
   no)
     echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
@@ -301,7 +373,7 @@ case "$REG_PREF" in
           ;;
         *)
           # shellcheck disable=SC2086
-          "${INSTALL_DIR}/${BIN_NAME}" $REGISTRY_CMD_ARGS --yes
+          "$TARGET_BIN" $REGISTRY_CMD_ARGS --yes
           ;;
       esac
     else
@@ -322,10 +394,10 @@ else
   case "$SB_PREF" in
     yes)
       echo "  Installing recommended sandbox policy..."
-      "${INSTALL_DIR}/${BIN_NAME}" setup sandbox defaults --yes
+      "$TARGET_BIN" setup sandbox defaults --yes
       ;;
     no)
-      echo "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+      echo "  Skipped. Run '${BIN_BASENAME} setup sandbox defaults' at any time."
       ;;
     ask)
       if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
@@ -334,14 +406,14 @@ else
         read -r REPLY </dev/tty
         case "$REPLY" in
           [nN]*)
-            echo "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+            echo "  Skipped. Run '${BIN_BASENAME} setup sandbox defaults' at any time."
             ;;
           *)
-            "${INSTALL_DIR}/${BIN_NAME}" setup sandbox defaults --yes
+            "$TARGET_BIN" setup sandbox defaults --yes
             ;;
         esac
       else
-        echo "  Run 'fimod setup sandbox defaults' to configure the sandbox policy."
+        echo "  Run '${BIN_BASENAME} setup sandbox defaults' to configure the sandbox policy."
       fi
       ;;
   esac

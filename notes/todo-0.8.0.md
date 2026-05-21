@@ -91,46 +91,67 @@ Validation status:
 - `rtk task lint` passed;
 - `rtk task test` passed.
 
-## Scope Candidates Still To Decide
-
 ### Documentation Honesty Around Monty / Python
 
 The current product message is strong: Python-powered, no Python installed.
-For 0.8.0, decide whether the public docs should make the Monty boundary even
-more explicit near the top:
+For 0.8.0, the public docs now make the Monty boundary more explicit near the
+top:
 
 - Python syntax and common builtins are supported;
 - this is not CPython;
 - no PyPI ecosystem, no full stdlib parity;
-- Fimod provides Rust built-ins to fill practical gaps.
+- Fimod exposes Rust-powered helpers as part of its data-shaping API.
 
-Status:
+Documentation pass:
 
-- partially improved in the mold contract cleanup;
-- still worth a dedicated docs pass if 0.8.0 is positioned as a broader
-  semantics/architecture release.
+- README and site landing page keep the short product pitch while stating that
+  molds run on Monty, not CPython;
+- Concepts and Mold Scripting define the authoring contract: Python syntax,
+  common built-ins, selected stdlib modules, no PyPI ecosystem, no full stdlib
+  parity;
+- Rust-powered helpers are framed as part of fimod's data-shaping API, not as a
+  workaround for Monty.
 
 ### Fast Variant Distribution And Version Identity
 
-`fimod-fast` is now coherent with `fimod-slim` as a named variant, but the
-distribution UX still needs a dedicated pass before release.
+Current worktree, not committed yet.
 
-Decision needed:
+The distribution UX now treats variants as separate commands by default:
 
-- review GitHub CI/release workflows so the fast variant is either published as
-  an official artifact or intentionally kept out of public releases;
-- review `install.sh` so users can either keep the default `fimod` install path
-  or choose a variant (`normal`, `slim`, `fast`) explicitly;
-- find the right UX for proposing that choice without making the default install
-  noisy or blocking for scripts;
-- make `fimod --version` expose the active variant (`normal`, `slim`, `fast`) so
-  installed binaries are diagnosable.
+- `standard` installs `fimod`;
+- `slim` installs `fimod-slim`;
+- `fast` installs `fimod-fast`;
+- `FIMOD_SET_DEFAULT=yes` (or the interactive prompt) also copies `slim` or
+  `fast` as the default `fimod` command.
 
-Open design point:
+Distribution pass:
 
-- decide whether variants are separate binary names only (`fimod`, `fimod-slim`,
-  `fimod-fast`) or whether `install.sh` can install one selected variant as the
-  canonical `fimod` command.
+- `fimod --version` now reports `standard`, `slim`, or `fast`, with `fast`
+  taking precedence over the default HTTP feature set;
+- GitHub release builds publish official `fimod-fast` assets for every release
+  target, without UPX compression;
+- prereleases publish `standard` and `fast` Linux x86_64 assets and e2e-test
+  public installation of both;
+- `install.sh` and `install.ps1` support `FIMOD_VARIANT=standard|slim|fast` and
+  `FIMOD_SET_DEFAULT=yes|no`;
+- README, Quick Start, CLI Reference, and release workflow notes document the
+  variant UX.
+
+Validation status:
+
+- `rtk cargo build --release` passed; `fimod --version` reports `standard`;
+- `rtk cargo build --release --no-default-features` passed; `fimod --version`
+  reports `slim`;
+- `rtk cargo build --profile release-fast --features fast --bin fimod-fast`
+  passed; `fimod-fast --version` reports `fast`;
+- `FIMOD_SKIP_DOWNLOAD=1` installer smoke tests passed for `slim` and `fast`,
+  including `FIMOD_SET_DEFAULT=yes` for `fast`;
+- `sh -n install.sh` passed;
+- `rtk task --list-all` parsed the updated `Taskfile.yml`;
+- `rtk task lint` passed;
+- `rtk task test` passed.
+
+## Scope Candidates Still To Decide
 
 ### Branch / Release Shape
 

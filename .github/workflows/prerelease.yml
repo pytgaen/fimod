@@ -13,8 +13,14 @@ permissions:
 
 jobs:
   build:
-    name: Build x86_64-unknown-linux-musl (default)
+    name: Build x86_64-unknown-linux-musl (${{ matrix.variant }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: standard, asset_prefix: fimod,      package_bin: fimod,      profile: release,      features: "" }
+          - { variant: fast,     asset_prefix: fimod-fast, package_bin: fimod-fast, profile: release-fast, features: "--features fast --bin fimod-fast" }
     steps:
       - uses: actions/checkout@v4
 
@@ -35,26 +41,35 @@ jobs:
         run: cargo install cargo-zigbuild --locked
 
       - name: Build
+        if: matrix.variant == 'standard'
         run: cargo zigbuild --release --target x86_64-unknown-linux-musl
+
+      - name: Build fast
+        if: matrix.variant == 'fast'
+        run: cargo zigbuild --profile release-fast --target x86_64-unknown-linux-musl ${{ matrix.features }}
 
       - name: Package
         id: pkg
         run: |
-          ASSET="fimod-${GITHUB_REF_NAME}-x86_64-unknown-linux-musl.tar.gz"
-          tar czf "$ASSET" -C target/x86_64-unknown-linux-musl/release fimod
+          ASSET="${{ matrix.asset_prefix }}-${GITHUB_REF_NAME}-x86_64-unknown-linux-musl.tar.gz"
+          PKG_DIR="package-${{ matrix.variant }}"
+          mkdir -p "$PKG_DIR"
+          cp "target/x86_64-unknown-linux-musl/${{ matrix.profile }}/${{ matrix.package_bin }}" \
+            "$PKG_DIR/${{ matrix.package_bin }}"
+          tar czf "$ASSET" -C "$PKG_DIR" "${{ matrix.package_bin }}"
           echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
 
       - name: Compute SHA256
         id: sha
         run: |
-          SUMS="fimod-${GITHUB_REF_NAME}-sha256sums.txt"
+          SUMS="${{ matrix.asset_prefix }}-${GITHUB_REF_NAME}-sha256sums.txt"
           sha256sum "${{ steps.pkg.outputs.asset }}" > "$SUMS"
           echo "sums=$SUMS" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: prerelease-binary
+          name: prerelease-binary-${{ matrix.variant }}
           path: |
             ${{ steps.pkg.outputs.asset }}
             ${{ steps.sha.outputs.sums }}
@@ -69,8 +84,13 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: prerelease-binary
           path: artifacts/
+
+      - name: Merge SHA256 checksums
+        run: |
+          SUMS="fimod-${GITHUB_REF_NAME}-sha256sums.txt"
+          find artifacts/ -name "*.txt" -type f -print0 | sort -z | xargs -0 cat > "$SUMS"
+          echo "sums_file=$SUMS" >> "$GITHUB_ENV"
 
       - name: Generate VERSION file
         run: echo "${GITHUB_REF_NAME}" > VERSION
@@ -80,7 +100,7 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body: |
-            Prerelease ${{ github.ref_name }} — linux/x86_64-musl only, no UPX.
+            Prerelease ${{ github.ref_name }} — linux/x86_64-musl only.
 
             This is a pre-release for pipeline validation. Do not use in production.
 
@@ -91,8 +111,8 @@ jobs:
           prerelease: true
           draft: false
           files: |
-            artifacts/*.tar.gz
-            artifacts/*.txt
+            artifacts/**/*.tar.gz
+            ${{ env.sums_file }}
             VERSION
 
   e2e-install:
@@ -104,18 +124,41 @@ jobs:
 
       - name: Install via public install.sh
         run: |
-          FIMOD_VERSION=${GITHUB_REF_NAME} FIMOD_INSTALL="$HOME/.local/bin" sh install.sh
+          FIMOD_VERSION=${GITHUB_REF_NAME} FIMOD_INSTALL="$HOME/.local/bin" FIMOD_SETUP_ALL=no sh install.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Verify version
         run: |
-          INSTALLED=$("$HOME/.local/bin/fimod" --version | awk '{print $2}')
+          OUT=$("$HOME/.local/bin/fimod" --version)
+          INSTALLED=$(echo "$OUT" | awk '{print $2}')
           EXPECTED=$(echo "${GITHUB_REF_NAME}" | sed 's/^v//')
           if [ "$INSTALLED" != "$EXPECTED" ]; then
             echo "version mismatch: installed=$INSTALLED expected=$EXPECTED" >&2
             exit 1
           fi
+          echo "$OUT" | grep -q "standard" || {
+            echo "variant mismatch: expected standard in '$OUT'" >&2
+            exit 1
+          }
           echo "✓ fimod $INSTALLED"
+
+      - name: Install fast variant via public install.sh
+        run: |
+          FIMOD_VERSION=${GITHUB_REF_NAME} FIMOD_VARIANT=fast FIMOD_INSTALL="$HOME/.local/bin" FIMOD_SETUP_ALL=no sh install.sh
+
+      - name: Verify fast variant
+        run: |
+          OUT=$("$HOME/.local/bin/fimod-fast" --version)
+          EXPECTED=$(echo "${GITHUB_REF_NAME}" | sed 's/^v//')
+          echo "$OUT" | grep -q "$EXPECTED" || {
+            echo "version mismatch for fast: expected $EXPECTED in '$OUT'" >&2
+            exit 1
+          }
+          echo "$OUT" | grep -q "fast" || {
+            echo "variant mismatch: expected fast in '$OUT'" >&2
+            exit 1
+          }
+          echo "✓ $OUT"
 
       - name: Registry setup (fresh HOME)
         run: |

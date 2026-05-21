@@ -130,6 +130,7 @@ Le projet est distribué comme binaire autonome, avec variantes :
 
 - build par défaut avec support HTTP (`reqwest`) ;
 - build `slim` sans dépendance HTTP ;
+- build `fast` speed-optimized via `release-fast` ;
 - feature `watch` activée par défaut.
 
 Les releases GitHub construisent plusieurs cibles :
@@ -137,9 +138,12 @@ Les releases GitHub construisent plusieurs cibles :
 - Linux musl `x86_64` et `aarch64` ;
 - macOS Apple Silicon ;
 - Windows MSVC ;
-- variantes default et slim.
+- variantes standard, slim et fast.
 
-Les binaires Linux/Windows sont compressés avec UPX. Le workflow release publie aussi checksums, archive des molds, fichier `VERSION` et images Docker GHCR multi-arch.
+Les binaires standard/slim Linux/Windows sont compressés avec UPX ; `fast`
+reste non compressé pour privilégier les performances. Le workflow release
+publie aussi checksums, archive des molds, fichier `VERSION` et images Docker
+GHCR multi-arch.
 
 Le dépôt fournit aussi :
 

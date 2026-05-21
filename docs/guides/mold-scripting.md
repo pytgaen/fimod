@@ -2,6 +2,9 @@
 
 Mold scripts are written in the Python subset supported by [Monty](https://github.com/pydantic/monty), a Rust implementation of Python's core semantics. No system Python required.
 
+!!! info "Python syntax, not CPython"
+    Molds run on Monty, not CPython. You get Python syntax, common built-ins, and selected standard-library modules, but not PyPI packages or full stdlib parity. Fimod adds Rust-powered helpers for regex, dot paths, iteration, hashing, templating, logging, and validation.
+
 ## 🎯 The `transform` function
 
 Your script must define a function named `transform` that receives `data` and returns the result. Fimod passes extra context (`args`, `env`, `headers`, `pipeline`) as keyword arguments.
@@ -496,12 +499,14 @@ When no `--arg` is passed, `args` is an empty dict `{}`.
 - [x] `for` / `while` loops, `if` / `elif` / `else`
 - [x] `in` / `not in` operators
 - [x] `isinstance()`, `len()`, `int()`, `str()`, `float()`, `bool()`
+- [x] Common built-ins such as `range()`, `enumerate()`, `zip()`, `sum()`, `min()`, `max()`, `sorted()`
 - [x] f-strings (`f"Hello {name}"`, `f"{x:.2f}"`, `f"{x!r}"`)
 - [x] Nested functions, multiple return values (tuples)
 - [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`, `Step.create(...)`)
 
 ## ❌ Monty limitations
 
-- [ ] `import` — only `re`, `math`, `datetime`, `json`, `sys`, `typing`, `asyncio`, `pathlib`, `os` (partial)
+- [ ] Arbitrary PyPI packages (`requests`, `pandas`, `sqlalchemy`, ...)
+- [ ] Full standard-library parity; only selected modules such as `re`, `math`, `datetime`, `json`, `sys`, `typing`, `asyncio`, `pathlib`, and partial `os` are available
 - [ ] `del` statement
 - [ ] File I/O, network, system calls

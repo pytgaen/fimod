@@ -8,7 +8,7 @@ You already know Python. Why learn another DSL?
 # jq: filter users older than 30
 jq '[.[] | select(.age > 30)]' users.json
 
-# fimod: same thing, it's just Python
+# fimod: same idea, with Python syntax
 fimod s -i users.json -e '[u for u in data if u["age"] > 30]'
 ```
 

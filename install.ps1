@@ -6,7 +6,8 @@
 #   & "$env:TEMP\fimod-install.ps1"
 #
 # Options (environment variables):
-#   $env:FIMOD_VARIANT   standard (default, includes HTTP mold loading) or slim (without HTTP)
+#   $env:FIMOD_VARIANT   standard (default), slim (without HTTP), or fast (speed optimized)
+#   $env:FIMOD_SET_DEFAULT yes=also install slim/fast as the default `fimod` command, no=skip, unset=interactive prompt
 #   $env:FIMOD_INSTALL   install directory (default: ~\.local\bin)
 #   $env:FIMOD_VERSION   specific version to install (default: latest)
 #   $env:FIMOD_SOURCE    github (default) or gitlab
@@ -33,6 +34,25 @@ if ($Source -eq "gitlab") {
 $Variant = $env:FIMOD_VARIANT
 if ([string]::IsNullOrWhiteSpace($Variant)) {
     $Variant = "standard"
+}
+
+switch ($Variant) {
+    "standard" {
+        $Prefix = "fimod"
+        $BinBase = "fimod"
+    }
+    "slim" {
+        $Prefix = "fimod-slim"
+        $BinBase = "fimod-slim"
+    }
+    "fast" {
+        $Prefix = "fimod-fast"
+        $BinBase = "fimod-fast"
+    }
+    default {
+        Write-Error "Error: unsupported FIMOD_VARIANT=$Variant`nSupported variants: standard, slim, fast"
+        exit 1
+    }
 }
 
 # -- Detect platform --------------------------------------------------
@@ -109,12 +129,6 @@ Write-Host "Installing fimod $Version ($Variant) for $OsName/$Arch..."
 
 # -- Build asset name --------------------------------------------------
 
-if ($Variant -eq "slim") {
-    $Prefix = "fimod-slim"
-} else {
-    $Prefix = "fimod"
-}
-
 $Asset = "$Prefix-$Version-$Target.$Ext"
 if ($Source -eq "gitlab") {
     $Url = "$GlPkgBase/$Version/$Asset"
@@ -134,8 +148,11 @@ if (-not (Test-Path -Path $InstallDir)) {
 
 # -- Download and install -----------------------------------------------
 
-$BinName = "fimod.exe"
+$BinName = "$BinBase.exe"
+$CanonicalBin = "fimod.exe"
 $TargetBin = Join-Path $InstallDir $BinName
+$CanonicalTarget = Join-Path $InstallDir $CanonicalBin
+$DefaultInstalled = $false
 
 if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
     Write-Host "Skipping download (FIMOD_SKIP_DOWNLOAD=1)"
@@ -183,6 +200,17 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
         Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
 
         $ExtractedBin = Join-Path $TmpDir $BinName
+        if (-not (Test-Path -Path $ExtractedBin)) {
+            $FallbackBin = Join-Path $TmpDir $CanonicalBin
+            if (Test-Path -Path $FallbackBin) {
+                # Backward compatibility for older slim archives that contained fimod.exe.
+                $ExtractedBin = $FallbackBin
+            }
+        }
+        if (-not (Test-Path -Path $ExtractedBin)) {
+            Write-Error "Error: archive did not contain $BinName"
+            exit 1
+        }
 
         if (Test-Path -Path $TargetBin) {
             Remove-Item -Path $TargetBin -Force
@@ -197,10 +225,60 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
     }
 }
 
+# -- Optional default command copy for slim/fast ------------------------
+
+function Resolve-DefaultPref {
+    if ($env:FIMOD_SET_DEFAULT -eq "yes" -or $env:FIMOD_SET_DEFAULT -eq "no") {
+        return $env:FIMOD_SET_DEFAULT
+    }
+    return "ask"
+}
+
+function Copy-AsDefault {
+    Copy-Item -Path $TargetBin -Destination $CanonicalTarget -Force
+    $script:DefaultInstalled = $true
+}
+
+if ($Variant -ne "standard") {
+    $DefaultPref = Resolve-DefaultPref
+    switch ($DefaultPref) {
+        "yes" {
+            Copy-AsDefault
+        }
+        "no" {}
+        default {
+            if ([Environment]::UserInteractive) {
+                Write-Host ""
+                Write-Host "Install the $Variant variant as the default 'fimod' command too? [y/N]"
+                $Reply = Read-Host "  >"
+                if ($Reply -match '^[yY]') {
+                    Copy-AsDefault
+                }
+            }
+        }
+    }
+}
+
 # -- Verify ------------------------------------------------------------
 
 Write-Host ""
-Write-Host "fimod installed to $TargetBin"
+Write-Host "$BinBase installed to $TargetBin"
+try {
+    $Installed = & $TargetBin --version
+    Write-Host "   $Installed"
+} catch {
+    Write-Host "   (Installed, but could not run --version)"
+}
+
+if ($DefaultInstalled) {
+    Write-Host "fimod installed to $CanonicalTarget"
+    try {
+        $DefaultVersion = & $CanonicalTarget --version
+        Write-Host "   $DefaultVersion"
+    } catch {
+        Write-Host "   (Installed, but could not run --version)"
+    }
+}
 
 $PathDirs = ($env:PATH -split ';') | ForEach-Object { $_.TrimEnd('\') }
 $InstallDirNorm = $InstallDir.TrimEnd('\')
@@ -211,13 +289,6 @@ if ($PathDirs -notcontains $InstallDirNorm) {
     Write-Host "   [Environment]::SetEnvironmentVariable('PATH', '$InstallDir;' + `$env:PATH, 'User')"
     Write-Host "   And for this session:"
     Write-Host "   `$env:PATH = `"$InstallDir;`$env:PATH`""
-} else {
-    try {
-        $Installed = & $TargetBin --version
-        Write-Host "   $Installed"
-    } catch {
-        Write-Host "   (Installed, but could not run --version)"
-    }
 }
 
 Write-Host ""
@@ -231,8 +302,8 @@ Write-Host ""
 #   3. interactive prompt
 #
 # The command path depends on the installed fimod version:
-#   >= 0.5.0  -> `fimod setup registry defaults` and `fimod setup sandbox defaults`
-#   <  0.5.0  -> only `fimod registry setup` (sandbox unavailable)
+#   >= 0.5.0  -> `<installed-command> setup registry defaults` and sandbox defaults
+#   <  0.5.0  -> `<installed-command> registry setup` (sandbox unavailable)
 
 $VersionOutput = ""
 try { $VersionOutput = (& $TargetBin --version) 2>$null } catch { $VersionOutput = "" }
@@ -249,11 +320,11 @@ if ($VersionMatch.Success) {
 
 if ($InstalledNum -ge 500) {
     $RegistryCmdArgs = @("setup", "registry", "defaults")
-    $RegistryHint    = "fimod setup registry defaults"
+    $RegistryHint    = "$BinBase setup registry defaults"
     $SandboxAvailable = $true
 } else {
     $RegistryCmdArgs = @("registry", "setup")
-    $RegistryHint    = "fimod registry setup"
+    $RegistryHint    = "$BinBase registry setup"
     $SandboxAvailable = $false
 }
 
@@ -303,13 +374,13 @@ if (-not $SandboxAvailable) {
             & $TargetBin setup sandbox defaults --yes
         }
         "no" {
-            Write-Host "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+            Write-Host "  Skipped. Run '$BinBase setup sandbox defaults' at any time."
         }
         default {
             Write-Host "  Install recommended sandbox policy? [Y/n]"
             $Reply = Read-Host "  >"
             if ($Reply -match '^[nN]') {
-                Write-Host "  Skipped. Run 'fimod setup sandbox defaults' at any time."
+                Write-Host "  Skipped. Run '$BinBase setup sandbox defaults' at any time."
             } else {
                 & $TargetBin setup sandbox defaults --yes
             }
