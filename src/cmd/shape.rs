@@ -3,6 +3,7 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+use clap::ArgMatches;
 use serde_json::Value;
 
 use fimod::format::{CsvOptions, DataFormat};
@@ -16,48 +17,34 @@ use fimod::{convert, format, http};
 
 use crate::cli::{MsgLevel, ShapeArgs};
 
-pub fn build_script_refs(molds: &[String], expressions: &[String]) -> Vec<ScriptRef> {
-    let args: Vec<String> = std::env::args().collect();
-    let mut mold_iter = molds.iter();
-    let mut expr_iter = expressions.iter();
-    let mut refs = Vec::new();
+pub fn script_refs_from_matches(matches: &ArgMatches, shape: &ShapeArgs) -> Vec<ScriptRef> {
+    let Some((_, shape_matches)) = matches.subcommand() else {
+        return Vec::new();
+    };
 
-    let mut i = 0;
-    while i < args.len() {
-        let arg = &args[i];
-        if (arg == "-m" || arg == "--mold") && i + 1 < args.len() {
-            if let Some(v) = mold_iter.next() {
-                refs.push(ScriptRef::Mold(v.clone()));
-            }
-            i += 2;
-        } else if arg.starts_with("--mold=")
-            || (arg.starts_with("-m") && arg.len() > 2 && !arg.starts_with("-m-"))
-        {
-            if let Some(v) = mold_iter.next() {
-                refs.push(ScriptRef::Mold(v.clone()));
-            }
-            i += 1;
-        } else if (arg == "-e" || arg == "--expression") && i + 1 < args.len() {
-            if let Some(v) = expr_iter.next() {
-                refs.push(ScriptRef::Expr(v.clone()));
-            }
-            i += 2;
-        } else if arg.starts_with("--expression=")
-            || (arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e-"))
-        {
-            if let Some(v) = expr_iter.next() {
-                refs.push(ScriptRef::Expr(v.clone()));
-            }
-            i += 1;
-        } else {
-            i += 1;
-        }
+    let mut refs: Vec<(usize, ScriptRef)> = Vec::new();
+
+    if let Some(indices) = shape_matches.indices_of("mold") {
+        refs.extend(
+            indices
+                .zip(shape.mold.iter())
+                .map(|(idx, value)| (idx, ScriptRef::Mold(value.clone()))),
+        );
     }
 
-    refs
+    if let Some(indices) = shape_matches.indices_of("expression") {
+        refs.extend(
+            indices
+                .zip(shape.expression.iter())
+                .map(|(idx, value)| (idx, ScriptRef::Expr(value.clone()))),
+        );
+    }
+
+    refs.sort_by_key(|(idx, _)| *idx);
+    refs.into_iter().map(|(_, script_ref)| script_ref).collect()
 }
 
-pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
+pub fn run_shape(mut shape: ShapeArgs, script_refs: Vec<ScriptRef>) -> Result<CliResult> {
     // Parse output format once so the rest of the function can dispatch on
     // the typed `OutputMode` enum instead of string-comparing to "raw".
     let output_mode = shape
@@ -125,12 +112,12 @@ pub fn run_shape(mut shape: ShapeArgs) -> Result<CliResult> {
 
     if shape.watch {
         #[cfg(feature = "watch")]
-        return crate::watch::run_watch(&shape, &policy, debug, msg_level);
+        return crate::watch::run_watch(&shape, &script_refs, &policy, debug, msg_level);
         #[cfg(not(feature = "watch"))]
         bail!("--watch is not available in this build (compiled without the 'watch' feature)");
     }
 
-    run_shape_pipeline(&shape, &policy, debug, msg_level)
+    run_shape_pipeline(&shape, &script_refs, &policy, debug, msg_level)
 }
 
 /// Validation pass after `--input-list` has been resolved into `shape.input`.
@@ -261,6 +248,7 @@ fn run_raw_passthrough(shape: ShapeArgs, debug: bool, is_batch: bool) -> Result<
 
 pub fn run_shape_pipeline(
     shape: &ShapeArgs,
+    script_refs: &[ScriptRef],
     policy: &SandboxPolicy,
     debug: bool,
     msg_level: u8,
@@ -285,8 +273,7 @@ pub fn run_shape_pipeline(
     let env_value = build_env(&shape.env_patterns);
 
     // Build scripts chain
-    let script_refs = build_script_refs(&shape.mold, &shape.expression);
-    let scripts = build_scripts(&script_refs, shape.no_cache)?;
+    let scripts = build_scripts(script_refs, shape.no_cache)?;
 
     // First mold's defaults drive input options; last mold's defaults drive output options
     let first_defaults = &scripts[0].defaults;

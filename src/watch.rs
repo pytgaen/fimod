@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use fimod::mold::MoldSource;
-use fimod::pipeline::CliResult;
+use fimod::pipeline::{CliResult, ScriptRef};
 use fimod::sandbox::SandboxPolicy;
 use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
@@ -36,6 +36,7 @@ fn quiet_ms() -> u64 {
 
 pub fn run_watch(
     shape: &ShapeArgs,
+    script_refs: &[ScriptRef],
     policy: &SandboxPolicy,
     debug: bool,
     msg_level: u8,
@@ -80,7 +81,7 @@ pub fn run_watch(
     let quiet = Duration::from_millis(quiet_ms());
 
     let mut run_n: u32 = 1;
-    run_once(shape, policy, debug, msg_level, run_n);
+    run_once(shape, script_refs, policy, debug, msg_level, run_n);
 
     while let Ok(first) = rx.recv() {
         // Debounce: notify can split a single logical write into multiple
@@ -108,15 +109,22 @@ pub fn run_watch(
         }
 
         run_n += 1;
-        run_once(shape, policy, debug, msg_level, run_n);
+        run_once(shape, script_refs, policy, debug, msg_level, run_n);
     }
 
     Ok(CliResult::Done)
 }
 
-fn run_once(shape: &ShapeArgs, policy: &SandboxPolicy, debug: bool, msg_level: u8, run_n: u32) {
+fn run_once(
+    shape: &ShapeArgs,
+    script_refs: &[ScriptRef],
+    policy: &SandboxPolicy,
+    debug: bool,
+    msg_level: u8,
+    run_n: u32,
+) {
     let start = Instant::now();
-    match crate::cmd::shape::run_shape_pipeline(shape, policy, debug, msg_level) {
+    match crate::cmd::shape::run_shape_pipeline(shape, script_refs, policy, debug, msg_level) {
         Ok(_) => eprintln!(
             "[watch] run #{run_n} ok ({}ms)",
             start.elapsed().as_millis()

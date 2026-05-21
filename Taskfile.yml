@@ -106,11 +106,11 @@ tasks:
       - upx --best --lzma ~/.local/bin/fimod
 
   build:fast:
-    desc: Build speed-optimized ffimod binary (opt-level=3) and install to ~/.local/bin
+    desc: Build speed-optimized fimod-fast binary (opt-level=3) and install to ~/.local/bin
     cmds:
-      - cargo build --profile release-fast --features ffimod
-      - cp target/release-fast/ffimod ~/.local/bin/ffimod
-      - chmod +x ~/.local/bin/ffimod
+      - cargo build --profile release-fast --features fast
+      - cp target/release-fast/fimod-fast ~/.local/bin/fimod-fast
+      - chmod +x ~/.local/bin/fimod-fast
 
   # ─── Documentation ──────────────────────────────
 
@@ -166,25 +166,25 @@ tasks:
   #   ❌ aarch64-apple-darwin        (requires macOS SDK)
 
   dist:fast:linux:x86_64:
-    desc: Build speed-optimized ffimod for x86_64-unknown-linux-musl (opt-level=3, no UPX)
+    desc: Build speed-optimized fimod-fast for x86_64-unknown-linux-musl (opt-level=3, no UPX)
     vars:
       TARGET: x86_64-unknown-linux-musl
     cmds:
       - mkdir -p dist /tmp/fimod-pkg
-      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features ffimod
-      - cp target/{{.TARGET}}/release-fast/ffimod /tmp/fimod-pkg/ffimod
-      - tar czf "dist/ffimod-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg ffimod
+      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features fast
+      - cp target/{{.TARGET}}/release-fast/fimod-fast /tmp/fimod-pkg/fimod-fast
+      - tar czf "dist/fimod-fast-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg fimod-fast
       - rm -rf /tmp/fimod-pkg
 
   dist:fast:linux:aarch64:
-    desc: Build speed-optimized ffimod for aarch64-unknown-linux-musl (opt-level=3, no UPX)
+    desc: Build speed-optimized fimod-fast for aarch64-unknown-linux-musl (opt-level=3, no UPX)
     vars:
       TARGET: aarch64-unknown-linux-musl
     cmds:
       - mkdir -p dist /tmp/fimod-pkg
-      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features ffimod
-      - cp target/{{.TARGET}}/release-fast/ffimod /tmp/fimod-pkg/ffimod
-      - tar czf "dist/ffimod-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg ffimod
+      - cargo zigbuild --profile release-fast --target {{.TARGET}} --features fast
+      - cp target/{{.TARGET}}/release-fast/fimod-fast /tmp/fimod-pkg/fimod-fast
+      - tar czf "dist/fimod-fast-{{.VERSION}}-{{.TARGET}}.tar.gz" -C /tmp/fimod-pkg fimod-fast
       - rm -rf /tmp/fimod-pkg
 
   dist:linux:x86_64:

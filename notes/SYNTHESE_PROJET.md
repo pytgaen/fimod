@@ -187,17 +187,23 @@ Cette discipline documentaire réduit fortement le coût d'entrée pour un contr
 
 ## Problèmes et risques identifiés
 
-### P1 - Parsing manuel de l'ordre `-m` / `-e`
+### P1 - Parsing manuel de l'ordre `-m` / `-e` — traité
 
-`src/cmd/shape.rs::build_script_refs` reparcourt `std::env::args()` pour reconstruire l'ordre d'apparition des options `-m` et `-e`. Cette logique est fragile parce qu'elle duplique une partie du parsing déjà fait par Clap.
+Le risque initial était que `src/cmd/shape.rs::build_script_refs` reparcoure
+`std::env::args()` pour reconstruire l'ordre d'apparition des options `-m` et
+`-e`. Cette logique était fragile parce qu'elle dupliquait une partie du parsing
+déjà fait par Clap.
 
-Risques :
+Risques qui ont motivé la correction :
 
 - divergences sur les formes d'options acceptées par Clap ;
 - mauvais comportement autour de `--`, valeurs ressemblant à des flags, ou syntaxes rares ;
 - difficulté à tester exhaustivement tous les cas d'arguments.
 
-La direction la plus saine est de récupérer l'ordre via les indices fournis par Clap (`ArgMatches`) ou de représenter les étapes ordonnées directement dans le modèle CLI. Ce point est déjà identifié dans `notes/todo-0.7.3.md`, mais il reste important car il touche le comportement central de chaînage.
+État actuel : le plumbing CLI récupère désormais l'ordre via les indices fournis
+par Clap (`ArgMatches`) et passe la chaîne ordonnée explicitement au pipeline
+`shape`, y compris en watch mode. Les sujets qui restent à planifier ont été
+déplacés vers `notes/todo-to-plannif.md`.
 
 ### P1 - Positionnement "Python" à préciser
 

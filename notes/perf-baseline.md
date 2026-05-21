@@ -28,7 +28,7 @@ mise exec -- cargo test --release --test performance -- --ignored --nocapture
 
 ## Synthèse des gains — session v0.7.4-dev (2026-05-15)
 
-Trois optimisations output fast-path + un binaire vitesse (`ffimod`).
+Trois optimisations output fast-path + un binaire vitesse (`fimod-fast`).
 
 ### Output fast-path : `MontySerialize`
 
@@ -47,9 +47,9 @@ Note : fast-path input (`json_str_to_monty` via `serde::de::Visitor`) implément
 retiré — `monty` active `serde_json::arbitrary_precision` ce qui force les nombres
 dans `visit_map` via un sentinel interne, annulant le gain.
 
-### Comparaisons CLI — outil / fimod / ffimod
+### Comparaisons CLI — outil / fimod / fimod-fast
 
-| Comparaison | outil | fimod v0.7.3 | fimod v0.7.4-dev | ffimod v0.7.4-dev |
+| Comparaison | outil | fimod v0.7.3 | fimod v0.7.4-dev | fimod-fast v0.7.4-dev |
 | --- | --- | --- | --- | --- |
 | JSON filter 20 000 records vs jq | 47.5 ms | 108.6 ms (2.22x) | 92.5 ms (1.95x) | 72.2 ms (1.41x) |
 | YAML → JSON 5 000 records vs yq | 70.1 ms | 71.3 ms (1.00x) | 68.9 ms (0.98x) | 42.4 ms (0.56x) |
@@ -57,10 +57,10 @@ dans `visit_map` via un sentinel interne, annulant le gain.
 
 ---
 
-## ffimod — binaire speed-optimized
+## fimod-fast — binaire speed-optimized
 
 Profil `release-fast` : hérite de `release`, `opt-level = 3`.
-Activé via feature gate : `cargo build --profile release-fast --features ffimod`.
+Activé via feature gate : `cargo build --profile release-fast --features fast`.
 Tâches : `task build:fast` (local) / `task dist:fast:linux:x86_64` (dist musl, sans UPX).
 
 ### Taille binaire
@@ -68,14 +68,14 @@ Tâches : `task build:fast` (local) / `task dist:fast:linux:x86_64` (dist musl, 
 | Binaire | opt-level | Brut | UPX `--best --lzma` |
 | --- | --- | --- | --- |
 | `fimod` | z | 8.5 MB | 2.9 MB |
-| `ffimod` | 3 | 13 MB (+53 %) | 3.8 MB (+31 %) |
+| `fimod-fast` | 3 | 13 MB (+53 %) | 3.8 MB (+31 %) |
 
 UPX ajoute ~160–240 ms de décompression par invocation — rédhibitoire pour CLI
-courtes. Distribution : `fimod` avec UPX, `ffimod` sans UPX.
+courtes. Distribution : `fimod` avec UPX, `fimod-fast` sans UPX.
 
-### Microbenchmarks ffimod vs fimod
+### Microbenchmarks fimod-fast vs fimod
 
-| Test | fimod (opt-z) | ffimod (opt-3) | Δ |
+| Test | fimod (opt-z) | fimod-fast (opt-3) | Δ |
 | --- | --- | --- | --- |
 | JSON parse + Monty round-trip + compact serialize (20 000 records) | 80.8 ms | 68.4 ms | −15 % |
 | CSV direct Monty round-trip + serialize (20 000 records) | 43.3 ms | 35.3 ms | −18 % |

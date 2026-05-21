@@ -15,7 +15,7 @@ rust-version = "1.75"
 default = ["reqwest", "watch"]
 full = ["reqwest", "watch"]
 slim = []
-ffimod = []
+fast = []
 watch = ["dep:notify"]
 
 [[bin]]
@@ -23,9 +23,9 @@ name = "fimod"
 path = "src/main.rs"
 
 [[bin]]
-name = "ffimod"
+name = "fimod-fast"
 path = "src/main.rs"
-required-features = ["ffimod"]
+required-features = ["fast"]
 
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
@@ -60,7 +60,7 @@ panic = "abort"
 
 [profile.release-fast]
 inherits = "release"
-opt-level = 3  # Speed over size (used by ffimod)
+opt-level = 3  # Speed over size (used by fimod-fast)
 
 
 [lints.rust]
