@@ -16,6 +16,7 @@ default = ["reqwest", "watch"]
 full = ["reqwest", "watch"]
 slim = []
 fast = []
+reqwest = ["dep:reqwest"]
 watch = ["dep:notify"]
 
 [[bin]]
@@ -37,7 +38,7 @@ anyhow = "1"
 serde-saphyr = "0.0.26"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "1", features = ["preserve_order"] }
 csv = "1.4"
-reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+reqwest = { version = "0.13", features = ["blocking", "rustls", "system-proxy"], default-features = false, optional = true }
 fancy-regex = "0.18"
 rustyline = "18"
 md-5 = "0.11"

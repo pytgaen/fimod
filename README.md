@@ -17,7 +17,7 @@
 
 ---
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~2.9 MB, UPX-compressed) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~3.3 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
 
 Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
 
@@ -49,6 +49,10 @@ The script downloads the right binary, installs it, then runs setup prompts for 
 > 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
 >
 > Variants install as separate commands by default: `standard` → `fimod`, `slim` → `fimod-slim`, `fast` → `fimod-fast`. For `slim` or `fast`, answer the prompt or set `FIMOD_SET_DEFAULT=yes` to also install that variant as the default `fimod` command.
+>
+> The standard build includes HTTP/HTTPS and proxy support through `reqwest` + `rustls` + AWS-LC. Use `FIMOD_VARIANT=slim` when binary size matters more than HTTP input or remote mold loading.
+>
+> The `fast` build keeps the standard feature set but uses the speed profile (`opt-level=3`) and ships without UPX compression. Internal smoke tests show roughly 15-25% faster CPU-heavy JSON/CSV/chain workloads; use it for large files, long chains, or repeated batch jobs.
 
 ### Windows
 
@@ -69,7 +73,7 @@ ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\b
 # Or install the slim variant (no HTTP support, smaller binary)
 # ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
-# Or install the fast variant (speed optimized, larger binary)
+# Or install the fast variant (speed optimized, larger uncompressed binary)
 # ubi --project pytgaen/fimod --matching "fimod-fast-v" --in "$env:USERPROFILE\.local\bin"
 
 # 🛤️ 3. Add to PATH (if not already present)
@@ -391,7 +395,7 @@ fimod s -i https://example.com/archive.tar.gz --output-format raw -O
 
 ![HTTP Demo](docs/assets/demo-http.gif)
 
-Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls - proxy-aware out of the box (`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`). Smart format detection reads `Content-Type` headers automatically. Use `--input-format http` for full access to status codes and response headers.
+Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls/AWS-LC - proxy-aware out of the box (`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`). Smart format detection reads `Content-Type` headers automatically. Use `--input-format http` for full access to status codes and response headers.
 
 > Included in the `standard` and `fast` variants. Use `FIMOD_VARIANT=slim` to exclude HTTP support.
 

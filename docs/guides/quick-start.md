@@ -15,7 +15,7 @@
 
     | Variable | Default | Description |
     |---|---|---|
-    | `FIMOD_VARIANT` | `standard` | `standard`, `slim` (no HTTP/remote mold loading), or `fast` (speed optimized) |
+    | `FIMOD_VARIANT` | `standard` | `standard` (HTTP/HTTPS via `reqwest` + `rustls` + AWS-LC), `slim` (no HTTP/remote mold loading, smaller), or `fast` (same features as standard, speed optimized, larger/uncompressed) |
     | `FIMOD_SET_DEFAULT` | *prompt* | For `slim`/`fast`: `yes` also installs that variant as `fimod`; `no` keeps only `fimod-slim` / `fimod-fast` |
     | `FIMOD_INSTALL` | `/usr/local/bin` | Install directory (falls back to `~/.local/bin` if not writable) |
     | `FIMOD_VERSION` | latest | Pin a specific version (e.g. `v0.2.1`) |
@@ -53,7 +53,7 @@
     # Or slim variant (no HTTP support, smaller binary)
     # ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
-    # Or fast variant (speed optimized, larger binary)
+    # Or fast variant (speed optimized, larger uncompressed binary)
     # ubi --project pytgaen/fimod --matching "fimod-fast-v" --in "$env:USERPROFILE\.local\bin"
 
     # 🛤️ 3. Add to PATH (if not already present)

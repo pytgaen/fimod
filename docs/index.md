@@ -9,7 +9,7 @@
 >
 > *💡 DRY your pipelines · Slim your container images · Tame your configs*
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~2.9 MB, UPX-compressed). You write the transform logic; fimod handles parsing, format detection, and I/O.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~3.3 MB in the UPX-compressed standard build). You write the transform logic; fimod handles parsing, format detection, and I/O.
 
 !!! info "Python syntax, Monty runtime"
     Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
@@ -44,7 +44,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["name"]' --output
 
     ---
 
-    No runtime, no `pip install`, no dependencies. One ~2.9 MB binary (UPX-compressed) that works everywhere.
+    No runtime, no `pip install`, no dependencies. One ~3.3 MB standard binary after UPX compression; use `slim` when you do not need HTTP input, or `fimod-fast` for large CPU-heavy runs.
 
 -   :material-swap-horizontal:{ .lg .middle } **All the formats**
 

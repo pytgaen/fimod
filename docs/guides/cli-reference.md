@@ -126,6 +126,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod/releases/latest \
 
 !!! tip "Requires the standard or fast build variant"
     HTTP input needs reqwest, which is included in the `standard` and `fast` release variants. Use `FIMOD_VARIANT=slim` (or `cargo build --no-default-features`) if you want to opt out.
+    Use `FIMOD_VARIANT=fast` for a larger, uncompressed binary optimized for long CPU-heavy transforms.
 
 ---
 

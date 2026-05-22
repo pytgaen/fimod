@@ -65,10 +65,13 @@ Tâches : `task build:fast` (local) / `task dist:fast:linux:x86_64` (dist musl, 
 
 ### Taille binaire
 
+Mesure native Linux actualisée le 2026-05-22 après le passage à `reqwest`
+0.13 / `rustls` / AWS-LC.
+
 | Binaire | opt-level | Brut | UPX `--best --lzma` |
 | --- | --- | --- | --- |
-| `fimod` | z | 8.5 MB | 2.9 MB |
-| `fimod-fast` | 3 | 13 MB (+53 %) | 3.8 MB (+31 %) |
+| `fimod` | z | 10.8 MB | 3.3 MB |
+| `fimod-fast` | 3 | 14.7 MB (+36 %) | 4.3 MB (+31 %, not distributed compressed) |
 
 UPX ajoute ~160–240 ms de décompression par invocation — rédhibitoire pour CLI
 courtes. Distribution : `fimod` avec UPX, `fimod-fast` sans UPX.
