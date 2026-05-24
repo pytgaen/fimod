@@ -240,10 +240,11 @@ fi
 
 ## ⚙️ Setup
 
-`fimod setup <category> defaults` installs the canonical configuration for a category. It's what the install scripts call after downloading the binary, but you can re-run it at any time.
+`fimod setup <category> defaults` installs the canonical configuration for a category. The install scripts call the idempotent `--if-needed` form after downloading the binary, but you can re-run it at any time.
 
 ```bash
-fimod setup all defaults --yes          # 🚀 registry + sandbox in one go
+fimod setup all defaults --if-needed    # registry + sandbox, only when missing
+fimod setup all defaults --yes          # registry + sandbox in one go
 fimod setup registry defaults --yes     # community registries only
 fimod setup sandbox defaults --yes      # sandbox policy only
 ```
@@ -252,11 +253,20 @@ fimod setup sandbox defaults --yes      # sandbox policy only
 |------|-------------|
 | `--yes` | Non-interactive (required on CI / non-TTY). |
 | `--force` | Overwrite an existing `sandbox.toml` (ignored for registry). |
+| `--if-needed` | Install missing defaults, skip already-configured blocks, and leave existing files untouched. |
+
+Setup prompts can also be answered with environment variables. Granular values win over `FIMOD_SETUP_ALL`.
+
+| Variable | Values | Applies to |
+|----------|--------|------------|
+| `FIMOD_SETUP_REGISTRY` | `yes` / `no` | Community registries |
+| `FIMOD_SETUP_SANDBOX` | `yes` / `no` | Sandbox policy |
+| `FIMOD_SETUP_ALL` | `yes` / `no` | Default for both when granular values are unset |
 
 What each target does:
 
 - **`registry`** — installs the community registries in `~/.config/fimod/sources.toml`. Idempotent; safe to re-run. Same effect as the legacy `fimod registry setup`.
-- **`sandbox`** — writes the recommended sandbox policy to `~/.config/fimod/sandbox.toml`. Refuses to overwrite without `--force`.
+- **`sandbox`** — writes the recommended sandbox policy to `~/.config/fimod/sandbox.toml`. Refuses to overwrite without `--force`; with `--if-needed`, an existing file is left unchanged.
 - **`all`** — runs `registry` then `sandbox`, stopping at the first error.
 
 See [Sandbox policy](#sandbox-policy) for what the sandbox file controls and how it is resolved.

@@ -241,6 +241,9 @@ pub enum SetupDefaults {
         /// Overwrite existing configuration (sandbox.toml)
         #[arg(long)]
         force: bool,
+        /// Only install missing defaults; leave existing configuration untouched
+        #[arg(long = "if-needed")]
+        if_needed: bool,
     },
 }
 

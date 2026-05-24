@@ -16,6 +16,7 @@ mod cmd;
 mod watch;
 
 use cli::{Cli, Commands, MoldAction, MontyAction, SetupCategory, SetupDefaults};
+use cmd::setup::SetupOptions;
 
 fn main() -> Result<()> {
     CompleteEnv::with_factory(Cli::command).complete();
@@ -67,14 +68,29 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
         },
         Commands::Setup { category } => match category {
             SetupCategory::Registry {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::registry_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::registry_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::Sandbox {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::sandbox_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::sandbox_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::All {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::all_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::all_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::Completions { shell } => {
                 cmd::completions::print_completion_script(shell)
             }

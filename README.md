@@ -44,7 +44,7 @@ fimod s -i logs/*.json -m normalize.py -o cleaned/
 curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 ```
 
-The script downloads the right binary, installs it, then runs setup prompts for **community registries** (example molds) and the **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). When installing `slim` or `fast`, it may also ask whether to install that variant as the default `fimod` command. Answer `y`/`n` per block, or skip the prompts with env vars.
+The script downloads the right binary, installs it, then runs `fimod setup all defaults --if-needed` for **community registries** (example molds) and the **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). Already-configured blocks are skipped; missing blocks ask unless you answer with env vars. When installing `slim` or `fast`, the script may also ask whether to install that variant as the default `fimod` command.
 
 > 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
 >
@@ -84,8 +84,8 @@ if ($UserPath -notlike "*$BinDir*") {
     $env:PATH = "$BinDir;$env:PATH"
 }
 
-# 🗂️ 4. Install community registries + recommended sandbox policy
-fimod setup all defaults --yes
+# 🗂️ 4. Install missing registries + sandbox policy
+fimod setup all defaults --if-needed
 ```
 
 </details>

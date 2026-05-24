@@ -25,7 +25,9 @@ pub fn dispatch(action: RegistryAction) -> Result<()> {
         }
         RegistryAction::Setup { yes } => {
             eprintln!("warning: `fimod registry setup` is deprecated. Use `fimod setup registry defaults`. Will be removed in 0.10.0.");
-            crate::cmd::setup::registry_defaults(yes, false)
+            crate::cmd::setup::registry_defaults(crate::cmd::setup::SetupOptions::new(
+                yes, false, false,
+            ))
         }
         RegistryAction::Cache { action } => match action {
             CacheAction::Clear { name } => registry::cache_clear(name.as_deref()),

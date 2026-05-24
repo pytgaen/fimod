@@ -12,9 +12,9 @@
 #   $env:FIMOD_VERSION   specific version to install (default: latest)
 #   $env:FIMOD_SOURCE    github (default) or gitlab
 #   $env:FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
-#   $env:FIMOD_SETUP_REGISTRY yes=auto-setup registries, no=skip, unset=fall through
-#   $env:FIMOD_SETUP_SANDBOX  yes=auto-setup sandbox, no=skip, unset=fall through (fimod >= 0.5.0)
-#   $env:FIMOD_SETUP_ALL      yes|no default for both when granulars are unset; unset=interactive prompt
+#   $env:FIMOD_SETUP_REGISTRY yes=setup registries, no=skip, unset=prompt if needed
+#   $env:FIMOD_SETUP_SANDBOX  yes=setup sandbox, no=skip, unset=prompt if needed
+#   $env:FIMOD_SETUP_ALL      yes|no default for both when granulars are unset
 
 $ErrorActionPreference = "Stop"
 
@@ -294,97 +294,13 @@ if ($PathDirs -notcontains $InstallDirNorm) {
 Write-Host ""
 
 # -- Post-install setup (registry + sandbox) ---------------------------
-#
-# Two independent blocks: registry (community molds) and sandbox (policy file).
-# Each resolves its preference in order:
-#   1. FIMOD_SETUP_<CAT>=yes|no   (granular, wins over the rest)
-#   2. FIMOD_SETUP_ALL=yes|no     (default for both when granular unset)
-#   3. interactive prompt
-#
-# The command path depends on the installed fimod version:
-#   >= 0.5.0  -> `<installed-command> setup registry defaults` and sandbox defaults
-#   <  0.5.0  -> `<installed-command> registry setup` (sandbox unavailable)
-
-$VersionOutput = ""
-try { $VersionOutput = (& $TargetBin --version) 2>$null } catch { $VersionOutput = "" }
-$VersionMatch = [regex]::Match($VersionOutput, '(\d+)\.(\d+)\.(\d+)')
-if ($VersionMatch.Success) {
-    $InstalledVersion = $VersionMatch.Value
-    $InstalledNum = ([int]$VersionMatch.Groups[1].Value * 10000) +
-                    ([int]$VersionMatch.Groups[2].Value * 100) +
-                    ([int]$VersionMatch.Groups[3].Value)
-} else {
-    $InstalledVersion = "0.0.0"
-    $InstalledNum = 0
-}
-
-if ($InstalledNum -ge 500) {
-    $RegistryCmdArgs = @("setup", "registry", "defaults")
-    $RegistryHint    = "$BinBase setup registry defaults"
-    $SandboxAvailable = $true
-} else {
-    $RegistryCmdArgs = @("registry", "setup")
-    $RegistryHint    = "$BinBase registry setup"
-    $SandboxAvailable = $false
-}
-
-function Resolve-SetupPref([string]$specific) {
-    if ($specific -eq "yes" -or $specific -eq "no") { return $specific }
-    $all = $env:FIMOD_SETUP_ALL
-    if ($all -eq "yes" -or $all -eq "no") { return $all }
-    return "ask"
-}
-
-$RegPref = Resolve-SetupPref $env:FIMOD_SETUP_REGISTRY
-$SbPref  = Resolve-SetupPref $env:FIMOD_SETUP_SANDBOX
 
 Write-Host "-----------------------------------------------"
-Write-Host "Registry"
-switch ($RegPref) {
-    "yes" {
-        Write-Host "  Installing community registries..."
-        & $TargetBin @RegistryCmdArgs --yes
-    }
-    "no" {
-        Write-Host "  Skipped. Run '$RegistryHint' at any time."
-    }
-    default {
-        Write-Host "  Install community registries? [Y/n]"
-        $Reply = Read-Host "  >"
-        if ($Reply -match '^[nN]') {
-            Write-Host "  Skipped. Run '$RegistryHint' at any time."
-        } else {
-            & $TargetBin @RegistryCmdArgs --yes
-        }
-    }
+Write-Host "Post-install setup"
+& $TargetBin setup all defaults --if-needed
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Warning: post-install setup did not complete." -ForegroundColor Yellow
+    Write-Host "Run '$BinBase setup all defaults --if-needed' later to configure registries and sandbox." -ForegroundColor Yellow
 }
-
-Write-Host ""
-Write-Host "Sandbox"
-if (-not $SandboxAvailable) {
-    if ($SbPref -eq "yes") {
-        Write-Host "  Requires fimod >= 0.5.0 (installed $InstalledVersion) - skipped."
-    } else {
-        Write-Host "  Requires fimod >= 0.5.0 (installed $InstalledVersion)."
-    }
-} else {
-    switch ($SbPref) {
-        "yes" {
-            Write-Host "  Installing recommended sandbox policy..."
-            & $TargetBin setup sandbox defaults --yes
-        }
-        "no" {
-            Write-Host "  Skipped. Run '$BinBase setup sandbox defaults' at any time."
-        }
-        default {
-            Write-Host "  Install recommended sandbox policy? [Y/n]"
-            $Reply = Read-Host "  >"
-            if ($Reply -match '^[nN]') {
-                Write-Host "  Skipped. Run '$BinBase setup sandbox defaults' at any time."
-            } else {
-                & $TargetBin setup sandbox defaults --yes
-            }
-        }
-    }
-}
+$global:LASTEXITCODE = 0
 Write-Host "-----------------------------------------------"

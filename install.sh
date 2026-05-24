@@ -11,9 +11,9 @@
 #   FIMOD_VERSION   specific version to install (default: latest)
 #   FIMOD_SOURCE    github (default) or gitlab
 #   FIMOD_SKIP_DOWNLOAD  set to 1 to skip download (binary must already be installed)
-#   FIMOD_SETUP_REGISTRY yes=auto-setup registries, no=skip, unset=fall through
-#   FIMOD_SETUP_SANDBOX  yes=auto-setup sandbox, no=skip, unset=fall through (fimod >= 0.5.0)
-#   FIMOD_SETUP_ALL      yes|no default for both when granulars are unset; unset=interactive prompt
+#   FIMOD_SETUP_REGISTRY yes=setup registries, no=skip, unset=prompt if needed
+#   FIMOD_SETUP_SANDBOX  yes=setup sandbox, no=skip, unset=prompt if needed
+#   FIMOD_SETUP_ALL      yes|no default for both when granulars are unset
 
 set -eu
 
@@ -308,114 +308,13 @@ fi
 echo ""
 
 # ── Post-install setup (registry + sandbox) ─────────────────────────
-#
-# Two independent blocks: registry (community molds) and sandbox (policy file).
-# Each resolves its preference in order:
-#   1. FIMOD_SETUP_<CAT>=yes|no   (granular, wins over the rest)
-#   2. FIMOD_SETUP_ALL=yes|no     (default for both when granular unset)
-#   3. interactive TTY prompt
-#   4. otherwise skip with a hint
-#
-# The command path depends on the installed fimod version:
-#   >= 0.5.0  → `<installed-command> setup registry defaults` and sandbox defaults
-#   <  0.5.0  → `<installed-command> registry setup` (sandbox unavailable)
-
-INSTALLED_VERSION=$("$TARGET_BIN" --version 2>/dev/null \
-  | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
-  | head -n 1)
-: "${INSTALLED_VERSION:=0.0.0}"
-INSTALLED_NUM=$(echo "$INSTALLED_VERSION" \
-  | awk -F'[.-]' '{ printf "%d", ($1*10000)+($2*100)+$3 }')
-: "${INSTALLED_NUM:=0}"
-
-if [ "$INSTALLED_NUM" -ge 500 ]; then
-  REGISTRY_CMD_ARGS="setup registry defaults"
-  REGISTRY_HINT="${BIN_BASENAME} setup registry defaults"
-  SANDBOX_AVAILABLE=1
-else
-  REGISTRY_CMD_ARGS="registry setup"
-  REGISTRY_HINT="${BIN_BASENAME} registry setup"
-  SANDBOX_AVAILABLE=0
-fi
-
-resolve_pref() {
-  case "$1" in
-    yes|no) echo "$1"; return ;;
-  esac
-  case "${FIMOD_SETUP_ALL:-}" in
-    yes|no) echo "${FIMOD_SETUP_ALL}"; return ;;
-  esac
-  echo "ask"
-}
-
-REG_PREF=$(resolve_pref "${FIMOD_SETUP_REGISTRY:-}")
-SB_PREF=$(resolve_pref "${FIMOD_SETUP_SANDBOX:-}")
 
 echo "───────────────────────────────────────────────"
-echo "Registry"
-case "$REG_PREF" in
-  yes)
-    echo "  Installing community registries..."
-    # shellcheck disable=SC2086
-    "$TARGET_BIN" $REGISTRY_CMD_ARGS --yes
-    ;;
-  no)
-    echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
-    ;;
-  ask)
-    if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
-      echo "  Install community registries? [Y/n]"
-      printf "  > "
-      read -r REPLY </dev/tty
-      case "$REPLY" in
-        [nN]*)
-          echo "  Skipped. Run '${REGISTRY_HINT}' at any time."
-          ;;
-        *)
-          # shellcheck disable=SC2086
-          "$TARGET_BIN" $REGISTRY_CMD_ARGS --yes
-          ;;
-      esac
-    else
-      echo "  Run '${REGISTRY_HINT}' to configure community registries."
-    fi
-    ;;
-esac
-
-echo ""
-echo "Sandbox"
-if [ "$SANDBOX_AVAILABLE" -eq 0 ]; then
-  if [ "$SB_PREF" = "yes" ]; then
-    echo "  Requires fimod >= 0.5.0 (installed ${INSTALLED_VERSION}) — skipped."
-  else
-    echo "  Requires fimod >= 0.5.0 (installed ${INSTALLED_VERSION})."
-  fi
+echo "Post-install setup"
+if "$TARGET_BIN" setup all defaults --if-needed; then
+  :
 else
-  case "$SB_PREF" in
-    yes)
-      echo "  Installing recommended sandbox policy..."
-      "$TARGET_BIN" setup sandbox defaults --yes
-      ;;
-    no)
-      echo "  Skipped. Run '${BIN_BASENAME} setup sandbox defaults' at any time."
-      ;;
-    ask)
-      if [ -t 0 ] || (: </dev/tty) 2>/dev/null; then
-        echo "  Install recommended sandbox policy? [Y/n]"
-        printf "  > "
-        read -r REPLY </dev/tty
-        case "$REPLY" in
-          [nN]*)
-            echo "  Skipped. Run '${BIN_BASENAME} setup sandbox defaults' at any time."
-            ;;
-          *)
-            "$TARGET_BIN" setup sandbox defaults --yes
-            ;;
-        esac
-      else
-        echo "  Run '${BIN_BASENAME} setup sandbox defaults' to configure the sandbox policy."
-      fi
-      ;;
-  esac
+  echo "Warning: post-install setup did not complete." >&2
+  echo "Run '${BIN_BASENAME} setup all defaults --if-needed' later to configure registries and sandbox." >&2
 fi
 echo "───────────────────────────────────────────────"

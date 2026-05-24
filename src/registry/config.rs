@@ -9,21 +9,48 @@ use serde::{Deserialize, Serialize};
 /// Prompt the user with a yes/no question. Returns `false` in non-interactive contexts.
 /// `default_yes` controls the default when the user presses Enter without typing.
 pub fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
-    use std::io::{IsTerminal, Write};
+    use std::io::{BufRead, IsTerminal, Write};
+
+    fn ask<R: BufRead, W: Write>(
+        input: &mut R,
+        output: &mut W,
+        prompt: &str,
+        default_yes: bool,
+    ) -> Result<bool> {
+        let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
+        write!(output, "{prompt} {hint} ")?;
+        output.flush()?;
+        let mut answer = String::new();
+        input.read_line(&mut answer)?;
+        let answer = answer.trim().to_lowercase();
+        if answer.is_empty() {
+            Ok(default_yes)
+        } else {
+            Ok(answer == "y" || answer == "yes")
+        }
+    }
+
     if !std::io::stdin().is_terminal() {
+        #[cfg(unix)]
+        {
+            if let Ok(tty) = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tty")
+            {
+                let mut output = tty.try_clone()?;
+                let mut input = std::io::BufReader::new(tty);
+                return ask(&mut input, &mut output, prompt, default_yes);
+            }
+        }
         return Ok(false);
     }
-    let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
-    print!("{prompt} {hint} ");
-    std::io::stdout().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer)?;
-    let answer = answer.trim().to_lowercase();
-    if answer.is_empty() {
-        Ok(default_yes)
-    } else {
-        Ok(answer == "y" || answer == "yes")
-    }
+
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let mut input = stdin.lock();
+    let mut output = stdout.lock();
+    ask(&mut input, &mut output, prompt, default_yes)
 }
 
 // ── config path ───────────────────────────────────────────────────────────────

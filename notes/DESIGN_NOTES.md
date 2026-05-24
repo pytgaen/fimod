@@ -155,6 +155,7 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 - Auto-token detection for GitHub (`GITHUB_TOKEN`) and GitLab (`GITLAB_TOKEN`).
 - Remote registries publish a `catalog.toml` for discovery.
 - `fimod setup registry defaults` handles first-run onboarding; `fimod registry setup` is only a deprecated compatibility alias.
+- `fimod setup all defaults --if-needed` is the post-install onboarding contract used by install scripts. The binary, not shell/PowerShell glue, owns `FIMOD_SETUP_ALL`, `FIMOD_SETUP_REGISTRY`, `FIMOD_SETUP_SANDBOX`, interactive prompts, and idempotent upgrade skips.
 - Subcommands: `list`, `add`, `show`, `remove`, `set-priority`, `build-catalog`, `cache`.
 
 ### Mold test runner
