@@ -17,7 +17,9 @@
 
 ---
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~2.9 MB, UPX-compressed) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~3.3 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
+
+Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
 
 ```bash
 # 🔍 Filter, reshape, convert - in one command
@@ -42,9 +44,15 @@ fimod s -i logs/*.json -m normalize.py -o cleaned/
 curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 ```
 
-The script downloads the right binary, installs it, then runs two interactive prompts: **community registries** (example molds) and **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). Answer `y`/`n` per block, or skip the prompts with env vars.
+The script downloads the right binary, installs it, then runs `fimod setup all defaults --if-needed` for **community registries** (example molds) and the **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). Already-configured blocks are skipped; missing blocks ask unless you answer with env vars. When installing `slim` or `fast`, the script may also ask whether to install that variant as the default `fimod` command.
 
-> 💡 Options via env vars: `FIMOD_VARIANT=slim` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
+> 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
+>
+> Variants install as separate commands by default: `standard` → `fimod`, `slim` → `fimod-slim`, `fast` → `fimod-fast`. For `slim` or `fast`, answer the prompt or set `FIMOD_SET_DEFAULT=yes` to also install that variant as the default `fimod` command.
+>
+> The standard build includes HTTP/HTTPS and proxy support through `reqwest` + `rustls` + AWS-LC. Use `FIMOD_VARIANT=slim` when binary size matters more than HTTP input or remote mold loading.
+>
+> The `fast` build keeps the standard feature set but uses the speed profile (`opt-level=3`) and ships without UPX compression. Internal smoke tests show roughly 15-25% faster CPU-heavy JSON/CSV/chain workloads; use it for large files, long chains, or repeated batch jobs.
 
 ### Windows
 
@@ -65,6 +73,9 @@ ubi --project pytgaen/fimod --matching "fimod-v" --in "$env:USERPROFILE\.local\b
 # Or install the slim variant (no HTTP support, smaller binary)
 # ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
+# Or install the fast variant (speed optimized, larger uncompressed binary)
+# ubi --project pytgaen/fimod --matching "fimod-fast-v" --in "$env:USERPROFILE\.local\bin"
+
 # 🛤️ 3. Add to PATH (if not already present)
 $BinDir = "$env:USERPROFILE\.local\bin"
 $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
@@ -73,8 +84,8 @@ if ($UserPath -notlike "*$BinDir*") {
     $env:PATH = "$BinDir;$env:PATH"
 }
 
-# 🗂️ 4. Install community registries + recommended sandbox policy
-fimod setup all defaults --yes
+# 🗂️ 4. Install missing registries + sandbox policy
+fimod setup all defaults --if-needed
 ```
 
 </details>
@@ -91,7 +102,7 @@ Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.p
 & "$env:TEMP\fimod-install.ps1"
 ```
 
-> 💡 Same env var options as Linux: `$env:FIMOD_VARIANT`, `$env:FIMOD_INSTALL`, `$env:FIMOD_VERSION`
+> 💡 Same env var options as Linux: `$env:FIMOD_VARIANT`, `$env:FIMOD_SET_DEFAULT`, `$env:FIMOD_INSTALL`, `$env:FIMOD_VERSION`
 
 </details>
 
@@ -125,7 +136,7 @@ You already know Python. Why learn another DSL?
 # jq: filter users older than 30
 jq '[.[] | select(.age > 30)]' users.json
 
-# fimod: same thing, it's just Python
+# fimod: same idea, with Python syntax
 fimod s -i users.json -e '[u for u in data if u["age"] > 30]'
 ```
 
@@ -155,7 +166,7 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 
 ### 👀 A taste of what fimod can do
 
-🐍 **Pure Python transforms — Rust-powered I/O, serialization & builtins:**
+🐍 **Python-syntax transforms — Rust-powered I/O, serialization & builtins:**
 
 ```bash
 # YAML to JSON, filter active users, sort by name
@@ -240,7 +251,7 @@ The classic `yq`/`jq` slurp use case — merge a base config with environment ov
 ```bash
 # Merge base.yaml with prod overrides in TOML — impossible with yq
 fimod s -i base.yaml -i prod.toml -s -e '
-def transform(data):
+def transform(data, **_):
     data[0].update(data[1])
     return data[0]
 '
@@ -255,7 +266,7 @@ def transform(data):
 ```bash
 # Merge base with prod overrides — role is explicit, no need to count -i flags
 fimod s -i base.yaml: -i prod.yaml: -s -e '
-def transform(data):
+def transform(data, **_):
     data["base"].update(data["prod"])
     return data["base"]
 '
@@ -301,11 +312,11 @@ fimod s -i data.json \
 
 ### 📦 Reusable molds & registries
 
-A **mold** is a Python file with a `transform(data, args, env, headers)` function. Inline `-e` expressions are great for one-liners, molds are for transforms you want to name, test, and share.
+A **mold** is a Python file with a `transform(data, **_)` function. Add named context parameters before `**_` when needed, for example `args` or `pipeline`. Keeping `**_` is the recommended convention for reusable molds because fimod passes context as keyword arguments.
 
 ```python
 # normalize.py
-def transform(data, args, env, headers):
+def transform(data, **_):
     return [{"name": u["name"].strip().title(), "email": u["email"].lower()} for u in data]
 ```
 
@@ -384,9 +395,9 @@ fimod s -i https://example.com/archive.tar.gz --output-format raw -O
 
 ![HTTP Demo](docs/assets/demo-http.gif)
 
-Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls - proxy-aware out of the box (`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`). Smart format detection reads `Content-Type` headers automatically. Use `--input-format http` for full access to status codes and response headers.
+Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls/AWS-LC - proxy-aware out of the box (`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`). Smart format detection reads `Content-Type` headers automatically. Use `--input-format http` for full access to status codes and response headers.
 
-> Included in the default build variant. Use `FIMOD_VARIANT=slim` to exclude HTTP support.
+> Included in the `standard` and `fast` variants. Use `FIMOD_VARIANT=slim` to exclude HTTP support.
 
 ## 🛡️ Security model
 
@@ -436,10 +447,11 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune. Override per-
 
 Design decisions, invariants, and architectural boundaries stay explicit — see [`notes/`](notes/) for the vision, architecture map, and design log. The discipline you see in the code (`cargo deny`, `#[must_use]`, layered serde/Monty boundary, conventional commits, ~500 tests + e2e fixtures) is intentional; the speed is the AI.
 
-- **Monty** (the embedded Python runtime) is an early-stage project by Pydantic. Its API is unstable and may change between releases.
+- **Monty** (the embedded Python runtime) is an early-stage project by Pydantic. It is not CPython, and its API may change between releases.
 - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
 - Versioning follows [Semantic Release](https://semver.org/) - breaking changes bump the major version.
-- Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to complement Monty's limited stdlib. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module - see [Built-ins Reference](docs/reference/built-ins.md).
+- Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
+- Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module - see [Built-ins Reference](docs/reference/built-ins.md).
 
 > [!NOTE]
 > **Regex: Fimod built-ins vs Monty's `re` module**

@@ -201,32 +201,6 @@ container_push "$BINARY" "/usr/local/bin/fimod"
 container_exec chmod +x /usr/local/bin/fimod
 container_push "$FIMOD_DIR/install.sh" "/tmp/install.sh"
 
-# Version-spoof wrappers for dual-path tests (tests 8 & 9):
-#   The real binary is kept at /usr/local/bin/fimod.
-#   Each wrapper reports a spoofed version for --version and delegates
-#   everything else to /usr/local/bin/fimod (the actual binary).
-_SPOOF_050=$(mktemp)
-cat > "$_SPOOF_050" << 'SH'
-#!/bin/sh
-if [ "$1" = "--version" ]; then
-  echo "fimod 0.5.0"
-else
-  exec /usr/local/bin/fimod "$@"
-fi
-SH
-_SPOOF_030=$(mktemp)
-cat > "$_SPOOF_030" << 'SH'
-#!/bin/sh
-if [ "$1" = "--version" ]; then
-  echo "fimod 0.3.0"
-else
-  exec /usr/local/bin/fimod "$@"
-fi
-SH
-container_push "$_SPOOF_050" "/tmp/fimod-spoof-050.sh"
-container_push "$_SPOOF_030" "/tmp/fimod-spoof-030.sh"
-container_exec chmod +x /tmp/fimod-spoof-050.sh /tmp/fimod-spoof-030.sh
-rm -f "$_SPOOF_050" "$_SPOOF_030"
 ok "Files pushed"
 
 # ── Phase 4: Tests ───────────────────────────────────────────────────
@@ -440,49 +414,84 @@ assert_ok "install.sh completes without download" \
         fimod --version
     '
 
-# ── Test 8: install.sh dual-path — new version (>= 0.5.0) ──────────
+# ── Test 8: install.sh delegates post-install setup to fimod ─────────
 
-step "Test 8: install.sh dual-path — fimod >= 0.5.0 path"
+step "Test 8: install.sh setup delegation"
 container_exec_bash '
-    export HOME=/tmp/test-dual-new
-    mkdir -p $HOME /tmp/fimod-bin-050
-    cp /tmp/fimod-spoof-050.sh /tmp/fimod-bin-050/fimod
-    chmod +x /tmp/fimod-bin-050/fimod
-    FIMOD_INSTALL=/tmp/fimod-bin-050 FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_REGISTRY=yes FIMOD_SETUP_SANDBOX=yes sh /tmp/install.sh
+    export HOME=/tmp/test-setup-delegation
+    mkdir -p $HOME /tmp/fimod-bin-setup
+    cp /usr/local/bin/fimod /tmp/fimod-bin-setup/fimod
+    chmod +x /tmp/fimod-bin-setup/fimod
+    FIMOD_INSTALL=/tmp/fimod-bin-setup FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_ALL=yes sh /tmp/install.sh
 '
-assert_ok "registry configured via setup registry defaults (new path)" \
+assert_ok "registry configured by delegated setup" \
     container_exec_bash '
-        export HOME=/tmp/test-dual-new
+        export HOME=/tmp/test-setup-delegation
         fimod registry list --output-format json | grep -q "examples"
     '
-assert_ok "sandbox.toml written (new path)" \
+assert_ok "sandbox.toml written by delegated setup" \
     container_exec_bash '
-        test -f /tmp/test-dual-new/.config/fimod/sandbox.toml
+        test -f /tmp/test-setup-delegation/.config/fimod/sandbox.toml
     '
 
-# ── Test 9: install.sh dual-path — old version (< 0.5.0) ──────────
+# ── Test 9: install.sh if-needed preserves existing sandbox ──────────
 
-step "Test 9: install.sh dual-path — fimod < 0.5.0 path"
-# FIMOD_SETUP_SANDBOX=yes is intentional: it exercises the branch that
-# prints "Requires fimod >= 0.5.0 — skipped" instead of silently passing.
-assert_output_contains \
-    "sandbox section explains version requirement (old path)" \
-    "Requires fimod >= 0.5.0" \
+step "Test 9: install.sh setup if-needed preserves sandbox"
+container_exec_bash '
+    export HOME=/tmp/test-if-needed-existing
+    mkdir -p $HOME/.config/fimod /tmp/fimod-bin-existing
+    echo "# custom sandbox" > $HOME/.config/fimod/sandbox.toml
+    cp /usr/local/bin/fimod /tmp/fimod-bin-existing/fimod
+    chmod +x /tmp/fimod-bin-existing/fimod
+    FIMOD_INSTALL=/tmp/fimod-bin-existing FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_ALL=yes sh /tmp/install.sh
+'
+assert_ok "registry configured when sandbox already exists" \
     container_exec_bash '
-        export HOME=/tmp/test-dual-old
-        mkdir -p $HOME /tmp/fimod-bin-030
-        cp /tmp/fimod-spoof-030.sh /tmp/fimod-bin-030/fimod
-        chmod +x /tmp/fimod-bin-030/fimod
-        FIMOD_INSTALL=/tmp/fimod-bin-030 FIMOD_SKIP_DOWNLOAD=1 FIMOD_SETUP_REGISTRY=yes FIMOD_SETUP_SANDBOX=yes sh /tmp/install.sh
-    '
-assert_ok "registry configured via registry setup (old path)" \
-    container_exec_bash '
-        export HOME=/tmp/test-dual-old
+        export HOME=/tmp/test-if-needed-existing
         fimod registry list --output-format json | grep -q "examples"
     '
-assert_ok "sandbox.toml NOT written (old path)" \
+assert_ok "sandbox.toml preserved by if-needed" \
     container_exec_bash '
-        test ! -f /tmp/test-dual-old/.config/fimod/sandbox.toml
+        grep -q "custom sandbox" /tmp/test-if-needed-existing/.config/fimod/sandbox.toml
+    '
+
+# ── Test 10: install.sh interactive defaults via pseudo-TTY ─────────
+
+step "Test 10: install.sh interactive setup accepts defaults"
+container_exec_bash '
+    export HOME=/tmp/test-interactive-accept
+    mkdir -p $HOME /tmp/fimod-bin-interactive-accept
+    cp /usr/local/bin/fimod /tmp/fimod-bin-interactive-accept/fimod
+    chmod +x /tmp/fimod-bin-interactive-accept/fimod
+    printf "\n\n" | script -qec "FIMOD_INSTALL=/tmp/fimod-bin-interactive-accept FIMOD_SKIP_DOWNLOAD=1 sh /tmp/install.sh" /dev/null
+'
+assert_ok "interactive default installs registries" \
+    container_exec_bash '
+        export HOME=/tmp/test-interactive-accept
+        fimod registry list --output-format json | grep -q "examples"
+    '
+assert_ok "interactive default writes sandbox" \
+    container_exec_bash '
+        test -f /tmp/test-interactive-accept/.config/fimod/sandbox.toml
+    '
+
+# ── Test 11: install.sh interactive explicit no via pseudo-TTY ──────
+
+step "Test 11: install.sh interactive setup can decline"
+container_exec_bash '
+    export HOME=/tmp/test-interactive-decline
+    mkdir -p $HOME /tmp/fimod-bin-interactive-decline
+    cp /usr/local/bin/fimod /tmp/fimod-bin-interactive-decline/fimod
+    chmod +x /tmp/fimod-bin-interactive-decline/fimod
+    printf "n\nn\n" | script -qec "FIMOD_INSTALL=/tmp/fimod-bin-interactive-decline FIMOD_SKIP_DOWNLOAD=1 sh /tmp/install.sh" /dev/null
+'
+assert_ok "interactive decline leaves registries absent" \
+    container_exec_bash '
+        test ! -e /tmp/test-interactive-decline/.config/fimod/sources.toml
+    '
+assert_ok "interactive decline leaves sandbox absent" \
+    container_exec_bash '
+        test ! -e /tmp/test-interactive-decline/.config/fimod/sandbox.toml
     '
 
 # ── Results ──────────────────────────────────────────────────────────

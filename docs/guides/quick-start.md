@@ -9,22 +9,26 @@
     ```
 
     Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
-    After installing the binary, the script prompts you (in two steps) to install the **community registries** and the **recommended sandbox policy**.
+    After installing the binary, the script runs `fimod setup all defaults --if-needed` for the **community registries** and the **recommended sandbox policy**. Already-configured blocks are skipped; missing blocks ask unless you answer with env vars. When installing `slim` or `fast`, it may also ask whether to install that variant as the default `fimod` command.
 
     **Options** (environment variables):
 
     | Variable | Default | Description |
     |---|---|---|
-    | `FIMOD_VARIANT` | *standard* | `slim` to exclude HTTP input and remote mold loading |
+    | `FIMOD_VARIANT` | `standard` | `standard` (HTTP/HTTPS via `reqwest` + `rustls` + AWS-LC), `slim` (no HTTP/remote mold loading, smaller), or `fast` (same features as standard, speed optimized, larger/uncompressed) |
+    | `FIMOD_SET_DEFAULT` | *prompt* | For `slim`/`fast`: `yes` also installs that variant as `fimod`; `no` keeps only `fimod-slim` / `fimod-fast` |
     | `FIMOD_INSTALL` | `/usr/local/bin` | Install directory (falls back to `~/.local/bin` if not writable) |
     | `FIMOD_VERSION` | latest | Pin a specific version (e.g. `v0.2.1`) |
-    | `FIMOD_SETUP_REGISTRY` | *prompt* | `yes` / `no` to skip the interactive prompt for community registries |
-    | `FIMOD_SETUP_SANDBOX` | *prompt* | `yes` / `no` to skip the interactive prompt for the sandbox policy |
-    | `FIMOD_SETUP_ALL` | *prompt* | `yes` / `no` shortcut applied to both when granulars are unset |
+    | `FIMOD_SETUP_REGISTRY` | *prompt if needed* | `yes` / `no` answer for community registries |
+    | `FIMOD_SETUP_SANDBOX` | *prompt if needed* | `yes` / `no` answer for the sandbox policy |
+    | `FIMOD_SETUP_ALL` | *prompt if needed* | `yes` / `no` shortcut applied to both when granulars are unset |
 
     ```bash
     # Install the slim variant to a custom directory
     FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+
+    # Install the fast variant and also make it the default fimod command
+    FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 
     # CI-friendly — no prompts, install everything
     FIMOD_SETUP_ALL=yes curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
@@ -49,6 +53,9 @@
     # Or slim variant (no HTTP support, smaller binary)
     # ubi --project pytgaen/fimod --matching "fimod-slim-v" --in "$env:USERPROFILE\.local\bin"
 
+    # Or fast variant (speed optimized, larger uncompressed binary)
+    # ubi --project pytgaen/fimod --matching "fimod-fast-v" --in "$env:USERPROFILE\.local\bin"
+
     # 🛤️ 3. Add to PATH (if not already present)
     $BinDir = "$env:USERPROFILE\.local\bin"
     $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
@@ -57,8 +64,8 @@
         $env:PATH = "$BinDir;$env:PATH"
     }
 
-    # 🗂️ 4. Install community registries + recommended sandbox policy
-    fimod setup all defaults --yes
+    # 🗂️ 4. Install missing registries + sandbox policy
+    fimod setup all defaults --if-needed
     ```
 
     </details>
@@ -75,7 +82,7 @@
     & "$env:TEMP\fimod-install.ps1"
     ```
 
-    Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION`
+    Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_SET_DEFAULT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION`
 
     The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make `fimod` available in new terminals.
 
@@ -116,7 +123,7 @@
 !!! note "Installed via `cargo` or built from source?"
     The shell installers set up registries and the sandbox policy for you. If you installed another way, run it manually:
     ```bash
-    fimod setup all defaults --yes
+    fimod setup all defaults --if-needed
     ```
 
 ---

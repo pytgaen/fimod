@@ -5,7 +5,7 @@
 Every fimod invocation runs through the same pipeline:
 
 ```
-📥 Read → 🔍 Parse → 🐍 transform(data, args, env, headers) → 📤 Serialize → ✍️ Write
+📥 Read → 🔍 Parse → 🐍 transform(data, **_) → 📤 Serialize → ✍️ Write
 ```
 
 | Step | What happens |
@@ -13,7 +13,7 @@ Every fimod invocation runs through the same pipeline:
 | **📥 Read** | Input from file (`-i`), URL (`-i https://...`), stdin, or multiple files combined with `-s` (multi-file slurp). `--no-input` skips this step (`data = None`). |
 | **🔍 Parse** | Rust parses the input via serde into native types. |
 | **🔁 Convert** | Parsed data becomes a Python-compatible `MontyObject`. |
-| **🐍 Execute** | Monty runs `transform(data, args, env, headers)`. Built-ins (`re_*`, `dp_*`, `it_*`, `hs_*`) are available. |
+| **🐍 Execute** | Monty runs `transform`; `data` is positional and context (`args`, `env`, `headers`, `pipeline`) is passed as keyword arguments. Built-ins (`re_*`, `dp_*`, `it_*`, `hs_*`) are available. |
 | **🔁 Convert back** | Return value becomes `serde_json::Value`. |
 | **📤 Serialize** | Rust serializes the result to the output format (see below). |
 | **✍️ Write** | Output goes to file (`-o`), stdout, or input file (`--in-place`). |
@@ -35,10 +35,10 @@ Every fimod invocation runs through the same pipeline:
 
 ## 🧱 What is a mold?
 
-A **mold** is a Python script that defines a `transform(data, args, env, headers)` function. It receives the parsed input and returns the transformed result.
+A **mold** is a Python script that defines a `transform(data, **_)` function. It receives the parsed input and returns the transformed result. Keep `**_` in reusable molds so unused and future keyword arguments are ignored safely.
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, **_):
     return {"count": len(data)}
 ```
 
@@ -50,7 +50,7 @@ def transform(data, args, env, headers):
     fimod s -i data.json -e '[u for u in data if u["active"]]'
     ```
 
-    Best for one-liners. Auto-wrapped into `def transform(data, args, env, headers): return <expr>`.
+    Best for one-liners. Auto-wrapped into a `transform(..., **_)` function.
     For multi-statement, write `def transform` explicitly inside `-e`.
 
 === "📄 Script file"
@@ -59,7 +59,7 @@ def transform(data, args, env, headers):
     fimod s -i data.json -m cleanup.py
     ```
 
-    Reusable, version-controlled transforms. Must define `transform(data, args, env, headers)`.
+    Reusable, version-controlled transforms. Must define `transform(data, **_)`, adding named context parameters before `**_` when needed.
 
 === "🌐 URL"
 
@@ -95,10 +95,13 @@ When `-m` points to a directory, fimod looks for an entry point in this order:
 
 fimod uses [Monty](https://github.com/pydantic/monty), a **Rust implementation of Python's core semantics** from the Pydantic team. No CPython, no FFI, no GIL.
 
+!!! info "Python subset, not CPython"
+    Molds run on Monty, not CPython. You get Python syntax, common built-ins, and selected standard-library modules, but not PyPI packages or full stdlib parity. Fimod adds Rust-powered helpers for regex, dot paths, iteration, hashing, templating, logging, and validation.
+
 !!! warning "Monty is early-stage"
     Monty is a very young project. Its API and feature set may change significantly between releases. fimod pins a specific Monty commit, but upgrading may require adapting mold scripts if Monty's behaviour changes.
 
-Because Monty does not include Python's standard library, fimod provides **Rust-implemented built-in helpers** (`re_*`, `dp_*`, `it_*`, `hs_*`) that are injected into every mold. Notably, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour) — **not** Python's `re` module. See [Built-ins Reference](../reference/built-ins.md) for details.
+The Rust-powered helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`) are injected into every mold. Notably, regex built-ins use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour) — **not** Python's `re` module. See [Built-ins Reference](../reference/built-ins.md) for details.
 
 === "✅ Supported"
 
@@ -112,7 +115,8 @@ Because Monty does not include Python's standard library, fimod provides **Rust-
 
 === "❌ Not supported"
 
-    - `import` — no stdlib, no external modules
+    - Arbitrary PyPI packages such as `requests`, `pandas`, or `sqlalchemy`
+    - Full standard-library parity
     - `del`
     - File I/O, network calls, system access
 

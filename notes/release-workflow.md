@@ -69,16 +69,19 @@ Fimod utilise **squash & merge** sur GitHub (pas de merge commits). Le défi : g
 
 Les bullets peuvent répéter/détailler le titre de PR — c'est voulu, l'un sert de titre éditorial court, l'autre de log détaillé pour le CHANGELOG.
 
-### Highlights éditoriaux
+### Brouillon éditorial du changelog
 
-Au fil du développement d'une version, un fichier `notes/release-vX.Y.Z.md` est rédigé pour capturer les **Highlights** (prose éditoriale, emojis autorisés). Exemple :
+Au fil du développement d'une version, un fichier `notes/changelog-X.Y.Z.md` est rédigé comme future section complète du `CHANGELOG.md`. Il doit déjà être dans le style public final : titre `## [X.Y.Z] — YYYY-MM-DD`, éventuels **Highlights**, puis sections conventionnelles (`Features`, `Bug Fixes`, `Performance`, `Refactoring`, `Documentation`, `Housekeeping`) selon le contenu réel de la release.
+
+Règle de style durable : avant de rédiger ou relire ce fichier, lire les dernières sections visibles de `CHANGELOG.md` et imiter leur ton. Le changelog public n'est pas un body de PR brut : chaque bullet garde le format `- **scope:** ...`, mais la phrase doit expliquer le comportement, le bénéfice ou le contexte utilisateur/mainteneur. Les highlights sont éditoriaux, courts, souvent avec emoji + **nom lisible** + tiret long. Éviter les lignes génériques du type "update docs" ou "add feature"; préférer une formulation comparable aux releases précédentes.
+
+Exemple de highlight :
 
 ```markdown
-- Monty v0.0.11 → v0.0.14 — natural JSON support, u32 CodeLoc fix.
-- New dotpath built-ins — `dp_has`, `dp_delete` complete the toolkit.
+- ✨ **New dotpath built-ins** — `dp_has`, `dp_delete` complete the dotpath toolkit.
 ```
 
-Lors de la release, ce contenu est injecté en tête de section dans le CHANGELOG, juste après la date. Le fichier `notes/release-vX.Y.Z.md` est supprimé dans le même commit (le contenu vit désormais dans `CHANGELOG.md`).
+Lors de la release, ce contenu est injecté dans `CHANGELOG.md` puis le fichier `notes/changelog-X.Y.Z.md` est supprimé dans le même commit (le contenu vit désormais dans `CHANGELOG.md`).
 
 ---
 
@@ -89,7 +92,7 @@ Lors de la release, ce contenu est injecté en tête de section dans le CHANGELO
 1. Créer une branche (`feat/...`, `fix/...`, `release/X.Y.Z`).
 2. Commiter normalement (les commits intra-branche sont squashés).
 3. Ne **jamais** modifier `CHANGELOG.md` dans cette phase.
-4. Ouvrir la PR avec titre + body conventionnels (voir fil conducteur).
+4. Pousser la branche et ouvrir la PR avec titre + body conventionnels (voir fil conducteur). Ces deux actions (`git push -u origin <branch>`, `gh pr create`) sont autorisées dans le flux normal uniquement après confirmation explicite.
 5. Attendre CI verte.
 6. Merger en **squash** (option *"pull request title and description"*).
 
@@ -100,15 +103,12 @@ Lors de la release, ce contenu est injecté en tête de section dans le CHANGELO
 3. Analyser les commits depuis le dernier tag : déterminer le bump (patch/minor/major, cf. règles ci-dessus).
 4. Bump `Cargo.toml`, rebuild `Cargo.lock` (`cargo build`).
 5. Smoke test : `cargo test --lib`.
-6. Générer le CHANGELOG :
-   ```bash
-   git-cliff --unreleased --tag vX.Y.Z --prepend CHANGELOG.md
-   ```
-7. Si `notes/release-vX.Y.Z.md` existe : injecter son contenu comme sous-section `### Highlights` en tête de la section `[X.Y.Z]`, puis supprimer le fichier.
-8. Commit EXACTEMENT ces 3 fichiers (+ éventuelle suppression de `notes/release-vX.Y.Z.md`) :
+6. Injecter `notes/changelog-X.Y.Z.md` dans `CHANGELOG.md` après remplacement de `YYYY-MM-DD` par la date de release.
+7. Supprimer `notes/changelog-X.Y.Z.md` dans le même commit : le contenu vit désormais dans `CHANGELOG.md`.
+8. Commit EXACTEMENT ces 3 fichiers (+ suppression de `notes/changelog-X.Y.Z.md`) :
    ```bash
    git add Cargo.toml Cargo.lock CHANGELOG.md
-   git add -u notes/release-vX.Y.Z.md   # si supprimé
+   git add -u notes/changelog-X.Y.Z.md
    git commit -m "chore(release): X.Y.Z"
    git tag vX.Y.Z
    ```
@@ -133,8 +133,8 @@ Utilisée **avant** une release majeure (typiquement X.Y.0) pour valider le pipe
 | **CHANGELOG.md** | Non modifié | Section générée par git-cliff |
 | **Commit** | `chore(prerelease): X.Y.Z-rc.N` | `chore(release): X.Y.Z` |
 | **Plateformes** | Linux x86_64 (musl) | Toutes (Linux x86/ARM, macOS ARM, Windows x64) |
-| **Variants** | `standard` uniquement | `standard` + `slim` |
-| **Binaire compressé (UPX)** | Non | Oui |
+| **Variants** | `standard` + `fast` | `standard` + `slim` + `fast` |
+| **Binaire compressé (UPX)** | Non | `standard` + `slim` oui, `fast` non |
 | **CI** | `.github/workflows/prerelease.yml` | `.github/workflows/release.yml` |
 | **GitHub Release** | Marquée `prerelease: true` | Stable |
 | **Branche** | Quelconque (y compris non-main) | `main` uniquement |
@@ -162,7 +162,7 @@ Utilisée **avant** une release majeure (typiquement X.Y.0) pour valider le pipe
 À respecter absolument sous peine de corrompre le CHANGELOG ou l'historique :
 
 1. `CHANGELOG.md` n'apparaît **JAMAIS** dans un commit non-`chore(release):`. Toute modif accidentelle doit être stashée jusqu'en Phase 2.
-2. Le commit `chore(release):` contient **EXACTEMENT** 3 fichiers : `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` (plus une éventuelle suppression de `notes/release-vX.Y.Z.md`). Tout autre fichier → STOP.
+2. Le commit `chore(release):` contient **EXACTEMENT** 3 fichiers : `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` (plus la suppression de `notes/changelog-X.Y.Z.md`). Tout autre fichier → STOP.
 3. Aucun tag n'est créé avant que la PR de travail soit mergée sur `main`.
 4. Aucun commit direct sur `main` en Phase 1 — tout passe par une PR.
 5. Subject du commit release **EXACTEMENT** `chore(release): X.Y.Z` — jamais `fix:`, `feat:`, etc.
@@ -182,6 +182,6 @@ Utilisée **avant** une release majeure (typiquement X.Y.0) pour valider le pipe
 
 - `cliff.toml` — configuration git-cliff (types, groupes, templates, skip rules).
 - `CHANGELOG.md` — historique public, maintenu automatiquement.
-- `notes/release-vX.Y.Z.md` — Highlights éditoriaux (temporaire, supprimé à la release).
+- `notes/changelog-X.Y.Z.md` — brouillon éditorial de la section release (temporaire, supprimé à la release).
 - `.github/workflows/release.yml` — pipeline release.
 - `.github/workflows/prerelease.yml` — pipeline prerelease.

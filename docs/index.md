@@ -9,7 +9,10 @@
 >
 > *💡 DRY your pipelines · Slim your container images · Tame your configs*
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~2.9 MB, UPX-compressed). You write the transform logic; fimod handles parsing, format detection, and I/O.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~3.3 MB in the UPX-compressed standard build). You write the transform logic; fimod handles parsing, format detection, and I/O.
+
+!!! info "Python syntax, Monty runtime"
+    Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
 
 ```bash
 # 🎯 One-liner
@@ -35,13 +38,13 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["name"]' --output
 
     ---
 
-    No new DSL. Write `for`, `if`, comprehensions, string methods — it's just Python.
+    No new DSL. Write `for`, `if`, comprehensions, and string methods using Monty's Python subset.
 
 -   :material-package-variant-closed:{ .lg .middle } **Single binary**
 
     ---
 
-    No runtime, no `pip install`, no dependencies. One ~2.9 MB binary (UPX-compressed) that works everywhere.
+    No runtime, no `pip install`, no dependencies. One ~3.3 MB standard binary after UPX compression; use `slim` when you do not need HTTP input, or `fimod-fast` for large CPU-heavy runs.
 
 -   :material-swap-horizontal:{ .lg .middle } **All the formats**
 
@@ -67,7 +70,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["name"]' --output
 
 ## 👀 A taste of what fimod can do
 
-🐍 **Pure Python transforms — Rust-powered I/O, serialization & builtins:**
+🐍 **Python-syntax transforms — Rust-powered I/O, serialization & builtins:**
 
 ```bash
 # YAML to JSON, filter active users, sort by name
@@ -240,10 +243,11 @@ Lookup tables and complete specifications.
 !!! warning "Early-stage software"
     fimod is young software, built with AI-assisted development ("vibe coding").
 
-    - **[Monty](https://github.com/pydantic/monty)** is an early-stage Rust implementation of Python by Pydantic. Its API is unstable and may introduce breaking changes.
+    - **[Monty](https://github.com/pydantic/monty)** is an early-stage Rust implementation of Python by Pydantic. It is not CPython, and its API may introduce breaking changes.
     - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
     - Versioning follows [Semantic Versioning](https://semver.org/) — breaking changes bump the major version.
-    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** to complement Monty's limited stdlib. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re_).
+    - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
+    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re_).
 
 !!! note "Regex: Fimod built-ins vs Monty's `re` module"
     Fimod was originally built on Monty v0.0.6, which had no regex support.

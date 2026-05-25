@@ -142,7 +142,7 @@ sequenceDiagram
         Note over eng: deny-all today; sandbox.toml in 0.5.0
         monty-->>eng: RunProgress::Complete(result)
     end
-    eng-->>pipe: (Value, exit_code, format_override, output_file)
+    eng-->>pipe: MoldExecResult (MontyObject + overrides)
     pipe->>fmt: detect out format (-o out.yaml → Yaml)
     pipe->>fmt: serialize(value, Yaml) → String
     pipe->>User: write to out.yaml
@@ -150,11 +150,11 @@ sequenceDiagram
 
 ## Key invariants
 
-- **`serde_json::Value` is the only intermediate representation.** Every `parse()` returns it; every `serialize()` consumes it. Monty operates on `MontyObject`, converted at the engine boundary via `convert.rs`.
-- **Monty never sees I/O.** All `RunProgress::OsCall` yields are resumed with `None` (`engine.rs:215-230`). `sandbox.toml` (0.5.0) will make this selective — but the primitive "Monty calls back, Rust decides" stays.
+- **`serde_json::Value` is the I/O representation.** Every `parse()` returns it; every `serialize()` consumes it. Monty operates on `MontyObject`; chain steps now thread `MontyObject` directly and convert back to `Value` only at the output boundary or when a re-parse is explicitly requested.
+- **Monty never sees I/O.** `RunProgress::OsCall` yields are routed through `engine.rs::dispatch_os_call` and gated by `SandboxPolicy`. The primitive "Monty calls back, Rust decides" stays.
 - **External functions are dispatched, not imported.** The mold writes `dp_get(data, "a.b.c")` without any `import`. Monty yields `NameLookup` → engine replies with `Function` → subsequent call yields `FunctionCall` → engine dispatches to `dotpath::dispatch`.
 - **Mold chain re-parses on `set_input_format`.** Between chained steps, if a mold called `set_input_format("yaml")`, the current result is re-serialized and re-parsed through the new format (`pipeline.rs:execute_chain`). `"raw"` is only legal as a final-step override.
-- **`execute_mold` returns a 4-tuple.** `(Value, Option<i32>, Option<String>, Option<String>)` = result, exit code, output-format override, output-file override. Any new runtime-overridable setting extends this tuple — consider a struct if we ever go to 5.
+- **`execute_mold` returns `MoldExecResult`.** The result value stays as `MontyObject` for chain performance, alongside optional exit code, output-format override, output-file override, and pending dynamic pipeline changes.
 
 ## Extension points
 

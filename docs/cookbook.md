@@ -7,7 +7,7 @@ Practical examples of common data transformation tasks using fimod. All examples
 ### 🏷️ Renaming Keys
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         if "First Name" in row:
             row["first_name"] = row["First Name"]
@@ -32,7 +32,7 @@ id,role,permission
 
 **Script:**
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     result = {}
     for row in data:
         user_id = row["id"]
@@ -55,7 +55,7 @@ def transform(data, args, env, headers):
 ### 🔒 Masking Sensitive Data
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for user in data:
         if "email" in user:
             parts = user["email"].split("@")
@@ -66,7 +66,7 @@ def transform(data, args, env, headers):
 ### 🧽 Deduplication + Normalization
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     seen = {}
     result = []
     for row in data:
@@ -87,7 +87,7 @@ def transform(data, args, env, headers):
 ### 📈 Group by + Average
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     depts = {}
     for e in data:
         d = e["department"]
@@ -111,21 +111,21 @@ def transform(data, args, env, headers):
 ### 📧 Extract Email Addresses
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"emails": re_findall(r"\w+@\w+\.\w+", data["text"])}
 ```
 
 ### 🧽 Normalize Whitespace
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return {"cleaned": re_sub(r"\s+", " ", data["text"].strip())}
 ```
 
 ### 🔗 Extract URLs
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     urls = re_findall(r"https?://[^\s]+", data["text"])
     return {"urls": urls, "count": len(urls)}
 ```
@@ -134,7 +134,7 @@ def transform(data, args, env, headers):
 
 ```python
 # Parse "KEY=VALUE" pairs from config text
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     pairs = re_findall(r"(\w+)=(\S+)", data["text"])
     # With 2 capture groups, re_findall returns [["key","val"], ...]
     result = {}
@@ -146,7 +146,7 @@ def transform(data, args, env, headers):
 Or with named groups:
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     result = {}
     for line in data["text"].strip().split("\n"):
         m = re_search(r"^(?P<key>\w+)=(?P<val>.+)$", line)
@@ -159,7 +159,7 @@ def transform(data, args, env, headers):
 
 ```python
 # Check if values match expected patterns
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         phone = row.get("phone", "")
         row["valid_phone"] = re_match(r"\+?\d{10,15}", phone) is not None
@@ -178,7 +178,7 @@ fimod s -i app.log --input-format lines \
 ### 📊 Count by Level
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     levels = {}
     for line in data:
         for level in ["ERROR", "WARN", "INFO", "DEBUG"]:
@@ -243,7 +243,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod/releases/latest \
 
 ```python
 # filter_by_field.py — generic filter script
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     field = args["field"]
     value = args["value"]
     return [row for row in data if row.get(field) == value]
@@ -258,7 +258,7 @@ fimod s -i users.json -m filter_by_field.py --arg field="status" --arg value="ac
 ### 🔢 Threshold with Type Casting
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     limit = int(args["min_age"])
     return [u for u in data if u["age"] > limit]
 ```
@@ -280,7 +280,7 @@ fimod s -i data.json -e '{"msg": args["prefix"] + " " + data["name"]}' \
 
 ```python
 # dp_get avoids KeyError for missing/optional fields
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     city    = dp_get(data, "address.city", "unknown")
     country = dp_get(data, "address.country", "unknown")
     last    = dp_get(data, "items.-1")   # last array element
@@ -291,7 +291,7 @@ def transform(data, args, env, headers):
 
 ```python
 # dp_set returns a new copy — original is unchanged
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     data = dp_set(data, "meta.source", "fimod")
     data = dp_set(data, "meta.version", "1")
     return data
@@ -307,7 +307,7 @@ fimod s -i record.json -m enrich.py
 
 ```python
 # it_group_by takes a field name (string), not a lambda
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_group_by(data, "department")
 ```
 
@@ -319,7 +319,7 @@ fimod s -i employees.json -m group.py --output-format json
 ### 📈 Sort Records by Field
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_sort_by(data, "created_at")
 ```
 
@@ -327,7 +327,7 @@ def transform(data, args, env, headers):
 
 ```python
 # Keep first occurrence, discard duplicates by email
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     return it_unique_by(data, "email")
 ```
 
@@ -338,7 +338,7 @@ fimod s -i contacts.csv -m dedup.py -o contacts_clean.csv --output-format csv
 ### 🌀 Flatten Nested Arrays
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     # data = [[1, 2], [3, [4, 5]]]  →  [1, 2, 3, 4, 5]
     return it_flatten(data)
 ```
@@ -350,7 +350,7 @@ def transform(data, args, env, headers):
 ```python
 # hash_pii.py
 # fimod: input-format=csv, output-format=csv
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         row["email"] = hs_sha256(row["email"])
         row["phone"] = hs_sha256(row["phone"])
@@ -364,7 +364,7 @@ fimod s -i users.csv -m hash_pii.py -o users_anon.csv
 ### 🔑 Generate Stable IDs from Keys
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     for row in data:
         key = f"{row['name']}|{row['dob']}"
         row["id"] = hs_md5(key)
@@ -377,7 +377,7 @@ def transform(data, args, env, headers):
 
 ```python
 # validate_config.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     required = ["host", "port", "db"]
     return all(k in data and data[k] for k in required)
 ```
@@ -404,7 +404,7 @@ curl -s https://jsonplaceholder.typicode.com/todos | \
 
 ```python
 # gen_users.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     n = int(args["count"])
     prefix = args.get("prefix", "user")
     return [{"id": i, "name": f"{prefix}{i}", "active": True} for i in range(1, n + 1)]

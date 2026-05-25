@@ -179,7 +179,7 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 5. **You can use `import math`** — `math.floor`, `math.sqrt`, `math.factorial`, `math.pi`, etc.
 6. **You can use `import datetime`** — `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`. Datetime objects returned in the output are automatically serialized as ISO 8601 strings
 7. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
-8. **You only need to declare the parameters you use** — `def transform(data, args, **_):` is valid; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments
+8. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
 9. **You cannot read files** — `Path(...)` calls return `None` in fimod
 10. **You cannot access env vars via os** — `os.getenv(...)` returns `None`; use the `env` parameter with `--env PATTERN` instead
 11. **You cannot import pip packages** — no `requests`, `pandas`, etc.

@@ -15,7 +15,18 @@ rust-version = "1.75"
 default = ["reqwest", "watch"]
 full = ["reqwest", "watch"]
 slim = []
-watch = ["dep:notify", "dep:notify-debouncer-mini"]
+fast = []
+reqwest = ["dep:reqwest"]
+watch = ["dep:notify"]
+
+[[bin]]
+name = "fimod"
+path = "src/main.rs"
+
+[[bin]]
+name = "fimod-fast"
+path = "src/main.rs"
+required-features = ["fast"]
 
 [dependencies]
 monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
@@ -27,7 +38,7 @@ anyhow = "1"
 serde-saphyr = "0.0.26"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "1", features = ["preserve_order"] }
 csv = "1.4"
-reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false, optional = true }
+reqwest = { version = "0.13", features = ["blocking", "rustls", "system-proxy"], default-features = false, optional = true }
 fancy-regex = "0.18"
 rustyline = "18"
 md-5 = "0.11"
@@ -40,7 +51,6 @@ minijinja = { version = "2", features = ["json", "loop_controls", "preserve_orde
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 notify = { version = "8", optional = true }
-notify-debouncer-mini = { version = "0.7", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
@@ -48,6 +58,10 @@ opt-level = "z"  # Optimize for size.
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[profile.release-fast]
+inherits = "release"
+opt-level = 3  # Speed over size (used by fimod-fast)
 
 
 [lints.rust]

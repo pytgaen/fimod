@@ -19,7 +19,8 @@ fimod/
 ├── deny.toml             cargo-deny config (licenses, advisories, bans)
 ├── mkdocs.yml            Zensical (mkdocs-material flavor) config for docs site
 ├── CHANGELOG.md          release history, only touched in `chore(release): X.Y.Z` commits
-├── CLAUDE.md             AI-assistant guidance (read by Claude Code on every session)
+├── AGENTS.md             repo-specific AI-assistant guidance
+├── AGENTS.base.md        shared AI-assistant guardrails imported by AGENTS.md
 ├── README.md             public landing (crates.io + GitHub)
 ├── LICENSE.txt           Apache-2.0
 ├── install.sh / .ps1     curl-piped installers (POSIX + PowerShell)
@@ -43,14 +44,15 @@ molds/           the public mold registry catalog source (catalog.toml + one dir
 examples/        usage examples shipped alongside the docs (e.g. jq compat shims)
 resources/       binary assets (logo, vhs cassettes for demo gifs)
 .github/         CI workflows, issue/PR templates, dependabot config
-.claude/         per-project Claude Code config (skills, settings)
+.agents/         per-project Codex/agent config (skills, settings, commands)
+.claude/         per-project Claude Code config (skills, settings, commands)
 target/          cargo build cache (gitignored)
 dist/            release artifact staging (gitignored)
 site/            Zensical build output (gitignored)
 tmp/             scratch dir (gitignored)
 ```
 
-Other dot-dirs (`.agents/`, `.cache/`, `.config/`, `.memsearch/`, `.rtk/`, `.skylos/`, `.ruff_cache/`, `.astx/`, `.vscode/`) are tooling caches — ignorable unless you're debugging the tool itself.
+Other dot-dirs (`.cache/`, `.config/`, `.memsearch/`, `.rtk/`, `.skylos/`, `.ruff_cache/`, `.astx/`, `.vscode/`) are tooling caches — ignorable unless you're debugging the tool itself.
 
 ---
 
@@ -194,7 +196,7 @@ tests-molds/
 └── …
 ```
 
-See the `mold-tests` skill (`~/.claude/skills/mold-tests/`) for fixture format details.
+See the repo-local `mold-tests` skill (`.agents/skills/mold-tests/`) for fixture format details.
 
 ---
 
@@ -233,7 +235,7 @@ notes/
 ├── ARCHITECTURE.md            module map, layer responsibilities, end-to-end flow
 ├── DESIGN_NOTES.md            concrete design decisions + tooling conventions
 ├── CODE_LAYOUT.md             this file — where every file lives
-├── release-workflow.md        release process detail (skill = .claude/skills/release-workflow)
+├── release-workflow.md        release process detail (skill = .agents/skills/release-workflow)
 ├── todo-X.Y.Z.md              transient backlog for the current cycle
 ├── changelog-X.Y.Z.md         drafted changelog for the next release (transient)
 └── assets/                    diagrams / sketches consumed by the docs above
@@ -318,7 +320,7 @@ resources/
 | New CLI argument | `cli::ShapeArgs` (or relevant subcommand args struct) + threading through `cmd/shape.rs` → `pipeline.rs` | `tests/cli/args.rs` or the topic-specific file |
 | Watch mode behavior | `src/watch.rs` (feature-gated) + `cmd/shape.rs` watch branch | `tests/cli/watch.rs` |
 | Public mold | New directory under `molds/<name>/`; regenerate `catalog.toml` with `fimod registry build-catalog` | `tests-molds/<name>/` fixtures |
-| Release process | `notes/release-workflow.md` + `.claude/skills/release-workflow/SKILL.md` | manual via `/prerelease-workflow` |
+| Release process | `notes/release-workflow.md` + `.agents/skills/release-workflow/SKILL.md` | manual via `/prerelease-workflow` |
 
 ---
 
@@ -327,5 +329,5 @@ resources/
 - `notes/ARCHITECTURE.md` — how the layers fit together (mermaid module map, end-to-end flow)
 - `notes/DESIGN_NOTES.md` — *why* we drew the boundaries the way we did
 - `notes/VISION.md` — what we refuse to build
-- `CLAUDE.md` (root) — AI-assistant guardrails, build/test commands, code style
+- `AGENTS.md` (root) — AI-assistant guardrails, build/test commands, code style
 - `docs/guides/concepts.md` — user-facing mental model

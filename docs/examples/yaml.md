@@ -114,4 +114,4 @@ Bob,25
 
 ## Mix YAML with another format in one pipeline
 
-YAML cohabits naturally with JSON, TOML, CSV, and HTTP responses via multi-file slurp (`-s` with two or more `-i`). See the [Cookbook → Mixed-Format Merge](../cookbook.md#-mixed-format-merge--json--yaml--toml) recipes.
+YAML cohabits naturally with JSON, TOML, CSV, and HTTP responses via multi-file slurp (`-s` with two or more `-i`). See the [Cookbook → Mixed-Format Merge](../cookbook.md#mixed-format-merge-json-yaml-toml) recipes.

@@ -412,9 +412,15 @@ pub struct HttpOptions {
 }
 
 /// Result of a pipeline execution.
+/// Output of a pipeline execution — either a materialized JSON value (slow path)
+/// or a raw `MontyObject` ready for direct serialization (fast path).
+pub enum PipelineOutput {
+    Value(Value),
+    Monty(MontyObject),
+}
+
 pub struct PipelineResult {
-    /// The transformed data.
-    pub value: Value,
+    pub output: PipelineOutput,
     /// Exit code requested by the mold via `set_exit()`.
     pub exit_code: Option<i32>,
     /// Output format override requested by the mold via `set_output_format()`.
@@ -442,6 +448,7 @@ fn run_pipeline_core(
     scripts: &[MoldStep],
     http_opts: &HttpOptions,
     ctx: &ChainExecCtx<'_>,
+    fast_path: bool,
 ) -> Result<PipelineResult> {
     let input_path = metadata.input;
     let no_input = metadata.no_input;
@@ -611,16 +618,45 @@ fn run_pipeline_core(
 
     debug_phase(ctx.debug, "parse", parse_start);
 
-    // Execute the mold chain (converts MontyObject → Value at the boundary).
     let exec_start = Instant::now();
-    let out = execute_chain_to_value(scripts, data, metadata, &headers_value, ctx)?;
+    // fast_path: skip monty_to_json when the mold does not override the output format.
+    // Checked after execute_chain returns — if format_override is set, fall back to Value.
+    let (output, out_exit_code, out_format_override, out_file_override) = if fast_path {
+        let exec = execute_chain(scripts, data, metadata, &headers_value, ctx)?;
+        if exec.format_override.is_none() {
+            (
+                PipelineOutput::Monty(exec.value),
+                exec.exit_code,
+                exec.format_override,
+                exec.output_file,
+            )
+        } else {
+            // Mold changed the output format — must materialize Value.
+            let v = convert::monty_to_json(exec.value)
+                .context("Failed to convert mold chain result to JSON")?;
+            (
+                PipelineOutput::Value(v),
+                exec.exit_code,
+                exec.format_override,
+                exec.output_file,
+            )
+        }
+    } else {
+        let out = execute_chain_to_value(scripts, data, metadata, &headers_value, ctx)?;
+        (
+            PipelineOutput::Value(out.value),
+            out.exit_code,
+            out.format_override,
+            out.output_file_override,
+        )
+    };
     debug_phase(ctx.debug, "execute", exec_start);
 
     Ok(PipelineResult {
-        value: out.value,
-        exit_code: out.exit_code,
-        format_override: out.format_override,
-        output_file_override: out.output_file_override,
+        output,
+        exit_code: out_exit_code,
+        format_override: out_format_override,
+        output_file_override: out_file_override,
         input_format: in_fmt,
         http_raw_bytes,
     })
@@ -694,6 +730,14 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
         debug,
         msg_level,
     };
+    // Output fast-path: avoid monty_to_json for formats that can serialize MontyObject directly.
+    let fast_path = !check
+        && !debug
+        && matches!(
+            effective_output_format,
+            Some("json-compact") | Some("ndjson") | Some("lines") | Some("txt")
+        );
+
     let result = run_pipeline_core(
         &metadata,
         effective_input_format,
@@ -701,10 +745,88 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
         scripts,
         http_opts,
         &exec_ctx,
+        fast_path,
     )?;
 
     // set_output_file() overrides the CLI -o path; otherwise fall back to CLI-provided path
     let actual_output = result.output_file_override.as_deref().or(output_path);
+
+    // Output fast-path: Monty variant is set when the format is in the fast_path set and the mold
+    // did not override the output format. Serialize MontyObject directly without monty_to_json.
+    if let PipelineOutput::Monty(ref monty) = result.output {
+        // format_override is None here by construction (guarded in run_pipeline_core)
+        let bytes = match effective_output_format {
+            Some("ndjson") => {
+                let mut out = Vec::new();
+                match monty {
+                    MontyObject::List(items) | MontyObject::Tuple(items) => {
+                        for item in items {
+                            serde_json::to_writer(&mut out, &convert::MontySerialize(item))
+                                .context("Failed to serialize NDJSON line")?;
+                            out.push(b'\n');
+                        }
+                    }
+                    other => {
+                        serde_json::to_writer(&mut out, &convert::MontySerialize(other))
+                            .context("Failed to serialize NDJSON")?;
+                        out.push(b'\n');
+                    }
+                }
+                out
+            }
+            Some("lines") => {
+                let mut out = Vec::new();
+                match monty {
+                    MontyObject::List(items) | MontyObject::Tuple(items) => {
+                        for item in items {
+                            match item {
+                                MontyObject::String(s) => out.extend_from_slice(s.as_bytes()),
+                                other => {
+                                    serde_json::to_writer(
+                                        &mut out,
+                                        &convert::MontySerialize(other),
+                                    )
+                                    .context("Failed to serialize lines item")?;
+                                }
+                            }
+                            out.push(b'\n');
+                        }
+                    }
+                    MontyObject::String(s) => {
+                        out.extend_from_slice(s.as_bytes());
+                        out.push(b'\n');
+                    }
+                    other => {
+                        serde_json::to_writer(&mut out, &convert::MontySerialize(other))
+                            .context("Failed to serialize lines output")?;
+                        out.push(b'\n');
+                    }
+                }
+                out
+            }
+            Some("txt") => match monty {
+                MontyObject::String(s) => s.as_bytes().to_vec(),
+                other => serde_json::to_vec(&convert::MontySerialize(other))
+                    .context("Failed to serialize txt output")?,
+            },
+            _ => {
+                let mut b = serde_json::to_vec(&convert::MontySerialize(monty))
+                    .context("Failed to serialize output as compact JSON")?;
+                b.push(b'\n');
+                b
+            }
+        };
+        write_bytes_to(actual_output, &bytes)?;
+        if let Some(code) = result.exit_code {
+            return Ok(CliResult::Exit(code));
+        }
+        debug_phase(debug, "total", total_start);
+        return Ok(CliResult::Done);
+    }
+
+    let PipelineOutput::Value(result_value) = result.output else {
+        unreachable!("Monty fast-path branch returns above");
+    };
 
     // Binary pass-through: set_output_format("raw") signals that raw HTTP bytes should be written
     // directly, bypassing the normal serde serialization pipeline.
@@ -742,7 +864,7 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
     if let Some(code) = result.exit_code {
         if !check {
             output_result(
-                &result.value,
+                &result_value,
                 actual_output,
                 effective_output_format,
                 result.input_format,
@@ -755,12 +877,12 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
     }
 
     if check {
-        let code = if is_truthy(&result.value) { 0 } else { 1 };
+        let code = if is_truthy(&result_value) { 0 } else { 1 };
         return Ok(CliResult::Exit(code));
     }
 
     output_result(
-        &result.value,
+        &result_value,
         actual_output,
         effective_output_format,
         result.input_format,
@@ -1080,7 +1202,7 @@ impl Default for PipelineConfig {
 /// cfg.steps = vec![ScriptRef::Expr("data['name'].upper()".into())];
 ///
 /// let result = run_pipeline(Some("data.json"), &cfg)?;
-/// println!("{}", result.value);
+/// if let PipelineOutput::Value(v) = result.output { println!("{v}"); }
 /// ```
 pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result<PipelineResult> {
     let scripts = build_scripts(&config.steps, config.no_cache)?;
@@ -1116,5 +1238,6 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         &scripts,
         &config.http_opts,
         &exec_ctx,
+        false,
     )
 }

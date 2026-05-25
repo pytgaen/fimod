@@ -13,8 +13,7 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const RERUN_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
-// Must exceed DEBOUNCE_MS (150) in src/watch.rs so the watcher is armed
-// in rx.recv() before the second write — otherwise the event can be lost.
+// Short gap so the watcher has returned to rx.recv() before the next write.
 const DEBOUNCE_GAP: Duration = Duration::from_millis(300);
 
 struct ChildGuard(Option<Child>);
@@ -197,6 +196,61 @@ fn read_n(path: &Path) -> Option<i64> {
 }
 
 #[test]
+fn test_watch_does_not_rerun_on_own_input_or_mold_reads() {
+    let dir = tempfile::Builder::new()
+        .prefix("fimod-watch-self-trigger-")
+        .tempdir_in(std::env::current_dir().unwrap())
+        .unwrap();
+    let input = dir.path().join("in.json");
+    let mold = dir.path().join("mold.py");
+    let output = dir.path().join("out.json");
+    std::fs::write(&input, r#"{"n":1}"#).unwrap();
+    std::fs::write(&mold, "def transform(data, **_):\n    return data\n").unwrap();
+
+    let bin = assert_cmd::cargo::cargo_bin("fimod");
+    let mut child = Command::new(bin)
+        .arg("shape")
+        .args([
+            "-i",
+            input.to_str().unwrap(),
+            "-m",
+            mold.to_str().unwrap(),
+            "-o",
+            output.to_str().unwrap(),
+            "--watch",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn fimod --watch");
+
+    let stderr_lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let stderr_pipe = child.stderr.take().expect("stderr piped");
+    let stderr_lines_thread = Arc::clone(&stderr_lines);
+    thread::spawn(move || {
+        for line in BufReader::new(stderr_pipe).lines().map_while(Result::ok) {
+            stderr_lines_thread.lock().unwrap().push(line);
+        }
+    });
+    let _guard = ChildGuard(Some(child));
+
+    poll_until(
+        || read_n(&output) == Some(1),
+        STARTUP_TIMEOUT,
+        "run #1 to write n=1",
+    );
+
+    thread::sleep(Duration::from_millis(1200));
+
+    let lines = stderr_lines.lock().unwrap();
+    let run_count = lines.iter().filter(|l| l.contains("[watch] run #")).count();
+    assert_eq!(
+        run_count, 1,
+        "watch reran without a write-like input/mold event: {lines:?}"
+    );
+}
+
+#[test]
 fn test_watch_detects_atomic_save_via_rename() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = dir.child("in.json");
@@ -283,7 +337,7 @@ fn test_watch_warns_on_delete_then_reruns_on_recreate() {
     thread::sleep(DEBOUNCE_GAP);
     std::fs::remove_file(input.path()).expect("remove input");
 
-    // Wait > COALESCE_MS (500ms) so the unlink lands in its own batch and
+    // Wait > default quiet window (500ms) so the unlink lands in its own batch and
     // triggers the (true → false) transition warning, before the recreate.
     thread::sleep(Duration::from_millis(800));
 
@@ -551,10 +605,8 @@ fn assert_watch_exits_on_signal(kill_arg: &str, expected_signo: i32) {
 #[test]
 fn test_watch_quiet_ms_env_overrides_default() {
     // Pin que FIMOD_WATCH_QUIET_MS est bien lu en baissant la fenêtre de
-    // coalescing : default 500ms coalescerait 2 writes espacés de 800ms
-    // (run_count == 2), override 50ms ne coalescera PAS (run_count == 3).
-    // L'inverse (override grand vs default petit) est moins discriminant
-    // car sensible au timing inotify cross-process.
+    // coalescing : default 500ms coalescerait ces 2 writes, override 50ms
+    // ne coalescera PAS.
     let dir = assert_fs::TempDir::new().unwrap();
     let input = dir.child("in.json");
     let output = dir.child("out.json");
@@ -596,8 +648,8 @@ fn test_watch_quiet_ms_env_overrides_default() {
 
     thread::sleep(DEBOUNCE_GAP);
     input.write_str(r#"{"n":1}"#).unwrap();
-    // 800ms gap >> default 500ms (would coalesce) >> override 50ms (won't).
-    thread::sleep(Duration::from_millis(800));
+    // 200ms gap < default 500ms (would coalesce) but > override 50ms (won't).
+    thread::sleep(Duration::from_millis(200));
     input.write_str(r#"{"n":2}"#).unwrap();
 
     poll_until(

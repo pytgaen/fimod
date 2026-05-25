@@ -116,6 +116,63 @@ fn test_setup_all_defaults_runs_both() {
     );
 }
 
+/// `--if-needed` reads setup env vars, so installers can pass answers through
+/// without duplicating setup logic in shell.
+#[test]
+fn test_setup_all_if_needed_honors_env_yes() {
+    let home = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["setup", "all", "defaults", "--if-needed"])
+        .env("HOME", home.path())
+        .env("FIMOD_SETUP_ALL", "yes")
+        .assert()
+        .success();
+
+    assert!(home.path().join(".config/fimod/sandbox.toml").is_file());
+    assert!(home.path().join(".config/fimod/sources.toml").is_file());
+}
+
+/// Granular env vars override FIMOD_SETUP_ALL for their own setup block.
+#[test]
+fn test_setup_all_if_needed_honors_granular_env_no() {
+    let home = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["setup", "all", "defaults", "--if-needed"])
+        .env("HOME", home.path())
+        .env("FIMOD_SETUP_ALL", "yes")
+        .env("FIMOD_SETUP_REGISTRY", "no")
+        .assert()
+        .success();
+
+    assert!(home.path().join(".config/fimod/sandbox.toml").is_file());
+    assert!(!home.path().join(".config/fimod/sources.toml").exists());
+}
+
+/// On upgrades, `--if-needed` leaves an existing sandbox policy untouched.
+#[test]
+fn test_setup_sandbox_if_needed_preserves_existing_file() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let config_dir = home.child(".config/fimod");
+    config_dir.create_dir_all().unwrap();
+    config_dir
+        .child("sandbox.toml")
+        .write_str("# custom policy\n")
+        .unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["setup", "sandbox", "defaults", "--if-needed"])
+        .env("HOME", home.path())
+        .env("FIMOD_SETUP_SANDBOX", "yes")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already exists"));
+
+    let content = std::fs::read_to_string(home.path().join(".config/fimod/sandbox.toml")).unwrap();
+    assert_eq!(content, "# custom policy\n");
+}
+
 /// `fimod setup all defaults` fails at first error: if sandbox is pre-existing without --force,
 /// registry must still have been configured (runs first).
 #[test]

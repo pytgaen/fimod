@@ -44,7 +44,7 @@ fi
 - Returns `None`
 
 ```python
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     if not data.get("valid"):
         set_exit(1)
     return data
@@ -67,7 +67,7 @@ echo $?   # could be 2, not 0 or 1
 
 ```python
 # validate.py
-def transform(data, args, env, headers):
+def transform(data, args, env, headers, **_):
     if "host" not in data:
         set_exit(2)   # 🔴 missing required field
         return data

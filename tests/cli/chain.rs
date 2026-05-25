@@ -186,3 +186,55 @@ fn test_chain_expr_mold_expr_ordering() {
         .success()
         .stdout(predicate::str::contains("Hello ALICE"));
 }
+
+#[test]
+fn test_chain_order_with_interleaved_non_step_flags() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"name": "alice"}"#);
+    let mold = setup_mold(
+        &dir,
+        "greet.py",
+        "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-e",
+            r#"{"name": data["name"].upper()}"#,
+            "--output-format",
+            "json-compact",
+            "--arg",
+            "unused=1",
+            "-m",
+            &mold,
+            "--expression",
+            r#"data["greeting"]"#,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""Hello ALICE""#));
+}
+
+#[test]
+fn test_chain_short_attached_values_preserve_order() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"name": "World"}"#);
+    let mold = setup_mold(
+        &dir,
+        "greet.py",
+        "def transform(data, args, env, headers, **_):\n    data[\"greeting\"] = f\"Hello {data['name']}\"\n    return data\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .arg("-i")
+        .arg(&input)
+        .arg(format!("-m{mold}"))
+        .arg(r#"-edata["greeting"]"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Hello World"));
+}

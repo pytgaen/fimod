@@ -8,7 +8,7 @@ You already know Python. Why learn another DSL?
 # jq: filter users older than 30
 jq '[.[] | select(.age > 30)]' users.json
 
-# fimod: same thing, it's just Python
+# fimod: same idea, with Python syntax
 fimod s -i users.json -e '[u for u in data if u["age"] > 30]'
 ```
 
@@ -54,7 +54,8 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **NDJSON** | ✅ (--slurp) | ❌ | manual I/O | 🟢 built-in (--slurp) |
 | **Cross-format** | ❌ | YAML↔JSON↔XML | manual | 🟢 any → any |
 | **Dependencies** | jq binary | yq binary | Python + pip | 🟢 **single binary** |
-| **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~2.9 MB** (UPX-compressed) |
+| **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~3.3 MB** standard (UPX-compressed; `slim` is smaller) |
+| **Speed-tuned build** | n/a | n/a | custom packaging | 🟢 `fimod-fast` (~15-25% faster on CPU-heavy smoke tests; larger, uncompressed) |
 | **Regex** | limited | limited | `import re` | 🟢 `re_*` built-in (PCRE2) |
 | **Deep access** | `.a.b.c` | `.a.b.c` | manual | 🟢 `dp_get(data, "a.b.c")` |
 | **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `it_unique_by` |

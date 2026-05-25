@@ -7,7 +7,7 @@ use fimod::pipeline::CliResult;
 use fimod::{registry, test_runner};
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser};
+use clap::{ArgMatches, CommandFactory, FromArgMatches};
 use clap_complete::CompleteEnv;
 
 mod cli;
@@ -16,12 +16,14 @@ mod cmd;
 mod watch;
 
 use cli::{Cli, Commands, MoldAction, MontyAction, SetupCategory, SetupDefaults};
+use cmd::setup::SetupOptions;
 
 fn main() -> Result<()> {
     CompleteEnv::with_factory(Cli::command).complete();
 
-    let cli = Cli::parse();
-    let result = dispatch(cli);
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches)?;
+    let result = dispatch(cli, &matches);
 
     match result {
         Ok(CliResult::Done) => Ok(()),
@@ -36,9 +38,12 @@ fn main() -> Result<()> {
     }
 }
 
-fn dispatch(cli: Cli) -> Result<CliResult> {
+fn dispatch(cli: Cli, matches: &ArgMatches) -> Result<CliResult> {
     match cli.command {
-        Some(Commands::Shape(shape)) => cmd::shape::run_shape(*shape),
+        Some(Commands::Shape(shape)) => {
+            let script_refs = cmd::shape::script_refs_from_matches(matches, &shape);
+            cmd::shape::run_shape(*shape, script_refs)
+        }
         // `mold test` can request exit code 1 on failure; handle separately.
         Some(Commands::Mold {
             action: MoldAction::Test { mold, tests_dir },
@@ -63,14 +68,29 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
         },
         Commands::Setup { category } => match category {
             SetupCategory::Registry {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::registry_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::registry_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::Sandbox {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::sandbox_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::sandbox_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::All {
-                action: SetupDefaults::Defaults { yes, force },
-            } => cmd::setup::all_defaults(yes, force),
+                action:
+                    SetupDefaults::Defaults {
+                        yes,
+                        force,
+                        if_needed,
+                    },
+            } => cmd::setup::all_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::Completions { shell } => {
                 cmd::completions::print_completion_script(shell)
             }
