@@ -11,6 +11,7 @@
 
 - **distribution:** publish standard, slim, and fast release assets across the stable release matrix. `fimod-fast` is distributed without UPX compression so the speed-oriented build does not trade runtime performance for size.
 - **install:** `install.sh` and `install.ps1` accept `FIMOD_VARIANT=standard|slim|fast`. Standard installs `fimod`; slim and fast install `fimod-slim` / `fimod-fast` unless the user explicitly opts into replacing `fimod`.
+- **setup:** add `fimod setup all defaults --if-needed` as the post-install onboarding command. Installers now delegate registry and sandbox setup to fimod itself, skip already-configured blocks, and let env vars answer prompts without forcing a blanket `--yes` flow.
 - **cli:** include the active variant in `--version` (`standard`, `slim`, or `fast`) so downloaded binaries and local builds are diagnosable.
 
 ### Bug Fixes
