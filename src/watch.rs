@@ -90,11 +90,13 @@ pub fn run_watch(
         let Some(event) = first.ok() else {
             continue;
         };
-        if !event_triggers_rerun(&event, &targets) {
+        if !event_targets_watched_file(&event, &targets) {
             continue;
         }
 
-        drain_quiet_period(&rx, &targets, quiet);
+        let was_present = input_present;
+        let had_write_event =
+            is_write_like_event(&event.kind) || drain_quiet_period(&rx, &targets, quiet);
 
         // Track input file existence transitions across batches. An atomic
         // save (rename) resolves within the quiet window — fichier existe
@@ -106,6 +108,11 @@ pub fn run_watch(
                 eprintln!("[watch] warn: input removed, waiting for it to reappear...");
             }
             input_present = now_present;
+        }
+
+        let input_presence_changed = was_present != input_present;
+        if !had_write_event && !input_presence_changed {
+            continue;
         }
 
         run_n += 1;
@@ -141,18 +148,23 @@ fn drain_quiet_period(
     rx: &mpsc::Receiver<notify::Result<Event>>,
     targets: &WatchTargets,
     quiet: Duration,
-) {
+) -> bool {
+    let mut had_write_event = false;
     let mut deadline = Instant::now() + quiet;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(remaining) {
-            Ok(Ok(event)) if event_triggers_rerun(&event, targets) => {
-                deadline = Instant::now() + quiet;
+            Ok(Ok(event)) if event_targets_watched_file(&event, targets) => {
+                if is_write_like_event(&event.kind) {
+                    had_write_event = true;
+                    deadline = Instant::now() + quiet;
+                }
             }
             Ok(_) => {}
             Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
         }
     }
+    had_write_event
 }
 
 struct WatchTargets {
@@ -189,8 +201,8 @@ impl WatchTargets {
     }
 }
 
-fn event_triggers_rerun(event: &Event, targets: &WatchTargets) -> bool {
-    is_write_like_event(&event.kind) && event.paths.iter().any(|p| targets.contains_event_path(p))
+fn event_targets_watched_file(event: &Event, targets: &WatchTargets) -> bool {
+    event.paths.iter().any(|p| targets.contains_event_path(p))
 }
 
 fn is_write_like_event(kind: &EventKind) -> bool {
@@ -201,10 +213,11 @@ fn is_write_like_event(kind: &EventKind) -> bool {
         | EventKind::Modify(ModifyKind::Data(_))
         | EventKind::Modify(ModifyKind::Name(_))
         | EventKind::Modify(ModifyKind::Any)
-        | EventKind::Modify(ModifyKind::Other)
-        | EventKind::Any
-        | EventKind::Other => true,
-        EventKind::Access(_) | EventKind::Modify(ModifyKind::Metadata(_)) => false,
+        | EventKind::Modify(ModifyKind::Other) => true,
+        EventKind::Any
+        | EventKind::Other
+        | EventKind::Access(_)
+        | EventKind::Modify(ModifyKind::Metadata(_)) => false,
     }
 }
 
@@ -280,6 +293,12 @@ mod tests {
         assert!(!is_write_like_event(&EventKind::Modify(
             ModifyKind::Metadata(MetadataKind::Any)
         )));
+    }
+
+    #[test]
+    fn write_like_filter_ignores_opaque_events() {
+        assert!(!is_write_like_event(&EventKind::Any));
+        assert!(!is_write_like_event(&EventKind::Other));
     }
 
     #[test]
