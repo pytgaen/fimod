@@ -92,7 +92,7 @@ Lors de la release, ce contenu est injecté dans `CHANGELOG.md` puis le fichier 
 1. Créer une branche (`feat/...`, `fix/...`, `release/X.Y.Z`).
 2. Commiter normalement (les commits intra-branche sont squashés).
 3. Ne **jamais** modifier `CHANGELOG.md` dans cette phase.
-4. Ouvrir la PR avec titre + body conventionnels (voir fil conducteur).
+4. Pousser la branche et ouvrir la PR avec titre + body conventionnels (voir fil conducteur). Ces deux actions (`git push -u origin <branch>`, `gh pr create`) sont autorisées dans le flux normal uniquement après confirmation explicite.
 5. Attendre CI verte.
 6. Merger en **squash** (option *"pull request title and description"*).
 
