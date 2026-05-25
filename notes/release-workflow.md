@@ -92,27 +92,29 @@ Lors de la release, ce contenu est injecté dans `CHANGELOG.md` puis le fichier 
 1. Créer une branche (`feat/...`, `fix/...`, `release/X.Y.Z`).
 2. Commiter normalement (les commits intra-branche sont squashés).
 3. Ne **jamais** modifier `CHANGELOG.md` dans cette phase.
-4. Pousser la branche et ouvrir la PR avec titre + body conventionnels (voir fil conducteur). Ces deux actions (`git push -u origin <branch>`, `gh pr create`) sont autorisées dans le flux normal uniquement après confirmation explicite.
-5. Attendre CI verte.
-6. Merger en **squash** (option *"pull request title and description"*).
+4. Lancer `task outdated` avant d'ouvrir la PR. Si une dépendance directe est obsolète, traiter le bump dans la branche de travail ou créer une PR dédiée `chore/deps` avant de merger le travail release.
+5. Pousser la branche et ouvrir la PR avec titre + body conventionnels (voir fil conducteur). Ces deux actions (`git push -u origin <branch>`, `gh pr create`) sont autorisées dans le flux normal uniquement après confirmation explicite.
+6. Attendre CI verte.
+7. Merger en **squash** (option *"pull request title and description"*).
 
 ### Phase 2 — Release (direct sur main)
 
 1. Switch sur `main`, `git pull --ff-only` (garantit un historique linéaire).
 2. Vérifier working tree clean.
 3. Analyser les commits depuis le dernier tag : déterminer le bump (patch/minor/major, cf. règles ci-dessus).
-4. Bump `Cargo.toml`, rebuild `Cargo.lock` (`cargo build`).
-5. Smoke test : `cargo test --lib`.
-6. Injecter `notes/changelog-X.Y.Z.md` dans `CHANGELOG.md` après remplacement de `YYYY-MM-DD` par la date de release.
-7. Supprimer `notes/changelog-X.Y.Z.md` dans le même commit : le contenu vit désormais dans `CHANGELOG.md`.
-8. Commit EXACTEMENT ces 3 fichiers (+ suppression de `notes/changelog-X.Y.Z.md`) :
+4. Relancer `task outdated` comme filet final juste avant le release commit. Il peut échouer si une dépendance devient obsolète entre la PR et la publication ; dans ce cas, revenir en Phase 1 pour un bump de dépendances, sauf bypass explicitement validé et documenté dans `notes/changelog-X.Y.Z.md`.
+5. Bump `Cargo.toml`, rebuild `Cargo.lock` (`cargo build`).
+6. Smoke test : `cargo test --lib`.
+7. Injecter `notes/changelog-X.Y.Z.md` dans `CHANGELOG.md` après remplacement de `YYYY-MM-DD` par la date de release.
+8. Supprimer `notes/changelog-X.Y.Z.md` dans le même commit : le contenu vit désormais dans `CHANGELOG.md`.
+9. Commit EXACTEMENT ces 3 fichiers (+ suppression de `notes/changelog-X.Y.Z.md`) :
    ```bash
    git add Cargo.toml Cargo.lock CHANGELOG.md
    git add -u notes/changelog-X.Y.Z.md
    git commit -m "chore(release): X.Y.Z"
    git tag vX.Y.Z
    ```
-9. Push avec confirmation :
+10. Push avec confirmation :
    ```bash
    git push && git push --tags
    ```
