@@ -5,18 +5,16 @@
 //! `watch` Cargo feature.
 
 use std::collections::HashSet;
-use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Result;
 use fimod::mold::MoldSource;
 use fimod::pipeline::{CliResult, ScriptRef};
 use fimod::sandbox::SandboxPolicy;
-use notify::event::{AccessKind, AccessMode, ModifyKind};
-use notify::{Event, EventKind, RecursiveMode, Watcher};
+use notify::{Event, RecursiveMode, Watcher};
 
 use crate::cli::ShapeArgs;
 
@@ -63,7 +61,8 @@ pub fn run_watch(
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
 
-    // Watch parent dirs (atomic-rename safe), filter events by filename.
+    // Watch parent dirs (atomic-rename safe), then snapshot the explicit
+    // target files after each event burst.
     let mut watched_dirs: HashSet<PathBuf> = HashSet::new();
     for f in &watch_files {
         let parent = f
@@ -77,44 +76,42 @@ pub fn run_watch(
     }
 
     let input_path: Option<PathBuf> = shape.input.first().map(PathBuf::from);
-    let mut input_present = input_path.as_ref().is_some_and(|p| p.exists());
+    let input_index = input_path
+        .as_ref()
+        .and_then(|p| targets.index_of(p).ok().flatten());
     let quiet = Duration::from_millis(quiet_ms());
+    let mut snapshots = targets.snapshots();
 
     let mut run_n: u32 = 1;
     run_once(shape, script_refs, policy, debug, msg_level, run_n);
 
     while let Ok(first) = rx.recv() {
-        // Debounce: notify can split a single logical write into multiple
-        // events. Wait until the stream is quiet so one trigger covers the
-        // full burst.
-        let Some(event) = first.ok() else {
+        let Ok(_) = first else {
             continue;
         };
-        if !event_targets_watched_file(&event, &targets) {
+
+        // Debounce: notify can split a single logical write into multiple
+        // events. Wait briefly, then inspect the actual watched files. That
+        // snapshot gate ignores read/access noise and stale delayed events
+        // that platforms such as macOS may emit after the content is already
+        // handled.
+        drain_quiet_period(&rx, quiet);
+        let new_snapshots = targets.snapshots();
+        if new_snapshots == snapshots {
             continue;
         }
-
-        let was_present = input_present;
-        let had_write_event =
-            is_write_like_event(&event.kind) || drain_quiet_period(&rx, &targets, quiet);
 
         // Track input file existence transitions across batches. An atomic
         // save (rename) resolves within the quiet window — fichier existe
         // début et fin de batch — donc transition (true, true), pas de
         // warning. Un vrai unlink prolongé déclenche (true, false) et logue.
-        if let Some(ref ip) = input_path {
-            let now_present = ip.exists();
-            if input_present && !now_present {
+        if let Some(index) = input_index {
+            if snapshots[index].exists && !new_snapshots[index].exists {
                 eprintln!("[watch] warn: input removed, waiting for it to reappear...");
             }
-            input_present = now_present;
         }
 
-        let input_presence_changed = was_present != input_present;
-        if !had_write_event && !input_presence_changed {
-            continue;
-        }
-
+        snapshots = new_snapshots;
         run_n += 1;
         run_once(shape, script_refs, policy, debug, msg_level, run_n);
     }
@@ -144,80 +141,64 @@ fn run_once(
     }
 }
 
-fn drain_quiet_period(
-    rx: &mpsc::Receiver<notify::Result<Event>>,
-    targets: &WatchTargets,
-    quiet: Duration,
-) -> bool {
-    let mut had_write_event = false;
-    let mut deadline = Instant::now() + quiet;
+fn drain_quiet_period(rx: &mpsc::Receiver<notify::Result<Event>>, quiet: Duration) {
+    let deadline = Instant::now() + quiet;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         match rx.recv_timeout(remaining) {
-            Ok(Ok(event)) if event_targets_watched_file(&event, targets) => {
-                if is_write_like_event(&event.kind) {
-                    had_write_event = true;
-                    deadline = Instant::now() + quiet;
-                }
-            }
             Ok(_) => {}
             Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
         }
     }
-    had_write_event
 }
 
 struct WatchTargets {
-    filenames: HashSet<OsString>,
-    canonical_paths: HashSet<PathBuf>,
-    absolute_paths: HashSet<PathBuf>,
+    files: Vec<PathBuf>,
 }
 
 impl WatchTargets {
     fn new(files: &[PathBuf]) -> Result<Self> {
-        let filenames = files
-            .iter()
-            .filter_map(|p| p.file_name().map(|n| n.to_os_string()))
-            .collect();
-        let canonical_paths = files.iter().filter_map(|p| p.canonicalize().ok()).collect();
-        let absolute_paths = files
+        let files = files
             .iter()
             .map(|p| absolute_normalized_path(p))
-            .collect::<Result<_>>()?;
-
-        Ok(Self {
-            filenames,
-            canonical_paths,
-            absolute_paths,
-        })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self { files })
     }
 
-    fn contains_event_path(&self, path: &Path) -> bool {
-        path.file_name().is_some_and(|n| self.filenames.contains(n))
-            && (path
-                .canonicalize()
-                .is_ok_and(|p| self.canonical_paths.contains(&p))
-                || absolute_normalized_path(path).is_ok_and(|p| self.absolute_paths.contains(&p)))
+    fn index_of(&self, path: &Path) -> Result<Option<usize>> {
+        let path = absolute_normalized_path(path)?;
+        Ok(self.files.iter().position(|p| p == &path))
+    }
+
+    fn snapshots(&self) -> Vec<FileSnapshot> {
+        self.files
+            .iter()
+            .map(|path| FileSnapshot::from_path(path))
+            .collect()
     }
 }
 
-fn event_targets_watched_file(event: &Event, targets: &WatchTargets) -> bool {
-    event.paths.iter().any(|p| targets.contains_event_path(p))
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FileSnapshot {
+    exists: bool,
+    len: Option<u64>,
+    modified: Option<SystemTime>,
 }
 
-fn is_write_like_event(kind: &EventKind) -> bool {
-    match kind {
-        EventKind::Create(_)
-        | EventKind::Remove(_)
-        | EventKind::Access(AccessKind::Close(AccessMode::Write))
-        | EventKind::Modify(ModifyKind::Data(_))
-        | EventKind::Modify(ModifyKind::Name(_))
-        | EventKind::Modify(ModifyKind::Any)
-        | EventKind::Modify(ModifyKind::Other) => true,
-        EventKind::Any
-        | EventKind::Other
-        | EventKind::Access(_)
-        | EventKind::Modify(ModifyKind::Metadata(_)) => false,
+impl FileSnapshot {
+    fn from_path(path: &Path) -> Self {
+        match std::fs::metadata(path) {
+            Ok(metadata) => Self {
+                exists: true,
+                len: Some(metadata.len()),
+                modified: metadata.modified().ok(),
+            },
+            Err(_) => Self {
+                exists: false,
+                len: None,
+                modified: None,
+            },
+        }
     }
 }
 
@@ -263,52 +244,46 @@ fn collect_watch_files(shape: &ShapeArgs) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notify::event::{DataChange, MetadataKind, RenameMode};
 
     #[test]
-    fn write_like_filter_ignores_read_access() {
-        assert!(!is_write_like_event(&EventKind::Access(AccessKind::Open(
-            AccessMode::Read
-        ))));
-        assert!(!is_write_like_event(&EventKind::Access(AccessKind::Close(
-            AccessMode::Read
-        ))));
-    }
-
-    #[test]
-    fn write_like_filter_accepts_real_changes() {
-        assert!(is_write_like_event(&EventKind::Modify(ModifyKind::Data(
-            DataChange::Content
-        ))));
-        assert!(is_write_like_event(&EventKind::Modify(ModifyKind::Name(
-            RenameMode::Both
-        ))));
-        assert!(is_write_like_event(&EventKind::Access(AccessKind::Close(
-            AccessMode::Write
-        ))));
-    }
-
-    #[test]
-    fn write_like_filter_ignores_metadata_only_changes() {
-        assert!(!is_write_like_event(&EventKind::Modify(
-            ModifyKind::Metadata(MetadataKind::Any)
-        )));
-    }
-
-    #[test]
-    fn write_like_filter_ignores_opaque_events() {
-        assert!(!is_write_like_event(&EventKind::Any));
-        assert!(!is_write_like_event(&EventKind::Other));
-    }
-
-    #[test]
-    fn target_matching_survives_deleted_paths() {
+    fn snapshots_ignore_read_access() {
         let dir = tempfile::tempdir().unwrap();
         let input = dir.path().join("in.json");
         std::fs::write(&input, "{}").unwrap();
         let targets = WatchTargets::new(std::slice::from_ref(&input)).unwrap();
-        std::fs::remove_file(&input).unwrap();
 
-        assert!(targets.contains_event_path(&input));
+        let before = targets.snapshots();
+        let _ = std::fs::read_to_string(&input).unwrap();
+
+        assert_eq!(targets.snapshots(), before);
+    }
+
+    #[test]
+    fn snapshots_detect_content_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.json");
+        std::fs::write(&input, "{}").unwrap();
+        let targets = WatchTargets::new(std::slice::from_ref(&input)).unwrap();
+
+        let before = targets.snapshots();
+        std::fs::write(&input, r#"{"changed": true}"#).unwrap();
+
+        assert_ne!(targets.snapshots(), before);
+    }
+
+    #[test]
+    fn snapshots_track_deleted_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.json");
+        std::fs::write(&input, "{}").unwrap();
+        let targets = WatchTargets::new(std::slice::from_ref(&input)).unwrap();
+
+        let before = targets.snapshots();
+        std::fs::remove_file(&input).unwrap();
+        let after = targets.snapshots();
+
+        assert!(before[0].exists);
+        assert!(!after[0].exists);
+        assert_ne!(after, before);
     }
 }

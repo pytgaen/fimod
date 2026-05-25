@@ -18,7 +18,7 @@
 
 - **mold:** generate inline expression wrappers with `**_` so `fimod -e ...` accepts the same keyword-context contract as reusable molds (`args`, `env`, `headers`, `pipeline`).
 - **shape:** derive the mixed `-m` / `-e` chain from Clap's parsed argument indices. Attached short values (`-mfoo`, `-eexpr`) and interleaved non-step flags keep the intended execution order.
-- **watch:** replace `notify-debouncer-mini` with raw `notify` events plus one explicit quiet-window debounce. Reads caused by fimod itself no longer retrigger watch mode.
+- **watch:** replace `notify-debouncer-mini` with raw `notify` events plus one snapshot-gated quiet-window debounce. Reads and delayed platform events that do not change watched files no longer retrigger watch mode.
 
 ### Performance
 
