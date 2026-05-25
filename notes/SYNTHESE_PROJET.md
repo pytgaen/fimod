@@ -1,6 +1,6 @@
 # Synthèse du projet Fimod
 
-Date d'analyse : 2026-05-15  
+Date d'analyse : 2026-05-15
 Version observée : `0.7.3` (`Cargo.toml`, `CHANGELOG.md`)
 
 ## Résumé exécutif
