@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="./assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.41">
+      <meta name="generator" content="zensical-0.0.43">
     
     
       
@@ -1277,7 +1277,11 @@
 <strong>🪶 Python-powered molding without Python installed.</strong></p>
 <p><em>💡 DRY your pipelines · Slim your container images · Tame your configs</em></p>
 </blockquote>
-<p><strong>fimod</strong> (<strong>F</strong>lexible <strong>I</strong>nput, <strong>M</strong>old <strong>O</strong>utput <strong>D</strong>ata) embeds <a href="https://github.com/pydantic/monty">Pydantic Monty</a> (a Rust implementation of Python) in a single binary (~2.9 MB, UPX-compressed). You write the transform logic; fimod handles parsing, format detection, and I/O.</p>
+<p><strong>fimod</strong> (<strong>F</strong>lexible <strong>I</strong>nput, <strong>M</strong>old <strong>O</strong>utput <strong>D</strong>ata) embeds <a href="https://github.com/pydantic/monty">Pydantic Monty</a> (a Rust implementation of Python) in a single binary (~3.3 MB in the UPX-compressed standard build). You write the transform logic; fimod handles parsing, format detection, and I/O.</p>
+<div class="admonition info">
+<p class="admonition-title">Python syntax, Monty runtime</p>
+<p>Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.</p>
+</div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># 🎯 One-liner</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
@@ -1297,12 +1301,12 @@
 <li>
 <p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19.14 7.5A2.86 2.86 0 0 1 22 10.36v3.78A2.86 2.86 0 0 1 19.14 17H12c0 .39.32.96.71.96H17v1.68a2.86 2.86 0 0 1-2.86 2.86H9.86A2.86 2.86 0 0 1 7 19.64v-3.75a2.85 2.85 0 0 1 2.86-2.85h5.25a2.85 2.85 0 0 0 2.85-2.86V7.5zm-4.28 11.79c-.4 0-.72.3-.72.89s.32.71.72.71a.71.71 0 0 0 .71-.71c0-.59-.32-.89-.71-.89m-10-1.79A2.86 2.86 0 0 1 2 14.64v-3.78A2.86 2.86 0 0 1 4.86 8H12c0-.39-.32-.96-.71-.96H7V5.36A2.86 2.86 0 0 1 9.86 2.5h4.28A2.86 2.86 0 0 1 17 5.36v3.75a2.85 2.85 0 0 1-2.86 2.85H8.89a2.85 2.85 0 0 0-2.85 2.86v2.68zM9.14 5.71c.4 0 .72-.3.72-.89s-.32-.71-.72-.71c-.39 0-.71.12-.71.71s.32.89.71.89"/></svg></span> <strong>Python you already know</strong></p>
 <hr />
-<p>No new DSL. Write <code>for</code>, <code>if</code>, comprehensions, string methods — it's just Python.</p>
+<p>No new DSL. Write <code>for</code>, <code>if</code>, comprehensions, and string methods using Monty's Python subset.</p>
 </li>
 <li>
 <p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A.99.99 0 0 1 3 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88zM12 4.15l-1.89 1.07L16 8.61l1.96-1.11zM6.04 7.5 12 10.85l1.96-1.1-5.88-3.4zM5 15.91l6 3.38v-6.71L5 9.21zm14 0v-6.7l-6 3.37v6.71z"/></svg></span> <strong>Single binary</strong></p>
 <hr />
-<p>No runtime, no <code>pip install</code>, no dependencies. One ~2.9 MB binary (UPX-compressed) that works everywhere.</p>
+<p>No runtime, no <code>pip install</code>, no dependencies. One ~3.3 MB standard binary after UPX compression; use <code>slim</code> when you do not need HTTP input, or <code>fimod-fast</code> for large CPU-heavy runs.</p>
 </li>
 <li>
 <p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m21 9-4-4v3h-7v2h7v3M7 11l-4 4 4 4v-3h7v-2H7z"/></svg></span> <strong>All the formats</strong></p>
@@ -1323,7 +1327,7 @@
 </div>
 <hr />
 <h2 id="a-taste-of-what-fimod-can-do">👀 A taste of what fimod can do</h2>
-<p>🐍 <strong>Pure Python transforms — Rust-powered I/O, serialization &amp; builtins:</strong></p>
+<p>🐍 <strong>Python-syntax transforms — Rust-powered I/O, serialization &amp; builtins:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># YAML to JSON, filter active users, sort by name</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;it_sort_by(data, &quot;name&quot;)&#39;</span><span class="w"> </span>-o<span class="w"> </span>result.json
 </code></pre></div>
@@ -1467,10 +1471,11 @@
 <p class="admonition-title">Early-stage software</p>
 <p>fimod is young software, built with AI-assisted development ("vibe coding").</p>
 <ul>
-<li><strong><a href="https://github.com/pydantic/monty">Monty</a></strong> is an early-stage Rust implementation of Python by Pydantic. Its API is unstable and may introduce breaking changes.</li>
+<li><strong><a href="https://github.com/pydantic/monty">Monty</a></strong> is an early-stage Rust implementation of Python by Pydantic. It is not CPython, and its API may introduce breaking changes.</li>
 <li><strong>fimod</strong> depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.</li>
 <li>Versioning follows <a href="https://semver.org/">Semantic Versioning</a> — breaking changes bump the major version.</li>
-<li>Built-in helpers (<code>re_*</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>) are implemented in <strong>Rust</strong> to complement Monty's limited stdlib. In particular, regex functions use <a href="https://github.com/fancy-regex/fancy-regex">fancy-regex</a> syntax (Rust/PCRE2 flavour), <strong>not</strong> Python's <code>re</code> module — see <a href="reference/built-ins/#regex-functions-re_">Built-ins → Regex</a>.</li>
+<li>Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.</li>
+<li>Built-in helpers (<code>re_*</code>, <code>dp_*</code>, <code>it_*</code>, <code>hs_*</code>, <code>tpl_*</code>, <code>msg_*</code>, <code>gk_*</code>, <code>env_subst</code>) are implemented in <strong>Rust</strong> as part of fimod's data-shaping API. In particular, regex functions use <a href="https://github.com/fancy-regex/fancy-regex">fancy-regex</a> syntax (Rust/PCRE2 flavour), <strong>not</strong> Python's <code>re</code> module — see <a href="reference/built-ins/#regex-functions-re_">Built-ins → Regex</a>.</li>
 </ul>
 </div>
 <div class="admonition note">
@@ -1548,7 +1553,7 @@ Both approaches now work side by side:</p>
       <script id="__config" type="application/json">{"annotate":null,"base":".","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"./assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="./assets/javascripts/bundle.dbc0afdc.min.js"></script>
+      <script src="./assets/javascripts/bundle.6e5f0216.min.js"></script>
       
     
   </body>

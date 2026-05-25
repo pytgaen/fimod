@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.41">
+      <meta name="generator" content="zensical-0.0.43">
     
     
       
@@ -2306,8 +2306,9 @@
 <p>Using <code>--output-format http</code> will produce an error. HTTP is only meaningful as an input format.</p>
 </div>
 <div class="admonition tip">
-<p class="admonition-title">Requires the default build variant</p>
-<p>HTTP input needs reqwest, which is included in the default build. Use <code>FIMOD_VARIANT=slim</code> (or <code>cargo build --no-default-features</code>) if you want to opt out.</p>
+<p class="admonition-title">Requires the standard or fast build variant</p>
+<p>HTTP input needs reqwest, which is included in the <code>standard</code> and <code>fast</code> release variants. Use <code>FIMOD_VARIANT=slim</code> (or <code>cargo build --no-default-features</code>) if you want to opt out.
+Use <code>FIMOD_VARIANT=fast</code> for a larger, uncompressed binary optimized for long CPU-heavy transforms.</p>
 </div>
 <hr />
 <h2 id="slurp-mode-slurp-s">📥 Slurp mode (<code>--slurp</code> / <code>-s</code>)</h2>
@@ -2386,7 +2387,7 @@
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>--no-input<span class="w"> </span>-m<span class="w"> </span>generate.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">count</span><span class="o">=</span><span class="m">5</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># generate.py</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">])</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">i</span> <span class="o">*</span> <span class="n">i</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
 </code></pre></div>
@@ -2415,10 +2416,11 @@
 </div>
 <hr />
 <h2 id="setup">⚙️ Setup</h2>
-<p><code>fimod setup &lt;category&gt; defaults</code> installs the canonical configuration for a category. It's what the install scripts call after downloading the binary, but you can re-run it at any time.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">          </span><span class="c1"># 🚀 registry + sandbox in one go</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>registry<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># community registries only</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">      </span><span class="c1"># sandbox policy only</span>
+<p><code>fimod setup &lt;category&gt; defaults</code> installs the canonical configuration for a category. The install scripts call the idempotent <code>--if-needed</code> form after downloading the binary, but you can re-run it at any time.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--if-needed<span class="w">    </span><span class="c1"># registry + sandbox, only when missing</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">          </span><span class="c1"># registry + sandbox in one go</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>registry<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># community registries only</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">      </span><span class="c1"># sandbox policy only</span>
 </code></pre></div>
 <table>
 <thead>
@@ -2436,12 +2438,43 @@
 <td><code>--force</code></td>
 <td>Overwrite an existing <code>sandbox.toml</code> (ignored for registry).</td>
 </tr>
+<tr>
+<td><code>--if-needed</code></td>
+<td>Install missing defaults, skip already-configured blocks, and leave existing files untouched.</td>
+</tr>
+</tbody>
+</table>
+<p>Setup prompts can also be answered with environment variables. Granular values win over <code>FIMOD_SETUP_ALL</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Values</th>
+<th>Applies to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FIMOD_SETUP_REGISTRY</code></td>
+<td><code>yes</code> / <code>no</code></td>
+<td>Community registries</td>
+</tr>
+<tr>
+<td><code>FIMOD_SETUP_SANDBOX</code></td>
+<td><code>yes</code> / <code>no</code></td>
+<td>Sandbox policy</td>
+</tr>
+<tr>
+<td><code>FIMOD_SETUP_ALL</code></td>
+<td><code>yes</code> / <code>no</code></td>
+<td>Default for both when granular values are unset</td>
+</tr>
 </tbody>
 </table>
 <p>What each target does:</p>
 <ul>
 <li><strong><code>registry</code></strong> — installs the community registries in <code>~/.config/fimod/sources.toml</code>. Idempotent; safe to re-run. Same effect as the legacy <code>fimod registry setup</code>.</li>
-<li><strong><code>sandbox</code></strong> — writes the recommended sandbox policy to <code>~/.config/fimod/sandbox.toml</code>. Refuses to overwrite without <code>--force</code>.</li>
+<li><strong><code>sandbox</code></strong> — writes the recommended sandbox policy to <code>~/.config/fimod/sandbox.toml</code>. Refuses to overwrite without <code>--force</code>; with <code>--if-needed</code>, an existing file is left unchanged.</li>
 <li><strong><code>all</code></strong> — runs <code>registry</code> then <code>sandbox</code>, stopping at the first error.</li>
 </ul>
 <p>See <a href="#sandbox-policy">Sandbox policy</a> for what the sandbox file controls and how it is resolved.</p>
@@ -2663,7 +2696,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 </code></pre></div>
 <p>Mold descriptions come from the module-level docstring at the top of each script:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="sd">&quot;&quot;&quot;Normalise field names to snake_case.&quot;&quot;&quot;</span>
-<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
 <a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>    <span class="o">...</span>
 </code></pre></div>
 <h3 id="cache-management">Cache management</h3>
@@ -2793,7 +2826,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <div class="tabbed-block">
 <p>For reusable transforms:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># cleanup.py</span>
-<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
 <a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
 <a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
 <a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>    <span class="k">return</span> <span class="n">data</span>
@@ -2834,7 +2867,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="c1"># Or via mold:</span>
 <a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
 </code></pre></div>
-<p>Access via <code>args["key"]</code> in the <code>transform(data, args, env, headers)</code> function.</p>
+<p>Access via <code>args["key"]</code> in a mold signature such as <code>def transform(data, args, **_):</code>.</p>
 <hr />
 <h2 id="format-conversion">🔀 Format conversion</h2>
 <p>Pass-through expression for pure format conversion:</p>
@@ -3162,7 +3195,7 @@ invalidate.</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"../../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.dbc0afdc.min.js"></script>
+      <script src="../../assets/javascripts/bundle.6e5f0216.min.js"></script>
       
     
   </body>
