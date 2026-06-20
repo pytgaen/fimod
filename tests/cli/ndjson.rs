@@ -1,4 +1,5 @@
 use super::helpers::setup_input;
+use assert_fs::prelude::*;
 use predicates::prelude::*;
 
 #[test]
@@ -39,6 +40,114 @@ fn test_ndjson_output() {
     assert_eq!(lines.len(), 2);
     assert!(lines[0].contains("\"name\":\"Alice\""));
     assert!(lines[1].contains("\"name\":\"Bob\""));
+}
+
+#[test]
+fn test_json_array_to_ndjson_identity_streams_to_output_extension() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(
+        &dir,
+        "pretty.json",
+        r#"[
+  {
+    "name": "Alice"
+  },
+  {
+    "name": "Bob"
+  }
+]"#,
+    );
+    let output = dir.child("out.jsonl");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "-o"])
+        .arg(output.path())
+        .assert()
+        .success();
+
+    output.assert("{\"name\":\"Alice\"}\n{\"name\":\"Bob\"}\n");
+}
+
+#[test]
+fn test_json_array_to_ndjson_identity_streams_from_stdin() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "json",
+            "--output-format",
+            "ndjson",
+            "-e",
+            "data",
+        ])
+        .write_stdin("[\n  {\"a\": 1},\n  {\"b\": 2}\n]\n")
+        .assert()
+        .success()
+        .stdout("{\"a\":1}\n{\"b\":2}\n");
+}
+
+#[test]
+fn test_json_object_to_ndjson_identity_still_outputs_single_line() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "json",
+            "--output-format",
+            "ndjson",
+            "-e",
+            "data",
+        ])
+        .write_stdin("{\"name\":\"Alice\"}\n")
+        .assert()
+        .success()
+        .stdout("{\"name\":\"Alice\"}\n");
+}
+
+#[test]
+fn test_json_array_to_ndjson_identity_in_place_does_not_truncate_input() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"[{"a":1},{"b":2}]"#);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "--output-format",
+            "ndjson",
+            "--in-place",
+            "-e",
+            "data",
+        ])
+        .assert()
+        .success();
+
+    dir.child("data.json").assert("{\"a\":1}\n{\"b\":2}\n");
+}
+
+#[test]
+fn test_identity_expression_converts_without_monty_step() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"[{"name": "Alice"}, {"name": "Bob"}]"#);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "--output-format",
+            "ndjson",
+            "--debug",
+            "-e",
+            "data",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("{\"name\":\"Alice\"}"))
+        .stdout(predicate::str::contains("{\"name\":\"Bob\"}"))
+        .stderr(predicate::str::contains("step 1/1").not());
 }
 
 #[test]

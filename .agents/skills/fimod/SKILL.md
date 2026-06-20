@@ -141,6 +141,13 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 **20. Monty REPL — interactive Python**
 `fimod monty repl` — starts an interactive Python REPL powered by the same embedded Monty engine. Useful for experimenting with expressions before putting them into a mold.
 
+**21. Watch a file for live updates**
+`fimod s -i config.yaml -e 'data' --watch`
+
+**22. Install defaults and shell completions**
+`fimod setup all defaults --if-needed`
+`fimod setup completions --shell zsh | source /dev/stdin`
+
 ## Subcommands Overview
 
 | Subcommand | Alias | Purpose |
@@ -151,6 +158,7 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 | `mold show` | | Show metadata and defaults for a mold |
 | `mold test` | | Run tests for a mold against `*.input.*` / `*.expected.*` file pairs |
 | `monty repl` | | Interactive Python REPL (embedded Monty engine) |
+| `setup` | | Install recommended defaults and generate shell completions |
 
 ## CLI Flag Reference
 
@@ -164,6 +172,8 @@ fimod s -i https://jsonplaceholder.typicode.com/users \
 | `--output` | `-o` | Output file path or directory |
 | `--url-filename` | `-O` | Use filename from URL (like `curl -O`) |
 | `--in-place` | | Modify input file in-place |
+| `--watch` | `-w` | Re-run the transform when input or mold files change (single file, file-based only) |
+| `--sandbox-file` | | Use a custom sandbox policy TOML file (`--sandbox-file=''` forces zero authorization) |
 | `--slurp` | `-s` | Read multiple JSON values into array / multi-file slurp |
 | `--no-input` | | Skip input — `data = None` |
 | `--check` | | No stdout; exit 0 if truthy, 1 if falsy |

@@ -1,9 +1,11 @@
 use std::borrow::Cow;
-use std::io::Cursor;
+use std::fmt;
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use monty::{DictPairs, MontyObject};
+use serde::de::{DeserializeSeed, SeqAccess, Visitor};
 use serde_json::Value;
 
 use crate::serde_compat::NativeNumbers;
@@ -77,8 +79,10 @@ pub struct CsvOptions {
     pub no_input_header: bool,
     /// Don't write a header line in output
     pub no_output_header: bool,
-    /// Explicit column names for input (implies no_input_header)
+    /// Explicit column names for input and object-row output projection
     pub header_names: Option<Vec<String>>,
+    /// Number of object rows to scan for output columns. 0 scans all rows.
+    pub csv_scan: usize,
 }
 
 impl CsvOptions {
@@ -96,6 +100,7 @@ impl Default for CsvOptions {
             no_input_header: false,
             no_output_header: false,
             header_names: None,
+            csv_scan: 1,
         }
     }
 }
@@ -235,6 +240,322 @@ impl DataFormat {
             DataFormat::Http => {
                 bail!("HTTP format is input-only and cannot be used for output")
             }
+        }
+    }
+}
+
+/// Stream a top-level JSON array as NDJSON without materializing the full array.
+///
+/// Each array element is parsed as a `serde_json::Value`, serialized as compact
+/// JSON, written with a trailing newline, then dropped before reading the next
+/// element. Memory is therefore bounded by the largest element, not by the full
+/// input file.
+pub fn stream_json_array_to_ndjson<R, W>(reader: R, mut writer: W) -> Result<()>
+where
+    R: Read,
+    W: Write,
+{
+    let mut deserializer = serde_json::Deserializer::from_reader(reader);
+    JsonArrayNdjsonSeed {
+        writer: &mut writer,
+    }
+    .deserialize(&mut deserializer)
+    .context("Failed to stream JSON array to NDJSON")?;
+    deserializer
+        .end()
+        .context("Failed to parse trailing data after JSON array")?;
+    writer.flush().context("Failed to flush NDJSON output")?;
+    Ok(())
+}
+
+struct JsonArrayNdjsonSeed<'a, W> {
+    writer: &'a mut W,
+}
+
+impl<'de, W> DeserializeSeed<'de> for JsonArrayNdjsonSeed<'_, W>
+where
+    W: Write,
+{
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(JsonArrayNdjsonVisitor {
+            writer: self.writer,
+        })
+    }
+}
+
+struct JsonArrayNdjsonVisitor<'a, W> {
+    writer: &'a mut W,
+}
+
+impl<'de, W> Visitor<'de> for JsonArrayNdjsonVisitor<'_, W>
+where
+    W: Write,
+{
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a top-level JSON array for streaming JSON to NDJSON")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while let Some(item) = seq.next_element::<Value>()? {
+            serde_json::to_writer(&mut *self.writer, &item).map_err(serde::de::Error::custom)?;
+            self.writer
+                .write_all(b"\n")
+                .map_err(serde::de::Error::custom)?;
+        }
+        Ok(())
+    }
+}
+
+fn csv_value_to_field(v: &Value) -> Cow<'_, str> {
+    match v {
+        Value::String(s) => Cow::Borrowed(s.as_str()),
+        Value::Null => Cow::Borrowed(""),
+        other => Cow::Owned(other.to_string()),
+    }
+}
+
+fn collect_object_columns(columns: &mut Vec<String>, obj: &serde_json::Map<String, Value>) {
+    for key in obj.keys() {
+        if !columns.iter().any(|existing| existing == key) {
+            columns.push(key.clone());
+        }
+    }
+}
+
+fn write_csv_array_record<W: Write>(wtr: &mut csv::Writer<W>, arr: &[Value]) -> csv::Result<()> {
+    let fields: Vec<Cow<'_, str>> = arr.iter().map(csv_value_to_field).collect();
+    wtr.write_record(fields.iter().map(|f| f.as_bytes()))
+}
+
+fn write_csv_object_record<W: Write>(
+    wtr: &mut csv::Writer<W>,
+    obj: &serde_json::Map<String, Value>,
+    columns: &[String],
+) -> csv::Result<()> {
+    let fields: Vec<Cow<'_, str>> = columns
+        .iter()
+        .map(|col| {
+            obj.get(col)
+                .map(csv_value_to_field)
+                .unwrap_or(Cow::Borrowed(""))
+        })
+        .collect();
+    wtr.write_record(fields.iter().map(|f| f.as_bytes()))
+}
+
+/// Stream a top-level JSON array as CSV without materializing the full array
+/// unless `opts.csv_scan == 0` requires a full column-union scan.
+pub fn stream_json_array_to_csv<R, W>(reader: R, mut writer: W, opts: &CsvOptions) -> Result<()>
+where
+    R: Read,
+    W: Write,
+{
+    let mut deserializer = serde_json::Deserializer::from_reader(reader);
+    {
+        let mut csv_writer = csv::WriterBuilder::new()
+            .delimiter(opts.effective_output_delimiter())
+            .from_writer(&mut writer);
+        JsonArrayCsvSeed {
+            writer: &mut csv_writer,
+            opts,
+        }
+        .deserialize(&mut deserializer)
+        .context("Failed to stream JSON array to CSV")?;
+        csv_writer.flush().context("Failed to flush CSV writer")?;
+    }
+    deserializer
+        .end()
+        .context("Failed to parse trailing data after JSON array")?;
+    writer.flush().context("Failed to flush CSV output")?;
+    Ok(())
+}
+
+struct JsonArrayCsvSeed<'a, W: Write> {
+    writer: &'a mut csv::Writer<W>,
+    opts: &'a CsvOptions,
+}
+
+impl<'de, W> DeserializeSeed<'de> for JsonArrayCsvSeed<'_, W>
+where
+    W: Write,
+{
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(JsonArrayCsvVisitor {
+            writer: self.writer,
+            opts: self.opts,
+        })
+    }
+}
+
+struct JsonArrayCsvVisitor<'a, W: Write> {
+    writer: &'a mut csv::Writer<W>,
+    opts: &'a CsvOptions,
+}
+
+impl<'de, W> JsonArrayCsvVisitor<'_, W>
+where
+    W: Write,
+{
+    fn write_array_rows<A>(self, mut seq: A, first: Value) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        if let Some(ref names) = self.opts.header_names {
+            if !self.opts.no_output_header {
+                self.writer
+                    .write_record(names)
+                    .map_err(serde::de::Error::custom)?;
+            }
+        }
+
+        let first_arr = first.as_array().ok_or_else(|| {
+            serde::de::Error::custom("CSV output: mixed rows (expected all arrays)")
+        })?;
+        write_csv_array_record(self.writer, first_arr).map_err(serde::de::Error::custom)?;
+
+        while let Some(row) = seq.next_element::<Value>()? {
+            let arr = row.as_array().ok_or_else(|| {
+                serde::de::Error::custom("CSV output: mixed rows (expected all arrays)")
+            })?;
+            write_csv_array_record(self.writer, arr).map_err(serde::de::Error::custom)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_object_rows<A>(self, mut seq: A, first: Value) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        if let Some(columns) = &self.opts.header_names {
+            if !self.opts.no_output_header {
+                self.writer
+                    .write_record(columns)
+                    .map_err(serde::de::Error::custom)?;
+            }
+
+            let first_obj = first.as_object().ok_or_else(|| {
+                serde::de::Error::custom("CSV output: each row must be an object or an array")
+            })?;
+            write_csv_object_record(self.writer, first_obj, columns)
+                .map_err(serde::de::Error::custom)?;
+
+            while let Some(row) = seq.next_element::<Value>()? {
+                let obj = row.as_object().ok_or_else(|| {
+                    serde::de::Error::custom("CSV output: mixed rows (expected all objects)")
+                })?;
+                write_csv_object_record(self.writer, obj, columns)
+                    .map_err(serde::de::Error::custom)?;
+            }
+
+            return Ok(());
+        }
+
+        let mut columns = Vec::new();
+        {
+            let first_obj = first.as_object().ok_or_else(|| {
+                serde::de::Error::custom("CSV output: each row must be an object or an array")
+            })?;
+            collect_object_columns(&mut columns, first_obj);
+        }
+
+        let full_scan = self.opts.csv_scan == 0;
+        let mut buffered = vec![first];
+
+        if full_scan {
+            while let Some(row) = seq.next_element::<Value>()? {
+                {
+                    let obj = row.as_object().ok_or_else(|| {
+                        serde::de::Error::custom("CSV output: mixed rows (expected all objects)")
+                    })?;
+                    collect_object_columns(&mut columns, obj);
+                }
+                buffered.push(row);
+            }
+        } else {
+            while buffered.len() < self.opts.csv_scan {
+                let Some(row) = seq.next_element::<Value>()? else {
+                    break;
+                };
+                {
+                    let obj = row.as_object().ok_or_else(|| {
+                        serde::de::Error::custom("CSV output: mixed rows (expected all objects)")
+                    })?;
+                    collect_object_columns(&mut columns, obj);
+                }
+                buffered.push(row);
+            }
+        }
+
+        if !self.opts.no_output_header {
+            self.writer
+                .write_record(&columns)
+                .map_err(serde::de::Error::custom)?;
+        }
+
+        for row in &buffered {
+            let obj = row.as_object().ok_or_else(|| {
+                serde::de::Error::custom("CSV output: mixed rows (expected all objects)")
+            })?;
+            write_csv_object_record(self.writer, obj, &columns)
+                .map_err(serde::de::Error::custom)?;
+        }
+
+        if !full_scan {
+            while let Some(row) = seq.next_element::<Value>()? {
+                let obj = row.as_object().ok_or_else(|| {
+                    serde::de::Error::custom("CSV output: mixed rows (expected all objects)")
+                })?;
+                write_csv_object_record(self.writer, obj, &columns)
+                    .map_err(serde::de::Error::custom)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<'de, W> Visitor<'de> for JsonArrayCsvVisitor<'_, W>
+where
+    W: Write,
+{
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a top-level JSON array for streaming JSON to CSV")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let Some(first) = seq.next_element::<Value>()? else {
+            return Ok(());
+        };
+
+        if first.is_array() {
+            self.write_array_rows(seq, first)
+        } else if first.is_object() {
+            self.write_object_rows(seq, first)
+        } else {
+            Err(serde::de::Error::custom(
+                "CSV output: each row must be an object or an array",
+            ))
         }
     }
 }
@@ -466,16 +787,8 @@ pub fn serialize_csv(value: &Value, opts: &CsvOptions) -> Result<String> {
             .delimiter(opts.effective_output_delimiter())
             .from_writer(&mut output);
 
-        fn value_to_field(v: &Value) -> Cow<'_, str> {
-            match v {
-                Value::String(s) => Cow::Borrowed(s.as_str()),
-                Value::Null => Cow::Borrowed(""),
-                other => Cow::Owned(other.to_string()),
-            }
-        }
-
         if rows[0].is_array() {
-            // Array-of-arrays mode: write header from --csv-header-names if provided
+            // Array-of-arrays mode: write header from --csv-header if provided
             if let Some(ref names) = opts.header_names {
                 if !opts.no_output_header {
                     wtr.write_record(names)
@@ -487,16 +800,31 @@ pub fn serialize_csv(value: &Value, opts: &CsvOptions) -> Result<String> {
                 let arr = row.as_array().ok_or_else(|| {
                     anyhow::anyhow!("CSV output: mixed rows (expected all arrays)")
                 })?;
-                let fields: Vec<Cow<'_, str>> = arr.iter().map(|v| value_to_field(v)).collect();
-                wtr.write_record(fields.iter().map(|f| f.as_bytes()))
-                    .context("Failed to write CSV record")?;
+                write_csv_array_record(&mut wtr, arr).context("Failed to write CSV record")?;
             }
         } else {
             // Array-of-objects mode
             let first_obj = rows[0].as_object().ok_or_else(|| {
                 anyhow::anyhow!("CSV output: each row must be an object or an array")
             })?;
-            let columns: Vec<String> = first_obj.keys().cloned().collect();
+            let columns: Vec<String> = if let Some(ref names) = opts.header_names {
+                names.clone()
+            } else {
+                let mut columns = Vec::new();
+                collect_object_columns(&mut columns, first_obj);
+                let scan_rows = if opts.csv_scan == 0 {
+                    rows.len()
+                } else {
+                    opts.csv_scan.min(rows.len())
+                };
+                for row in rows.iter().skip(1).take(scan_rows.saturating_sub(1)) {
+                    let obj = row.as_object().ok_or_else(|| {
+                        anyhow::anyhow!("CSV output: mixed rows (expected all objects)")
+                    })?;
+                    collect_object_columns(&mut columns, obj);
+                }
+                columns
+            };
 
             if !opts.no_output_header {
                 wtr.write_record(&columns)
@@ -507,15 +835,7 @@ pub fn serialize_csv(value: &Value, opts: &CsvOptions) -> Result<String> {
                 let obj = row.as_object().ok_or_else(|| {
                     anyhow::anyhow!("CSV output: mixed rows (expected all objects)")
                 })?;
-                let fields: Vec<Cow<'_, str>> = columns
-                    .iter()
-                    .map(|col| {
-                        obj.get(col)
-                            .map(|v| value_to_field(v))
-                            .unwrap_or(Cow::Borrowed(""))
-                    })
-                    .collect();
-                wtr.write_record(fields.iter().map(|f| f.as_bytes()))
+                write_csv_object_record(&mut wtr, obj, &columns)
                     .context("Failed to write CSV record")?;
             }
         }
@@ -679,6 +999,55 @@ mod tests {
     }
 
     #[test]
+    fn test_serialize_csv_header_names_project_object_rows() {
+        let value = serde_json::json!([
+            {"a": 1, "b": 2},
+            {"a": 3, "c": 99}
+        ]);
+        let opts = CsvOptions {
+            header_names: Some(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+            ..Default::default()
+        };
+
+        let output = serialize_csv(&value, &opts).unwrap().replace("\r\n", "\n");
+
+        assert_eq!(output, "a,b,c\n1,2,\n3,,99\n");
+    }
+
+    #[test]
+    fn test_serialize_csv_scan_zero_unions_all_object_rows() {
+        let value = serde_json::json!([
+            {"a": 1},
+            {"b": 2},
+            {"c": 3}
+        ]);
+        let opts = CsvOptions {
+            csv_scan: 0,
+            ..Default::default()
+        };
+
+        let output = serialize_csv(&value, &opts).unwrap().replace("\r\n", "\n");
+
+        assert_eq!(output, "a,b,c\n1,,\n,2,\n,,3\n");
+    }
+
+    #[test]
+    fn test_serialize_csv_field_stringification() {
+        let value = serde_json::json!([
+            {"s": "x", "n": 1, "b": true, "z": null, "o": {"k": 1}, "a": [1, 2]}
+        ]);
+
+        let output = serialize_csv(&value, &CsvOptions::default())
+            .unwrap()
+            .replace("\r\n", "\n");
+
+        assert_eq!(
+            output,
+            "s,n,b,z,o,a\nx,1,true,,\"{\"\"k\"\":1}\",\"[1,2]\"\n"
+        );
+    }
+
+    #[test]
     fn test_csv_delimiter_tab() {
         let input = "name\tage\nAlice\t30\n";
         let opts = CsvOptions {
@@ -805,6 +1174,62 @@ mod tests {
     fn test_parse_format_name_ndjson() {
         assert_eq!(parse_format_name("ndjson").unwrap(), DataFormat::Ndjson);
         assert_eq!(parse_format_name("jsonl").unwrap(), DataFormat::Ndjson);
+    }
+
+    #[test]
+    fn test_stream_json_array_to_ndjson() {
+        let input = Cursor::new(
+            br#"[
+            {"name": "Alice"},
+            {"name": "Bob"}
+        ]"#,
+        );
+        let mut output = Vec::new();
+
+        stream_json_array_to_ndjson(input, &mut output).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "{\"name\":\"Alice\"}\n{\"name\":\"Bob\"}\n"
+        );
+    }
+
+    #[test]
+    fn test_stream_json_array_to_ndjson_rejects_non_array_root() {
+        let input = Cursor::new(br#"{"name": "Alice"}"#);
+        let mut output = Vec::new();
+
+        let err = stream_json_array_to_ndjson(input, &mut output).unwrap_err();
+
+        assert!(format!("{err:#}").contains("top-level JSON array"));
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_stream_json_array_to_csv_empty_array() {
+        let input = Cursor::new(br#"[]"#);
+        let mut output = Vec::new();
+
+        stream_json_array_to_csv(input, &mut output, &CsvOptions::default()).unwrap();
+
+        assert_eq!(String::from_utf8(output).unwrap(), "");
+    }
+
+    #[test]
+    fn test_stream_json_array_to_csv_scan_window() {
+        let input = Cursor::new(br#"[{"a":1},{"b":2},{"c":3}]"#);
+        let mut output = Vec::new();
+        let opts = CsvOptions {
+            csv_scan: 2,
+            ..Default::default()
+        };
+
+        stream_json_array_to_csv(input, &mut output, &opts).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap().replace("\r\n", "\n"),
+            "a,b\n1,\n,2\n,\n"
+        );
     }
 
     #[test]

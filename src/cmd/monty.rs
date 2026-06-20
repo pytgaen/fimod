@@ -1,13 +1,17 @@
 use anyhow::Result;
-use monty::MontyObject;
+use monty::{ExcType, LimitedTracker, MontyObject, MontyRepl, NameLookupResult, ReplProgress};
 
-use fimod::MONTY_VERSION;
+use fimod::{sandbox::SandboxPolicy, MONTY_VERSION};
 
-pub fn run_monty_repl() -> Result<()> {
-    use monty::{detect_repl_continuation_mode, MontyRepl, NoLimitTracker, ReplContinuationMode};
+type FimodRepl = MontyRepl<LimitedTracker>;
+type ReplRunResult = Result<(FimodRepl, MontyObject), Box<(FimodRepl, String)>>;
+
+pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
+    use monty::{detect_repl_continuation_mode, ReplContinuationMode};
     use rustyline::error::ReadlineError;
     use rustyline::DefaultEditor;
 
+    let policy = SandboxPolicy::resolve(sandbox_file.as_deref())?;
     let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin());
 
     if is_tty {
@@ -18,7 +22,10 @@ pub fn run_monty_repl() -> Result<()> {
     }
 
     let mut rl = DefaultEditor::new()?;
-    let mut repl = MontyRepl::new("repl.py", NoLimitTracker);
+    let mut repl = Some(MontyRepl::new(
+        "repl.py",
+        LimitedTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
+    ));
     let mut pending_snippet = String::new();
     let mut continuation_mode = ReplContinuationMode::Complete;
 
@@ -49,7 +56,7 @@ pub fn run_monty_repl() -> Result<()> {
         pending_snippet.push('\n');
 
         if continuation_mode == ReplContinuationMode::IncompleteBlock && snippet.is_empty() {
-            repl_feed(&mut repl, &pending_snippet);
+            repl_feed(&mut repl, &pending_snippet, &policy);
             pending_snippet.clear();
             continuation_mode = ReplContinuationMode::Complete;
             continue;
@@ -61,7 +68,7 @@ pub fn run_monty_repl() -> Result<()> {
                 if continuation_mode == ReplContinuationMode::IncompleteBlock {
                     continue;
                 }
-                repl_feed(&mut repl, &pending_snippet);
+                repl_feed(&mut repl, &pending_snippet, &policy);
                 pending_snippet.clear();
                 continuation_mode = ReplContinuationMode::Complete;
             }
@@ -77,13 +84,69 @@ pub fn run_monty_repl() -> Result<()> {
     }
 }
 
-fn repl_feed(repl: &mut monty::MontyRepl<monty::NoLimitTracker>, snippet: &str) {
-    match repl.feed_run(snippet, vec![], monty::PrintWriter::Stdout) {
-        Ok(output) => {
+fn repl_feed(repl: &mut Option<FimodRepl>, snippet: &str, policy: &SandboxPolicy) {
+    if let (Some(limit), Some(active_repl)) = (policy.max_duration, repl.as_mut()) {
+        active_repl.tracker_mut().set_max_duration(limit);
+    }
+
+    let active_repl = repl.take().expect("REPL session must be available");
+    match execute_repl_snippet(active_repl, snippet, policy) {
+        Ok((returned_repl, output)) => {
             if output != MontyObject::None {
                 println!("{output}");
             }
+            *repl = Some(returned_repl);
         }
-        Err(err) => eprintln!("error:\n{err}"),
+        Err(err) => {
+            let (returned_repl, err) = *err;
+            eprintln!("error:\n{err}");
+            *repl = Some(returned_repl);
+        }
+    }
+}
+
+fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) -> ReplRunResult {
+    let mut progress = match repl.feed_start(snippet, vec![], monty::PrintWriter::Stdout) {
+        Ok(progress) => progress,
+        Err(err) => return Err(Box::new((err.repl, format_repl_error(err.error, policy)))),
+    };
+
+    loop {
+        match progress {
+            ReplProgress::Complete { repl, value } => return Ok((repl, value)),
+            ReplProgress::OsCall(mut call) => {
+                let function_call = call.take_function_call();
+                let result = fimod::engine::sandbox_os_call_result(function_call, policy);
+                progress = call
+                    .resume(result, monty::PrintWriter::Stdout)
+                    .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
+            }
+            ReplProgress::NameLookup(lookup) => {
+                progress = lookup
+                    .resume(NameLookupResult::Undefined, monty::PrintWriter::Stdout)
+                    .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
+            }
+            ReplProgress::FunctionCall(call) => {
+                return Err(Box::new((
+                    call.into_repl(),
+                    "external function calls are not supported in the REPL".to_string(),
+                )));
+            }
+            ReplProgress::ResolveFutures(state) => {
+                return Err(Box::new((
+                    state.into_repl(),
+                    "async futures are not supported in the REPL".to_string(),
+                )));
+            }
+        }
+    }
+}
+
+fn format_repl_error(err: monty::MontyException, policy: &SandboxPolicy) -> String {
+    match err.exc_type() {
+        ExcType::TimeoutError | ExcType::MemoryError => {
+            fimod::engine::translate_monty_error(err, policy).to_string()
+        }
+        _ => err.to_string(),
     }
 }

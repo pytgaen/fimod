@@ -432,9 +432,14 @@ fn load_url_with_cache(
 
         // Cache miss — fetch and store.
         let content = fetch_mold_content(url, token)?;
-        let _ = fs::create_dir_all(&mold_cache_dir);
-        let _ = fs::write(&cache_script_path, &content);
-        let _ = fs::write(&cache_hash_path, expected_hash);
+        if let Err(e) = write_hashed_mold_cache(
+            &cache_script_path,
+            &cache_hash_path,
+            &content,
+            expected_hash,
+        ) {
+            eprintln!("[fimod] warning: could not write mold cache: {e:#}");
+        }
 
         // Fetch companion files (templates, data, etc.) into the cache dir.
         fetch_companion_files(&mold_cache_dir, url, companion_urls, token);
@@ -476,14 +481,69 @@ fn load_url_with_cache(
     let content = fetch_mold_content(url, token)?;
 
     if ttl >= 0 {
-        if let Err(e) =
-            fs::create_dir_all(&legacy_cache_dir).and_then(|_| fs::write(&cache_path, &content))
-        {
+        if let Err(e) = write_cache_file_atomic(&cache_path, content.as_bytes()) {
             eprintln!("[fimod] warning: could not write mold cache: {e}");
         }
     }
 
     Ok(content)
+}
+
+#[cfg(feature = "reqwest")]
+fn write_hashed_mold_cache(
+    cache_script_path: &Path,
+    cache_hash_path: &Path,
+    content: &str,
+    expected_hash: &str,
+) -> Result<()> {
+    write_cache_file_atomic(cache_script_path, content.as_bytes())?;
+    write_cache_file_atomic(cache_hash_path, expected_hash.as_bytes())
+}
+
+#[cfg(feature = "reqwest")]
+fn write_cache_file_atomic(path: &Path, content: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create cache directory: {}", parent.display()))?;
+    }
+
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("cache");
+    let pid = std::process::id();
+    let tmp_path = path.with_file_name(format!(".{file_name}.tmp.{pid}"));
+
+    fs::write(&tmp_path, content)
+        .with_context(|| format!("Failed to write cache temp file: {}", tmp_path.display()))?;
+
+    if let Err(rename_err) = fs::rename(&tmp_path, path) {
+        if path.exists() {
+            if let Err(remove_err) = fs::remove_file(path) {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(rename_err).with_context(|| {
+                    format!(
+                        "Failed to replace cache file: {} (also failed to remove existing file: {remove_err})",
+                        path.display()
+                    )
+                });
+            }
+
+            if let Err(second_err) = fs::rename(&tmp_path, path) {
+                let _ = fs::remove_file(&tmp_path);
+                return Err(second_err)
+                    .with_context(|| format!("Failed to replace cache file: {}", path.display()));
+            }
+
+            return Ok(());
+        }
+
+        let _ = fs::remove_file(&tmp_path);
+        return Err(rename_err)
+            .with_context(|| format!("Failed to install cache file: {}", path.display()));
+    }
+
+    Ok(())
 }
 
 /// Download companion files (templates, data) into the mold cache directory.
@@ -507,20 +567,55 @@ fn fetch_companion_files(
             .strip_prefix(&format!("{script_base}/"))
             .unwrap_or(companion_url);
 
-        let target = cache_dir.join(rel_path);
-        if let Some(parent) = target.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
+        let target = match companion_cache_path(cache_dir, rel_path) {
+            Ok(target) => target,
+            Err(e) => {
+                eprintln!("[fimod] warning: skipping unsafe companion file '{rel_path}': {e}");
+                continue;
+            }
+        };
 
         match fetch_mold_content(companion_url, token) {
             Ok(content) => {
-                let _ = fs::write(&target, &content);
+                if let Err(e) = write_cache_file_atomic(&target, content.as_bytes()) {
+                    eprintln!(
+                        "[fimod] warning: could not write companion file '{rel_path}': {e:#}"
+                    );
+                }
             }
             Err(e) => {
                 eprintln!("[fimod] warning: could not fetch companion file '{rel_path}': {e:#}");
             }
         }
     }
+}
+
+#[cfg(feature = "reqwest")]
+fn companion_cache_path(cache_dir: &Path, rel_path: &str) -> Result<PathBuf> {
+    let bytes = rel_path.as_bytes();
+    let has_windows_drive_prefix =
+        bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+
+    if rel_path.starts_with('/') || rel_path.starts_with('\\') || has_windows_drive_prefix {
+        bail!("unsafe companion file path: {rel_path:?}");
+    }
+
+    let mut safe_path = PathBuf::new();
+    for segment in rel_path.split(['/', '\\']) {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            bail!("unsafe companion file path: {rel_path:?}");
+        }
+        safe_path.push(segment);
+    }
+
+    if safe_path.as_os_str().is_empty() {
+        bail!("unsafe companion file path: {rel_path:?}");
+    }
+
+    Ok(cache_dir.join(safe_path))
 }
 
 /// Fetch a mold script from a URL with optional Bearer token.
@@ -534,7 +629,7 @@ fn fetch_mold_content(url: &str, token: Option<&str>) -> Result<String> {
         .or_else(|| crate::registry::token_for_url(url));
 
     if let Some(ref t) = resolved_token {
-        request = request.header("Authorization", format!("Bearer {t}"));
+        request = request.bearer_auth(t);
     }
 
     let resp = request
@@ -564,10 +659,68 @@ pub struct MoldDefaults {
     pub docs: Option<String>,
     /// Documented --arg parameters: (name, optional description)
     pub args: Vec<(String, Option<String>)>,
+    /// Typed `--arg` declarations extracted from `arg=name:type...` directives.
+    pub arg_specs: Vec<MoldArgSpec>,
     /// Documented ENV variables: (var_name, optional description)
     pub envs: Vec<(String, Option<String>)>,
     /// Names of directives declared with `!=` (forced — not overridable by the CLI).
     pub forced: HashSet<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoldArgSpec {
+    pub name: String,
+    pub arg_type: MoldArgType,
+    pub optional: bool,
+    pub default: Option<String>,
+}
+
+impl MoldArgSpec {
+    pub fn declaration(&self) -> String {
+        let mut out = format!("{}:{}", self.name, self.arg_type.label());
+        if self.optional {
+            out.push('?');
+        }
+        if let Some(default) = &self.default {
+            out.push('=');
+            out.push_str(default);
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MoldArgType {
+    Str,
+    Int,
+    Float,
+    Bool,
+    Json,
+    Unknown(String),
+}
+
+impl MoldArgType {
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "str" => Self::Str,
+            "int" => Self::Int,
+            "float" => Self::Float,
+            "bool" => Self::Bool,
+            "json" => Self::Json,
+            other => Self::Unknown(other.to_string()),
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Str => "str",
+            Self::Int => "int",
+            Self::Float => "float",
+            Self::Bool => "bool",
+            Self::Json => "json",
+            Self::Unknown(raw) => raw,
+        }
+    }
 }
 
 /// Parse `# fimod:` directives from the script preamble, and extract the
@@ -584,7 +737,8 @@ pub struct MoldDefaults {
 /// Directives are scanned in contiguous comment lines that follow the docstring
 /// (or from the start of the script when there is no docstring).
 /// Syntax: `# fimod: key=value, key2=value2` or `# fimod: key` for bools.
-/// Split a `# fimod:` directive line on commas, respecting quoted strings.
+/// Split a `# fimod:` directive line on commas, respecting quoted strings and
+/// bracketed values such as JSON defaults.
 /// Supports `"..."` and `'...'` with backslash escapes (`\"`, `\'`, `\\`).
 fn split_directives(input: &str) -> Vec<&str> {
     let mut items = Vec::new();
@@ -592,6 +746,7 @@ fn split_directives(input: &str) -> Vec<&str> {
     let bytes = input.as_bytes();
     let mut i = 0;
     let mut in_quote: Option<u8> = None;
+    let mut depth = 0usize;
 
     while i < bytes.len() {
         match (bytes[i], in_quote) {
@@ -601,7 +756,9 @@ fn split_directives(input: &str) -> Vec<&str> {
             }
             (b'"' | b'\'', None) => in_quote = Some(bytes[i]),
             (q, Some(open)) if q == open => in_quote = None,
-            (b',', None) => {
+            (b'{' | b'[' | b'(', None) => depth += 1,
+            (b'}' | b']' | b')', None) => depth = depth.saturating_sub(1),
+            (b',', None) if depth == 0 => {
                 items.push(&input[start..i]);
                 start = i + 1;
             }
@@ -611,6 +768,41 @@ fn split_directives(input: &str) -> Vec<&str> {
     }
     items.push(&input[start..]);
     items
+}
+
+fn split_arg_spec_desc(input: &str) -> (&str, Option<&str>) {
+    let mut in_quote: Option<char> = None;
+    let mut escaped = false;
+    let mut depth = 0usize;
+
+    for (idx, c) in input.char_indices() {
+        if let Some(open) = in_quote {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == open {
+                in_quote = None;
+            }
+            continue;
+        }
+
+        match c {
+            '"' | '\'' => in_quote = Some(c),
+            '{' | '[' | '(' => depth += 1,
+            '}' | ']' | ')' => depth = depth.saturating_sub(1),
+            c if c.is_whitespace() && depth == 0 => {
+                let desc = input[idx..].trim();
+                return (
+                    input[..idx].trim(),
+                    if desc.is_empty() { None } else { Some(desc) },
+                );
+            }
+            _ => {}
+        }
+    }
+
+    (input.trim(), None)
 }
 
 /// Strip surrounding quotes and unescape `\"`, `\'`, `\\` in a description.
@@ -650,6 +842,42 @@ fn unquote_desc(s: &str) -> Option<String> {
     } else {
         Some(out)
     }
+}
+
+fn parse_arg_directive(value: &str) -> Option<(String, Option<String>, Option<MoldArgSpec>)> {
+    let (spec_raw, desc_raw) = split_arg_spec_desc(value);
+    if spec_raw.is_empty() {
+        return None;
+    }
+    let desc = desc_raw.and_then(unquote_desc);
+
+    let Some((name_raw, type_raw)) = spec_raw.split_once(':') else {
+        return Some((spec_raw.to_string(), desc, None));
+    };
+    let name = name_raw.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    let (type_part, default) = match type_raw.split_once('=') {
+        Some((ty, default)) => (ty.trim(), Some(default.trim().to_string())),
+        None => (type_raw.trim(), None),
+    };
+    let (type_name, optional) = match type_part.strip_suffix('?') {
+        Some(ty) => (ty.trim(), true),
+        None => (type_part, false),
+    };
+    if type_name.is_empty() {
+        return Some((name.to_string(), desc, None));
+    }
+
+    let spec = MoldArgSpec {
+        name: name.to_string(),
+        arg_type: MoldArgType::parse(type_name),
+        optional,
+        default,
+    };
+    Some((name.to_string(), desc, Some(spec)))
 }
 
 /// Read the mold script at `path` and parse its `MoldDefaults`.
@@ -767,7 +995,22 @@ pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
                     }
                     "csv-header" => defaults.csv_header = Some(value.to_string()),
 
-                    "arg" | "env" => {
+                    "arg" => {
+                        let Some((name, desc, spec)) = parse_arg_directive(value) else {
+                            continue;
+                        };
+                        defaults.args.push((name, desc));
+                        if let Some(spec) = spec {
+                            if let Some(existing) =
+                                defaults.arg_specs.iter_mut().find(|s| s.name == spec.name)
+                            {
+                                *existing = spec;
+                            } else {
+                                defaults.arg_specs.push(spec);
+                            }
+                        }
+                    }
+                    "env" => {
                         let (name, desc) = match value.split_once(|c: char| c.is_whitespace()) {
                             Some((n, d)) => {
                                 let d = d.trim();
@@ -779,11 +1022,7 @@ pub fn parse_mold_defaults(script: &str) -> MoldDefaults {
                             None => (value.to_string(), None),
                         };
                         if !name.is_empty() {
-                            if key == "arg" {
-                                defaults.args.push((name, desc));
-                            } else {
-                                defaults.envs.push((name, desc));
-                            }
+                            defaults.envs.push((name, desc));
                         }
                     }
                     _ => {} // unknown key, ignore
@@ -1072,11 +1311,133 @@ mod tests {
     }
 
     #[test]
+    fn test_arg_typed_required() {
+        let script =
+            "# fimod: arg=threshold:int Minimum score\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args[0].0, "threshold");
+        assert_eq!(d.args[0].1.as_deref(), Some("Minimum score"));
+        assert_eq!(d.arg_specs.len(), 1);
+        assert_eq!(d.arg_specs[0].name, "threshold");
+        assert_eq!(d.arg_specs[0].arg_type, MoldArgType::Int);
+        assert!(!d.arg_specs[0].optional);
+        assert_eq!(d.arg_specs[0].default, None);
+    }
+
+    #[test]
+    fn test_arg_typed_optional_with_default() {
+        let script = "# fimod: arg=threshold:int?=10 \"Minimum score\"\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.args[0].0, "threshold");
+        assert_eq!(d.args[0].1.as_deref(), Some("Minimum score"));
+        assert_eq!(d.arg_specs[0].arg_type, MoldArgType::Int);
+        assert!(d.arg_specs[0].optional);
+        assert_eq!(d.arg_specs[0].default.as_deref(), Some("10"));
+        assert_eq!(d.arg_specs[0].declaration(), "threshold:int?=10");
+    }
+
+    #[test]
+    fn test_arg_json_default_with_comma_does_not_split_directive() {
+        let script = "# fimod: arg=filter:json?={\"a\":1,\"b\":2}, output-format=json\ndef transform(data, args, **_):\n    return data\n";
+        let d = parse_mold_defaults(script);
+        assert_eq!(d.output_format.as_deref(), Some("json"));
+        assert_eq!(d.arg_specs[0].name, "filter");
+        assert_eq!(d.arg_specs[0].arg_type, MoldArgType::Json);
+        assert!(d.arg_specs[0].optional);
+        assert_eq!(d.arg_specs[0].default.as_deref(), Some("{\"a\":1,\"b\":2}"));
+    }
+
+    #[test]
     fn test_env_quoted_desc() {
         let script = "# fimod: env=TOKEN \"API token, required\"\ndef transform(data, env, **_):\n    return data\n";
         let d = parse_mold_defaults(script);
         assert_eq!(d.envs[0].0, "TOKEN");
         assert_eq!(d.envs[0].1.as_deref(), Some("API token, required"));
+    }
+
+    #[cfg(feature = "reqwest")]
+    #[test]
+    fn test_hashed_cache_keeps_old_hash_when_script_write_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join("cache");
+        fs::create_dir(&cache_dir).unwrap();
+
+        let cache_script_path = cache_dir.join("mold.py");
+        let cache_hash_path = cache_dir.join(".cache-hash");
+        fs::create_dir(&cache_script_path).unwrap();
+        fs::write(&cache_hash_path, "old-hash").unwrap();
+
+        let err = write_hashed_mold_cache(
+            &cache_script_path,
+            &cache_hash_path,
+            "def transform(data, **_): return data",
+            "new-hash",
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("Failed to replace cache file"));
+        assert_eq!(fs::read_to_string(cache_hash_path).unwrap(), "old-hash");
+        assert!(cache_script_path.is_dir());
+    }
+
+    #[cfg(feature = "reqwest")]
+    #[test]
+    fn test_companion_cache_path_rejects_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join("cache");
+
+        let safe = companion_cache_path(&cache_dir, "templates/hello.j2").unwrap();
+        assert_eq!(safe, cache_dir.join("templates").join("hello.j2"));
+
+        let safe_windows_sep = companion_cache_path(&cache_dir, r"templates\hello.j2").unwrap();
+        assert_eq!(
+            safe_windows_sep,
+            cache_dir.join("templates").join("hello.j2")
+        );
+
+        for path in [
+            "../foo",
+            "templates/../../foo",
+            "/tmp/foo",
+            r"\tmp\foo",
+            r"C:\tmp\foo",
+            "C:/tmp/foo",
+        ] {
+            let err = companion_cache_path(&cache_dir, path).unwrap_err();
+            assert!(err.to_string().contains("unsafe companion file path"));
+        }
+    }
+
+    #[cfg(feature = "reqwest")]
+    #[test]
+    fn test_fetch_mold_content_strips_auth_on_cross_origin_redirect() {
+        let server_a = httpmock::MockServer::start();
+        let server_b = httpmock::MockServer::start();
+
+        let with_auth = server_b.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/mold.py")
+                .header_exists("authorization");
+            then.status(200).body("with auth");
+        });
+        let without_auth = server_b.mock(|when, then| {
+            when.method(httpmock::Method::GET).path("/mold.py");
+            then.status(200)
+                .body("def transform(data, **_): return data");
+        });
+
+        let target_url = format!("{}/mold.py", server_b.base_url());
+        let _redirect = server_a.mock(|when, then| {
+            when.method(httpmock::Method::GET).path("/redirect.py");
+            then.status(302).header("location", &target_url);
+        });
+
+        let redirect_url = format!("{}/redirect.py", server_a.base_url());
+        let content = fetch_mold_content(&redirect_url, Some("secret")).unwrap();
+
+        assert_eq!(content, "def transform(data, **_): return data");
+        with_auth.assert_calls(0);
+        without_auth.assert_calls(1);
     }
 
     // ─── resolve_directory_mold tests ─────────────────────────

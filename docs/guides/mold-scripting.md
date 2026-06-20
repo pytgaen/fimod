@@ -18,14 +18,40 @@ def transform(data, **_):
     return [item for item in data if item["active"]]
 
 # With args
+# fimod: arg=min_age:int
 def transform(data, args, **_):
-    return [item for item in data if item["age"] > int(args["min_age"])]
+    return [item for item in data if item["age"] > args["min_age"]]
 
 # Full signature — all current parameters
 def transform(data, args, env, headers, pipeline, **_):
     # process data
     return data
 ```
+
+## Mold Args
+
+`--arg name=value` populates the `args` dict. Without a type declaration, values
+are strings for compatibility:
+
+```python
+def transform(data, args, **_):
+    return {"label": args["label"]}
+```
+
+Reusable molds can declare typed args in their header:
+
+```python
+# fimod: arg=min_age:int
+# fimod: arg=limit:int?=100
+# fimod: arg=filter:json?
+def transform(data, args, **_):
+    rows = [row for row in data if row["age"] >= args["min_age"]]
+    return rows[:args["limit"]]
+```
+
+`arg=name:type` is required. `arg=name:type?` may be omitted and is absent from
+`args` when missing. `arg=name:type?=default` injects the default; use
+`?=None` when the mold should receive `None` explicitly.
 
 ## ⚡ Inline expressions (`-e`)
 
@@ -284,7 +310,7 @@ def transform(data, **_):
     return data
 ```
 
-Bootstrap the canonical sandbox file with `fimod setup sandbox defaults --yes`, then edit it to grant the clock / env keys your molds need. For ad-hoc runs, pass `--sandbox-file <path>` to point at a specific policy, or `--sandbox-file=""` to force zero-authorization.
+Bootstrap the canonical sandbox file with `fimod setup sandbox defaults --yes`, then use `fimod setup sandbox set --allow-clock --allow-env LANG` to grant the clock / env keys your molds need. For ad-hoc runs, pass `--sandbox-file <path>` to point at a specific policy, or `--sandbox-file=""` to force zero-authorization.
 
 ### 🔄 Environment substitution
 
@@ -473,11 +499,14 @@ See [Mold Defaults](../reference/mold-defaults.md) for all supported directives.
 
 ## 📎 The `args` dict
 
-`--arg name=value` populates the `args` parameter of `transform(data, args, **_)`:
+`--arg name=value` populates the `args` parameter of `transform(data, args, **_)`.
+Untyped args arrive as strings. Typed arg directives validate and cast before
+the mold runs:
 
 ```python
+# fimod: arg=threshold:int
 def transform(data, args, **_):
-    limit  = int(args["threshold"])
+    limit  = args["threshold"]
     prefix = args.get("prefix", "")
     return [u for u in data if u["name"].startswith(prefix) and u["age"] > limit]
 ```

@@ -22,11 +22,17 @@ The single source of truth is `run_pipeline_core()` in `pipeline.rs`. `process_s
 8. **Serialize** — `Value` → String (or raw binary pass-through)
 9. **Write** — file, directory, stdout, or `set_output_file()` target
 
+Exception: the exact single-step identity expression `-e 'data'` is a native
+format-conversion path. It keeps the explicit identity syntax, but runs
+**Read → Parse → Serialize → Write** in Rust without converting to
+`MontyObject` and without starting Monty. Any other expression, mold, or
+multi-step chain uses the normal mold pipeline.
+
 ### Security: parsing in Rust, logic in Python
 
 All parsing/serialization (serde) remains entirely in Rust. Monty only manipulates Python dicts. This is a deliberate security boundary: user scripts never have access to the filesystem or the network.
 
-Concretely, `engine.rs` enforces this at the VM boundary: every `RunProgress::OsCall` yielded by Monty is routed through `dispatch_os_call()` and checked against the resolved `SandboxPolicy`. Clock access (`datetime.now`, `date.today`) is opt-in via `allow_clock`; `os.getenv` only returns values allowed by `allow_env`; `os.environ` returns an empty dict when denied; filesystem calls still return `None` until mount-based access exists. Resource limits are applied by default (`2m` / `1GB`) unless the policy explicitly changes them.
+Concretely, `engine.rs` enforces this at the VM boundary: every `RunProgress::OsCall` yielded by Monty is routed through `dispatch_os_call()` and checked against the resolved `SandboxPolicy`. Clock access (`datetime.now`, `date.today`) is opt-in via `allow_clock`; `os.getenv` only returns values allowed by `allow_env`; `os.environ` returns an empty dict when denied; filesystem calls still return `None` until mount-based access exists. Resource limits are applied by default (`10m` / `2GB`) unless the policy explicitly changes them.
 
 ### `transform(data, **_)` with kwargs
 
@@ -40,6 +46,10 @@ Molds define `transform(data, **_)`. fimod passes `args`, `env`, `headers`, and 
 ### Mold chaining
 
 Multiple `-m` and `-e` arguments execute sequentially; the output of each step becomes the input of the next (`execute_chain` in `pipeline.rs`). Between steps, the hot path threads `MontyObject` directly. If `set_input_format()` was called, the result is converted, serialized, and re-parsed with the new format. The `"raw"` output format is restricted to the final step only.
+
+The `-e 'data'` identity optimization only applies when it is the whole chain.
+Inside a multi-step chain it remains a normal inline expression so step counts
+and pipeline metadata stay stable.
 
 ### Batch mode (multiple inputs)
 
@@ -123,7 +133,10 @@ Supported formats: JSON, JSON-compact, NDJSON, YAML, TOML, CSV, TXT, Lines, Raw,
 
 ### CSV-specific options
 
-Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, defaults to input). `--csv-no-input-header`, `--csv-no-output-header`, `--csv-header col1,col2` (implies no-input-header).
+Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output,
+defaults to input). `--csv-no-input-header`, `--csv-no-output-header`,
+`--csv-header col1,col2` (input columns and object-output projection),
+`--csv-scan N` (object-output column scan, default `1`, `0` = all rows).
 
 `serde_json/preserve_order` in `Cargo.toml` so that CSV column order is preserved through the pipeline.
 
@@ -155,6 +168,7 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 - Auto-token detection for GitHub (`GITHUB_TOKEN`) and GitLab (`GITLAB_TOKEN`).
 - Remote registries publish a `catalog.toml` for discovery.
 - `fimod setup registry defaults` handles first-run onboarding; `fimod registry setup` is only a deprecated compatibility alias.
+- `fimod setup sandbox defaults/show/get/set` manages sandbox policy files. `defaults` writes named presets, `show` renders normalized TOML, `get` prints one value, and `set` updates selected fields in the canonical file or `--sandbox-file <PATH>`.
 - `fimod setup all defaults --if-needed` is the post-install onboarding contract used by install scripts. The binary, not shell/PowerShell glue, owns `FIMOD_SETUP_ALL`, `FIMOD_SETUP_REGISTRY`, `FIMOD_SETUP_SANDBOX`, interactive prompts, and idempotent upgrade skips.
 - Subcommands: `list`, `add`, `show`, `remove`, `set-priority`, `build-catalog`, `cache`.
 
@@ -164,7 +178,11 @@ Separate `--csv-delimiter` (input) and `--csv-output-delimiter` (output, default
 
 ### Monty REPL
 
-`fimod monty repl` provides an interactive Python REPL using Monty's `MontyRepl::new()` with continuation mode detection. All external functions are available.
+`fimod monty repl` provides an interactive Python REPL using Monty's
+`MontyRepl::new()` with continuation mode detection. It resolves the same
+sandbox policy as `fimod s`, including `--sandbox-file <path>` and
+`--sandbox-file=""`. Mold-only external helper families such as `re_*` and
+`dp_*` are not imported into the REPL.
 
 ### Debug on stderr
 
@@ -208,9 +226,9 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.18 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.17` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.18` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.

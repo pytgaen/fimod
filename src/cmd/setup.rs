@@ -1,14 +1,16 @@
-//! Top-level `fimod setup <category> defaults` subcommands.
+//! Top-level `fimod setup <category>` subcommands.
 //!
 //! Installs recommended defaults for each category:
 //! - `registry`  → community registries (same as legacy `fimod registry setup`).
 //! - `sandbox`   → recommended `~/.config/fimod/sandbox.toml`.
 //! - `all`       → runs registry then sandbox, failing at the first error.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use serde::Deserialize;
 
+use crate::cli::{SetupSandboxKey, SetupSandboxPreset};
 use crate::registry::{
     self,
     config::{load_config, save_config},
@@ -19,15 +21,98 @@ const EXAMPLES_URL: &str = "https://github.com/pytgaen/fimod/tree/main/molds";
 const POWERED_NAME: &str = "fimod-powered";
 const POWERED_URL: &str = "https://github.com/pytgaen/fimod-powered/tree/main/molds";
 
-/// Canonical sandbox config, kept minimal and conservative by design.
-const SANDBOX_RECOMMENDED: &str = r#"# fimod sandbox policy — recommended defaults.
-# See `fimod shape --help` and docs for field reference.
-[sandbox]
-allow_clock  = true
-max_duration = "2m"   # same as hard-coded default
-max_memory   = "1GB"  # same as hard-coded default
-allow_env    = []     # opt in per-key as needed
-"#;
+const SANDBOX_DEFAULT_MAX_DURATION: &str = "10m";
+const SANDBOX_DEFAULT_MAX_MEMORY: &str = "2GB";
+
+#[derive(Debug, Clone)]
+struct SandboxConfig {
+    allow_clock: bool,
+    max_duration: String,
+    max_memory: String,
+    allow_env: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SandboxFile {
+    sandbox: Option<SandboxTable>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct SandboxTable {
+    allow_clock: Option<bool>,
+    max_duration: Option<String>,
+    max_memory: Option<String>,
+    allow_env: Option<Vec<String>>,
+}
+
+impl SandboxConfig {
+    fn runtime_defaults() -> Self {
+        Self {
+            allow_clock: false,
+            max_duration: SANDBOX_DEFAULT_MAX_DURATION.to_string(),
+            max_memory: SANDBOX_DEFAULT_MAX_MEMORY.to_string(),
+            allow_env: Vec::new(),
+        }
+    }
+
+    fn preset(preset: SetupSandboxPreset) -> Self {
+        match preset {
+            SetupSandboxPreset::Recommended => Self {
+                allow_clock: true,
+                max_duration: SANDBOX_DEFAULT_MAX_DURATION.to_string(),
+                max_memory: SANDBOX_DEFAULT_MAX_MEMORY.to_string(),
+                allow_env: Vec::new(),
+            },
+            SetupSandboxPreset::Strict => Self {
+                allow_clock: false,
+                max_duration: "30s".to_string(),
+                max_memory: "512MB".to_string(),
+                allow_env: Vec::new(),
+            },
+            SetupSandboxPreset::Permissive => Self {
+                allow_clock: true,
+                max_duration: "30m".to_string(),
+                max_memory: "4GB".to_string(),
+                allow_env: vec![
+                    "LANG".to_string(),
+                    "LC_*".to_string(),
+                    "TZ".to_string(),
+                    "USER".to_string(),
+                    "HOME".to_string(),
+                ],
+            },
+        }
+    }
+
+    fn from_table(table: SandboxTable) -> Self {
+        let defaults = Self::runtime_defaults();
+        Self {
+            allow_clock: table.allow_clock.unwrap_or(defaults.allow_clock),
+            max_duration: table.max_duration.unwrap_or(defaults.max_duration),
+            max_memory: table.max_memory.unwrap_or(defaults.max_memory),
+            allow_env: table.allow_env.unwrap_or(defaults.allow_env),
+        }
+    }
+
+    fn validate(&self) -> Result<()> {
+        fimod::sandbox::parse_duration(&self.max_duration)
+            .with_context(|| format!("max_duration: {:?}", self.max_duration))?;
+        fimod::sandbox::parse_size(&self.max_memory)
+            .with_context(|| format!("max_memory: {:?}", self.max_memory))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SandboxSetOptions {
+    pub sandbox_file: Option<String>,
+    pub allow_clock: bool,
+    pub deny_clock: bool,
+    pub max_duration: Option<String>,
+    pub max_memory: Option<String>,
+    pub allow_env: Vec<String>,
+    pub clear_env: bool,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SetupOptions {
@@ -227,12 +312,19 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
     Ok(())
 }
 
-/// Write the recommended sandbox policy to `~/.config/fimod/sandbox.toml`.
+/// Write a sandbox preset to `~/.config/fimod/sandbox.toml` or an explicit file.
 ///
 /// - Refuses to overwrite an existing file unless `force` is set.
 /// - `yes` skips the confirmation prompt (required in non-TTY contexts).
-pub fn sandbox_defaults(options: SetupOptions) -> Result<()> {
-    let path = sandbox_config_path()?;
+pub fn sandbox_defaults(
+    options: SetupOptions,
+    preset: SetupSandboxPreset,
+    sandbox_file: Option<String>,
+) -> Result<()> {
+    let path = sandbox_target_path(sandbox_file.as_deref())?;
+    let config = SandboxConfig::preset(preset);
+    config.validate()?;
+    let rendered = render_sandbox_config(&config);
 
     if path.exists() && !options.force {
         if options.if_needed {
@@ -248,12 +340,12 @@ pub fn sandbox_defaults(options: SetupOptions) -> Result<()> {
     let pref = setup_pref(SetupBlock::Sandbox, options);
     if matches!(pref, SetupPref::Ask) {
         println!(
-            "This will {} {} with the recommended preset:",
+            "This will {} {} with the {preset:?} preset:",
             if path.exists() { "overwrite" } else { "create" },
             path.display()
         );
         println!();
-        for line in SANDBOX_RECOMMENDED.lines().filter(|l| !l.trim().is_empty()) {
+        for line in rendered.lines().filter(|l| !l.trim().is_empty()) {
             println!("  {line}");
         }
         println!();
@@ -265,25 +357,181 @@ pub fn sandbox_defaults(options: SetupOptions) -> Result<()> {
         return Ok(());
     }
 
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
-    }
-    std::fs::write(&path, SANDBOX_RECOMMENDED)
-        .with_context(|| format!("Failed to write sandbox config: {}", path.display()))?;
+    write_sandbox_config_with_content(&path, &rendered)?;
 
     println!("✓ Wrote {}", path.display());
     Ok(())
 }
 
+/// Print the normalized sandbox policy for a target file.
+pub fn sandbox_show(sandbox_file: Option<String>) -> Result<()> {
+    let path = sandbox_target_path(sandbox_file.as_deref())?;
+    let config = read_sandbox_config_or_recommended(&path)?;
+    print!("{}", render_sandbox_config(&config));
+    Ok(())
+}
+
+/// Print one sandbox policy value.
+pub fn sandbox_get(key: SetupSandboxKey, sandbox_file: Option<String>) -> Result<()> {
+    let path = sandbox_target_path(sandbox_file.as_deref())?;
+    let config = read_sandbox_config_or_recommended(&path)?;
+    match key {
+        SetupSandboxKey::AllowClock => println!("{}", config.allow_clock),
+        SetupSandboxKey::MaxDuration => println!("{}", config.max_duration),
+        SetupSandboxKey::MaxMemory => println!("{}", config.max_memory),
+        SetupSandboxKey::AllowEnv => {
+            for pattern in config.allow_env {
+                println!("{pattern}");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Update sandbox policy values in the canonical file or an explicit file.
+pub fn sandbox_set(options: SandboxSetOptions) -> Result<()> {
+    if options.allow_clock && options.deny_clock {
+        bail!("--allow-clock and --deny-clock cannot be used together");
+    }
+    if options.clear_env && !options.allow_env.is_empty() {
+        bail!("--clear-env and --allow-env cannot be used together");
+    }
+    if !options.allow_clock
+        && !options.deny_clock
+        && options.max_duration.is_none()
+        && options.max_memory.is_none()
+        && options.allow_env.is_empty()
+        && !options.clear_env
+    {
+        bail!("nothing to configure; pass at least one sandbox option");
+    }
+
+    let path = sandbox_target_path(options.sandbox_file.as_deref())?;
+    let mut config = read_sandbox_config_or_recommended(&path)?;
+
+    if options.allow_clock {
+        config.allow_clock = true;
+    }
+    if options.deny_clock {
+        config.allow_clock = false;
+    }
+    if let Some(max_duration) = options.max_duration {
+        fimod::sandbox::parse_duration(&max_duration)
+            .with_context(|| format!("--max-duration {max_duration:?}"))?;
+        config.max_duration = max_duration;
+    }
+    if let Some(max_memory) = options.max_memory {
+        fimod::sandbox::parse_size(&max_memory)
+            .with_context(|| format!("--max-memory {max_memory:?}"))?;
+        config.max_memory = max_memory;
+    }
+    if !options.allow_env.is_empty() {
+        config.allow_env = normalize_env_patterns(options.allow_env);
+    }
+    if options.clear_env {
+        config.allow_env.clear();
+    }
+
+    config.validate()?;
+    write_sandbox_config(&path, &config)?;
+    println!("✓ Wrote {}", path.display());
+    Ok(())
+}
+
 /// Run `registry_defaults` then `sandbox_defaults`, stopping at the first failure.
-pub fn all_defaults(options: SetupOptions) -> Result<()> {
+pub fn all_defaults(options: SetupOptions, preset: SetupSandboxPreset) -> Result<()> {
     registry_defaults(options)?;
     println!();
-    sandbox_defaults(options)?;
+    sandbox_defaults(options, preset, None)?;
     Ok(())
 }
 
 fn sandbox_config_path() -> Result<PathBuf> {
     Ok(fimod::paths::config_dir()?.join("sandbox.toml"))
+}
+
+fn sandbox_target_path(sandbox_file: Option<&str>) -> Result<PathBuf> {
+    match sandbox_file {
+        Some("") => bail!("--sandbox-file cannot be empty for setup commands"),
+        Some(path) => Ok(PathBuf::from(path)),
+        None => sandbox_config_path(),
+    }
+}
+
+fn read_sandbox_config_or_recommended(path: &Path) -> Result<SandboxConfig> {
+    if path.exists() {
+        read_sandbox_config(path)
+    } else {
+        Ok(SandboxConfig::preset(SetupSandboxPreset::Recommended))
+    }
+}
+
+fn read_sandbox_config(path: &Path) -> Result<SandboxConfig> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read sandbox config: {}", path.display()))?;
+    let parsed: SandboxFile = toml::from_str(&content)
+        .with_context(|| format!("Failed to parse sandbox TOML: {}", path.display()))?;
+    let config = SandboxConfig::from_table(parsed.sandbox.unwrap_or_default());
+    config.validate()?;
+    Ok(config)
+}
+
+fn write_sandbox_config(path: &Path, config: &SandboxConfig) -> Result<()> {
+    write_sandbox_config_with_content(path, &render_sandbox_config(config))
+}
+
+fn write_sandbox_config_with_content(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
+    }
+    std::fs::write(path, content)
+        .with_context(|| format!("Failed to write sandbox config: {}", path.display()))
+}
+
+fn render_sandbox_config(config: &SandboxConfig) -> String {
+    format!(
+        "[sandbox]\nallow_clock  = {}\nmax_duration = \"{}\"\nmax_memory   = \"{}\"\nallow_env    = {}\n",
+        config.allow_clock,
+        toml_escape(&config.max_duration),
+        toml_escape(&config.max_memory),
+        render_toml_string_array(&config.allow_env)
+    )
+}
+
+fn render_toml_string_array(values: &[String]) -> String {
+    if values.is_empty() {
+        return "[]".to_string();
+    }
+    let rendered = values
+        .iter()
+        .map(|value| format!("\"{}\"", toml_escape(value)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{rendered}]")
+}
+
+fn toml_escape(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|ch| match ch {
+            '\\' => "\\\\".chars().collect::<Vec<_>>(),
+            '"' => "\\\"".chars().collect::<Vec<_>>(),
+            '\n' => "\\n".chars().collect::<Vec<_>>(),
+            '\r' => "\\r".chars().collect::<Vec<_>>(),
+            '\t' => "\\t".chars().collect::<Vec<_>>(),
+            other => vec![other],
+        })
+        .collect()
+}
+
+fn normalize_env_patterns(patterns: Vec<String>) -> Vec<String> {
+    patterns
+        .into_iter()
+        .map(|pattern| pattern.trim().to_string())
+        .filter(|pattern| !pattern.is_empty())
+        .collect()
 }

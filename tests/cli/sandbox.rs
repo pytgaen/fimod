@@ -80,9 +80,9 @@ def transform(data, args, env, headers, **_):
         .stdout(predicate::str::contains(r#""path": null"#));
 }
 
-/// Verify that open() is not available (NameError).
+/// Verify that open() is available syntactically but denied by fimod's sandbox.
 #[test]
-fn test_sandbox_open_not_defined() {
+fn test_sandbox_open_is_denied() {
     let dir = assert_fs::TempDir::new().unwrap();
     let mold = setup_mold(
         &dir,
@@ -101,7 +101,8 @@ def transform(data, args, env, headers, **_):
         .write_stdin(r#"{"test": 1}"#)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("open"));
+        .stderr(predicate::str::contains("PermissionError"))
+        .stderr(predicate::str::contains("Permission denied"));
 }
 
 /// Verify that subprocess cannot be imported.

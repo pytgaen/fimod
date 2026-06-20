@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, BufRead, BufReader, BufWriter, Read};
 use std::path::Path;
 use std::time::Instant;
 
@@ -226,6 +226,7 @@ pub fn execute_chain(
 
         let opts = engine::MoldOptions {
             extra_args: ctx.extra_args,
+            arg_specs: &steps[i].defaults.arg_specs,
             env_value: ctx.env_value,
             headers_value,
             debug: ctx.debug,
@@ -686,6 +687,333 @@ pub struct SingleRunOptions<'a> {
     pub check: bool,
     pub http_opts: &'a HttpOptions,
     pub policy: &'a SandboxPolicy,
+}
+
+/// Pre-computed inputs for the native `-e data` identity path.
+pub struct IdentityRunOptions<'a> {
+    pub input_path: Option<&'a str>,
+    pub no_input: bool,
+    pub slurp: bool,
+    pub effective_input_format: Option<&'a str>,
+    pub csv_opts: &'a CsvOptions,
+    pub output_path: Option<&'a str>,
+    pub effective_output_format: Option<&'a str>,
+    pub check: bool,
+    pub http_opts: &'a HttpOptions,
+    pub debug: bool,
+}
+
+/// Read and parse input into `serde_json::Value` without entering Monty.
+fn read_input_to_value(opts: &IdentityRunOptions<'_>) -> Result<(DataFormat, Value)> {
+    let parse_start = Instant::now();
+    let parsed_input_fmt = opts
+        .effective_input_format
+        .map(format::parse_format_name)
+        .transpose()?;
+
+    let (in_fmt, value) = if opts.no_input {
+        if opts.debug {
+            eprintln!("[debug] no-input mode: data = None");
+        }
+        (DataFormat::Json, Value::Null)
+    } else {
+        let is_http = opts.input_path.is_some_and(http::is_url);
+
+        let (input_content, ct_format, http_shortcircuit) = if is_http {
+            let url = opts.input_path.unwrap();
+            let resp = http::fetch_url(
+                url,
+                &opts.http_opts.headers,
+                opts.http_opts.timeout,
+                opts.http_opts.no_follow,
+                opts.debug,
+            )?;
+
+            let ct_fmt = resp
+                .content_type
+                .as_deref()
+                .and_then(http::content_type_to_format);
+
+            if parsed_input_fmt == Some(DataFormat::Http) {
+                let is_binary = ct_fmt.is_none()
+                    && resp
+                        .content_type
+                        .as_deref()
+                        .is_some_and(|ct| !ct.starts_with("text/"));
+
+                let mut headers_map = serde_json::Map::new();
+                for (k, v) in &resp.headers {
+                    headers_map.insert(k.clone(), Value::String(v.clone()));
+                }
+                let body_val = if is_binary {
+                    Value::Null
+                } else {
+                    Value::String(resp.body.clone())
+                };
+                let http_data = serde_json::json!({
+                    "status": resp.status,
+                    "headers": Value::Object(headers_map),
+                    "body": body_val,
+                    "body_size": resp.body_bytes.len(),
+                    "content_type": resp.content_type.as_deref().unwrap_or(""),
+                    "url": url,
+                });
+                (String::new(), ct_fmt, Some((DataFormat::Http, http_data)))
+            } else {
+                (resp.body, ct_fmt, None)
+            }
+        } else {
+            let content = match opts.input_path {
+                Some(path) => {
+                    if opts.debug {
+                        eprintln!("[debug] input file: {path}");
+                    }
+                    fs::read_to_string(path)
+                        .with_context(|| format!("Failed to read input file: {path}"))?
+                }
+                None => {
+                    if opts.debug {
+                        eprintln!("[debug] input: stdin");
+                    }
+                    let mut buf = String::new();
+                    io::stdin()
+                        .read_to_string(&mut buf)
+                        .context("Failed to read from stdin")?;
+                    buf
+                }
+            };
+            (content, None, None)
+        };
+
+        if let Some((fmt, val)) = http_shortcircuit {
+            (fmt, val)
+        } else {
+            let in_fmt = if let Some(fmt) = parsed_input_fmt {
+                fmt
+            } else if let Some(ct_name) = ct_format {
+                format::parse_format_name(ct_name)?
+            } else if is_http {
+                let path_part = url_path_only(opts.input_path.unwrap());
+                DataFormat::from_extension(path_part).unwrap_or(DataFormat::Json)
+            } else {
+                format::resolve_format(None, opts.input_path, DataFormat::Json)?
+            };
+
+            if opts.debug {
+                eprintln!("[debug] input format: {in_fmt}");
+            }
+
+            let value = if opts.slurp && in_fmt == DataFormat::Json {
+                let mut values = Vec::new();
+                let deserializer = serde_json::Deserializer::from_str(&input_content);
+                for result in deserializer.into_iter::<serde_json::Value>() {
+                    values.push(result.context("Failed to parse JSON value in slurp mode")?);
+                }
+                serde_json::Value::Array(values)
+            } else if in_fmt == DataFormat::Csv {
+                let (value, _) = format::parse_csv(&input_content, opts.csv_opts)?;
+                value
+            } else {
+                let parsed = in_fmt.parse(&input_content)?;
+                if opts.slurp && in_fmt != DataFormat::Ndjson {
+                    serde_json::Value::Array(vec![parsed])
+                } else {
+                    parsed
+                }
+            };
+
+            if opts.debug {
+                eprintln!("[debug] input data:");
+                if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                    for line in pretty.lines() {
+                        eprintln!("  {line}");
+                    }
+                }
+            }
+
+            (in_fmt, value)
+        }
+    };
+
+    debug_phase(opts.debug, "parse", parse_start);
+    Ok((in_fmt, value))
+}
+
+fn resolve_identity_formats(opts: &IdentityRunOptions<'_>) -> Result<(DataFormat, DataFormat)> {
+    let in_fmt = format::resolve_format(
+        opts.effective_input_format,
+        opts.input_path,
+        DataFormat::Json,
+    )?;
+    let output_fallback = if opts.no_input || in_fmt == DataFormat::Http {
+        DataFormat::Json
+    } else {
+        in_fmt
+    };
+    let out_fmt = format::resolve_format(
+        opts.effective_output_format,
+        opts.output_path,
+        output_fallback,
+    )?;
+    Ok((in_fmt, out_fmt))
+}
+
+fn stream_identity_json_array_input_format(
+    opts: &IdentityRunOptions<'_>,
+) -> Result<Option<(DataFormat, DataFormat)>> {
+    if opts.check
+        || opts.debug
+        || opts.slurp
+        || opts.no_input
+        || opts.input_path.is_some_and(http::is_url)
+        || matches!((opts.input_path, opts.output_path), (Some(input), Some(output)) if paths_refer_to_same_file(input, output))
+    {
+        return Ok(None);
+    }
+
+    let (in_fmt, out_fmt) = resolve_identity_formats(opts)?;
+    if matches!(in_fmt, DataFormat::Json | DataFormat::JsonCompact)
+        && matches!(out_fmt, DataFormat::Ndjson | DataFormat::Csv)
+    {
+        Ok(Some((in_fmt, out_fmt)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn paths_refer_to_same_file(input: &str, output: &str) -> bool {
+    if input == output {
+        return true;
+    }
+
+    match (fs::canonicalize(input), fs::canonicalize(output)) {
+        (Ok(input), Ok(output)) => input == output,
+        _ => false,
+    }
+}
+
+fn reader_starts_with_json_array<R: BufRead>(reader: &mut R) -> Result<bool> {
+    loop {
+        let buffer = reader.fill_buf().context("Failed to inspect JSON input")?;
+        if buffer.is_empty() {
+            return Ok(false);
+        }
+
+        if let Some(pos) = buffer.iter().position(|byte| !byte.is_ascii_whitespace()) {
+            let first = buffer[pos];
+            if pos > 0 {
+                reader.consume(pos);
+            }
+            return Ok(first == b'[');
+        }
+
+        let len = buffer.len();
+        reader.consume(len);
+    }
+}
+
+fn write_json_array_reader_as_format<R: Read>(
+    reader: R,
+    output_path: Option<&str>,
+    out_fmt: DataFormat,
+    csv_opts: &CsvOptions,
+) -> Result<()> {
+    match output_path {
+        Some(path) => {
+            let file = fs::File::create(path)
+                .with_context(|| format!("Failed to write output file: {path}"))?;
+            let writer = BufWriter::new(file);
+            match out_fmt {
+                DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
+                DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
+                _ => unreachable!("guard restricts streamable JSON array output formats"),
+            }
+        }
+        None => {
+            let stdout = io::stdout();
+            let writer = BufWriter::new(stdout.lock());
+            match out_fmt {
+                DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
+                DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
+                _ => unreachable!("guard restricts streamable JSON array output formats"),
+            }
+        }
+    }
+}
+
+fn try_stream_identity_json_array(opts: &IdentityRunOptions<'_>) -> Result<bool> {
+    let Some((in_fmt, out_fmt)) = stream_identity_json_array_input_format(opts)? else {
+        return Ok(false);
+    };
+
+    match opts.input_path {
+        Some(path) => {
+            let file = fs::File::open(path)
+                .with_context(|| format!("Failed to read input file: {path}"))?;
+            let mut reader = BufReader::new(file);
+            if !reader_starts_with_json_array(&mut reader)? {
+                return Ok(false);
+            }
+            write_json_array_reader_as_format(reader, opts.output_path, out_fmt, opts.csv_opts)?;
+            Ok(true)
+        }
+        None => {
+            let stdin = io::stdin();
+            let mut reader = BufReader::new(stdin.lock());
+            if reader_starts_with_json_array(&mut reader)? {
+                write_json_array_reader_as_format(
+                    reader,
+                    opts.output_path,
+                    out_fmt,
+                    opts.csv_opts,
+                )?;
+            } else {
+                let value: Value =
+                    serde_json::from_reader(reader).context("Failed to parse JSON")?;
+                output_result(
+                    &value,
+                    opts.output_path,
+                    opts.effective_output_format,
+                    in_fmt,
+                    opts.csv_opts,
+                    opts.no_input,
+                    opts.debug,
+                )?;
+            }
+            Ok(true)
+        }
+    }
+}
+
+/// Process `-e data` as a native identity conversion: read → parse → serialize → write.
+///
+/// This keeps the explicit identity syntax while avoiding `Value ↔ MontyObject`
+/// conversion and Monty execution for pure format conversions.
+pub fn process_identity_input(opts: IdentityRunOptions<'_>) -> Result<CliResult> {
+    let total_start = Instant::now();
+    if try_stream_identity_json_array(&opts)? {
+        debug_phase(opts.debug, "total", total_start);
+        return Ok(CliResult::Done);
+    }
+
+    let (input_format, value) = read_input_to_value(&opts)?;
+
+    if opts.check {
+        return Ok(CliResult::Exit(if is_truthy(&value) { 0 } else { 1 }));
+    }
+
+    output_result(
+        &value,
+        opts.output_path,
+        opts.effective_output_format,
+        input_format,
+        opts.csv_opts,
+        opts.no_input,
+        opts.debug,
+    )?;
+
+    debug_phase(opts.debug, "total", total_start);
+    Ok(CliResult::Done)
 }
 
 /// Process a single input through the full pipeline: read → parse → execute chain → serialize → write.

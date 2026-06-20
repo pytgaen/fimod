@@ -1,5 +1,5 @@
 [tools]
-rust = "stable"
+rust = "1.95"
 zig = "latest"
 upx = "latest"
 uv = "latest"
@@ -8,4 +8,5 @@ yq = "latest"
 hyperfine = "latest"
 vhs = "latest"
 "cargo:cargo-deny" = "latest"
+"cargo:cargo-audit" = "latest"
 "cargo:cargo-outdated" = "latest"

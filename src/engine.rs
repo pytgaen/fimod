@@ -3,11 +3,11 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use monty::{
-    DictPairs, ExcType, LimitedTracker, MontyDate, MontyDateTime, MontyException, MontyObject,
-    MontyRun, NameLookupResult, OsFunction, PrintWriter, PrintWriterCallback, ResourceLimits,
-    RunProgress,
+    DictPairs, ExcType, ExtFunctionResult, LimitedTracker, MontyDate, MontyDateTime,
+    MontyException, MontyObject, MontyRun, NameLookupResult, OsFunctionCall, PrintWriter,
+    PrintWriterCallback, ResourceLimits, RunProgress,
 };
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use crate::convert::json_to_monty;
 
@@ -57,6 +57,7 @@ use crate::format_control;
 use crate::gatekeeper;
 use crate::hash;
 use crate::iter_helpers;
+use crate::mold::{MoldArgSpec, MoldArgType};
 use crate::msg;
 use crate::regex;
 use crate::sandbox::SandboxPolicy;
@@ -115,6 +116,7 @@ pub struct PipelineMetadata<'a> {
 /// Runtime options for mold execution.
 pub struct MoldOptions<'a> {
     pub extra_args: &'a [(String, String)],
+    pub arg_specs: &'a [MoldArgSpec],
     pub env_value: &'a Value,
     pub headers_value: &'a Value,
     pub debug: bool,
@@ -230,6 +232,193 @@ fn str_opt_to_monty(s: Option<&str>) -> MontyObject {
         Some(v) => MontyObject::String(v.to_string()),
         None => MontyObject::None,
     }
+}
+
+fn build_args_value(opts: &MoldOptions<'_>) -> Result<Value> {
+    let mut merged: serde_json::Map<String, Value> = opts
+        .extra_args
+        .iter()
+        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+        .collect();
+    if let Some(Value::Object(step_args)) = &opts.step_args {
+        for (k, v) in step_args {
+            merged.insert(k.clone(), v.clone());
+        }
+    }
+    apply_arg_specs(&mut merged, opts.arg_specs)?;
+    Ok(Value::Object(merged))
+}
+
+fn apply_arg_specs(args: &mut serde_json::Map<String, Value>, specs: &[MoldArgSpec]) -> Result<()> {
+    for spec in specs {
+        if let MoldArgType::Unknown(raw) = &spec.arg_type {
+            anyhow::bail!("arg error: {} unknown type {:?}", spec.name, raw);
+        }
+        if spec.default.is_some() && !spec.optional {
+            anyhow::bail!(
+                "arg error: {} default requires optional marker (?)",
+                spec.name
+            );
+        }
+
+        match args.remove(&spec.name) {
+            Some(value) => {
+                let coerced = coerce_arg_value(spec, value, "got")?;
+                args.insert(spec.name.clone(), coerced);
+            }
+            None if spec.optional => {
+                if let Some(default) = &spec.default {
+                    let coerced = coerce_arg_default(spec, default)?;
+                    args.insert(spec.name.clone(), coerced);
+                }
+            }
+            None => {
+                anyhow::bail!(
+                    "arg error: {} is required (expected {})",
+                    spec.name,
+                    spec.arg_type.label()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn coerce_arg_default(spec: &MoldArgSpec, raw: &str) -> Result<Value> {
+    if raw.trim() == "None" {
+        return Ok(Value::Null);
+    }
+
+    match spec.arg_type {
+        MoldArgType::Json => serde_json::from_str(raw.trim())
+            .or_else(|_| serde_json::from_str(&unquote_arg_default(raw)))
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "arg error: {} default expected json, got {:?}",
+                    spec.name,
+                    raw
+                )
+            }),
+        _ => coerce_arg_value(spec, Value::String(unquote_arg_default(raw)), "default"),
+    }
+}
+
+fn coerce_arg_value(spec: &MoldArgSpec, value: Value, got_label: &str) -> Result<Value> {
+    if value.is_null() {
+        if spec.optional || matches!(spec.arg_type, MoldArgType::Json) {
+            return Ok(Value::Null);
+        }
+        anyhow::bail!(
+            "arg error: {} expected {}, {} null",
+            spec.name,
+            spec.arg_type.label(),
+            got_label
+        );
+    }
+
+    match spec.arg_type {
+        MoldArgType::Str => match value {
+            Value::String(s) => Ok(Value::String(s)),
+            other => arg_type_error(spec, got_label, &other),
+        },
+        MoldArgType::Int => coerce_int_arg(spec, value, got_label),
+        MoldArgType::Float => coerce_float_arg(spec, value, got_label),
+        MoldArgType::Bool => coerce_bool_arg(spec, value, got_label),
+        MoldArgType::Json => coerce_json_arg(spec, value, got_label),
+        MoldArgType::Unknown(_) => unreachable!("unknown arg type checked before coercion"),
+    }
+}
+
+fn coerce_int_arg(spec: &MoldArgSpec, value: Value, got_label: &str) -> Result<Value> {
+    let parsed = match &value {
+        Value::Number(n) => n
+            .as_i64()
+            .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok())),
+        Value::String(s) => s.parse::<i64>().ok(),
+        _ => None,
+    };
+    match parsed {
+        Some(i) => Ok(Value::Number(i.into())),
+        None => arg_type_error(spec, got_label, &value),
+    }
+}
+
+fn coerce_float_arg(spec: &MoldArgSpec, value: Value, got_label: &str) -> Result<Value> {
+    let parsed = match &value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.parse::<f64>().ok(),
+        _ => None,
+    };
+    match parsed.and_then(Number::from_f64) {
+        Some(n) => Ok(Value::Number(n)),
+        None => arg_type_error(spec, got_label, &value),
+    }
+}
+
+fn coerce_bool_arg(spec: &MoldArgSpec, value: Value, got_label: &str) -> Result<Value> {
+    match &value {
+        Value::Bool(_) => Ok(value),
+        Value::String(s) if s.eq_ignore_ascii_case("true") => Ok(Value::Bool(true)),
+        Value::String(s) if s.eq_ignore_ascii_case("false") => Ok(Value::Bool(false)),
+        _ => arg_type_error(spec, got_label, &value),
+    }
+}
+
+fn coerce_json_arg(spec: &MoldArgSpec, value: Value, got_label: &str) -> Result<Value> {
+    match value {
+        Value::String(s) => serde_json::from_str(&s).map_err(|_| {
+            anyhow::anyhow!(
+                "arg error: {} expected json, {} {:?}",
+                spec.name,
+                got_label,
+                s
+            )
+        }),
+        other => Ok(other),
+    }
+}
+
+fn arg_type_error<T>(spec: &MoldArgSpec, got_label: &str, value: &Value) -> Result<T> {
+    anyhow::bail!(
+        "arg error: {} expected {}, {} {}",
+        spec.name,
+        spec.arg_type.label(),
+        got_label,
+        format_arg_value(value)
+    )
+}
+
+fn format_arg_value(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| format!("{value:?}"))
+}
+
+fn unquote_arg_default(raw: &str) -> String {
+    let s = raw.trim();
+    if s.len() < 2 {
+        return s.to_string();
+    }
+    let q = s.as_bytes()[0];
+    if (q != b'"' && q != b'\'') || s.as_bytes()[s.len() - 1] != q {
+        return s.to_string();
+    }
+
+    let mut out = String::with_capacity(s.len() - 2);
+    let mut chars = s[1..s.len() - 1].chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some(next) if next == q as char || next == '\\' => out.push(next),
+                Some(next) => {
+                    out.push(c);
+                    out.push(next);
+                }
+                None => out.push(c),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Build a Step Dataclass with no readable attrs — all reads must go through
@@ -623,19 +812,7 @@ fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyOb
 /// Takes `data` as an owned `MontyObject` to avoid the json_to_monty conversion
 /// when the caller has already built a MontyObject directly (e.g. csv_to_monty path).
 pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> MoldResult {
-    let merged_args = {
-        let mut merged: serde_json::Map<String, Value> = opts
-            .extra_args
-            .iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect();
-        if let Some(Value::Object(step_args)) = &opts.step_args {
-            for (k, v) in step_args {
-                merged.insert(k.clone(), v.clone());
-            }
-        }
-        Value::Object(merged)
-    };
+    let merged_args = build_args_value(opts)?;
     let args_dict = json_to_monty(&merged_args);
 
     let env_obj = json_to_monty(opts.env_value);
@@ -719,7 +896,7 @@ fn run_loop(
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
     let mut sp = StderrPrint;
-    let tracker = LimitedTracker::new(build_limits(ctx.policy));
+    let tracker = LimitedTracker::new(sandbox_resource_limits(ctx.policy));
     let mut progress = runner
         .start(
             inputs,
@@ -760,12 +937,14 @@ fn run_loop(
                     )
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
-            RunProgress::OsCall(call) => {
-                let result = dispatch_os_call(&call.function, &call.args, ctx.policy);
+            RunProgress::OsCall(mut call) => {
+                let function_call = call.take_function_call();
+                let function_name = function_call.to_string();
+                let result = dispatch_os_call(function_call, ctx.policy);
                 if ctx.debug {
                     eprintln!(
-                        "[debug] OsCall {:?} -> {}",
-                        call.function,
+                        "[debug] OsCall {} -> {}",
+                        function_name,
                         describe_os_result(&result)
                     );
                 }
@@ -819,7 +998,7 @@ fn run_loop(
 }
 
 /// Build `ResourceLimits` from a `SandboxPolicy`.
-fn build_limits(policy: &SandboxPolicy) -> ResourceLimits {
+pub fn sandbox_resource_limits(policy: &SandboxPolicy) -> ResourceLimits {
     let mut limits = ResourceLimits::new();
     if let Some(d) = policy.max_duration {
         limits = limits.max_duration(d);
@@ -830,6 +1009,13 @@ fn build_limits(policy: &SandboxPolicy) -> ResourceLimits {
     limits
 }
 
+pub fn sandbox_os_call_result(
+    function_call: OsFunctionCall,
+    policy: &SandboxPolicy,
+) -> ExtFunctionResult {
+    dispatch_os_call(function_call, policy).into()
+}
+
 /// Resolve an `OsCall` result according to the policy.
 ///
 /// Capability-deny defaults follow Python ergonomics:
@@ -837,33 +1023,51 @@ fn build_limits(policy: &SandboxPolicy) -> ResourceLimits {
 /// - `os.getenv(key)`: returns `None` silently when `key` is not in `allow_env` — mirrors the standard Python behavior for unset vars.
 /// - `os.environ`: returns an empty dict when denied (no raise).
 /// - `Path.*`: returns `None` (legacy behavior; proper filesystem gating lands with `[[mount]]`).
-fn dispatch_os_call(
-    function: &OsFunction,
-    args: &[MontyObject],
-    policy: &SandboxPolicy,
-) -> OsCallOutcome {
-    match function {
-        OsFunction::DateToday => {
+/// - `open()`: raises `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
+fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> OsCallOutcome {
+    match function_call {
+        OsFunctionCall::DateToday => {
             if policy.allow_clock {
                 OsCallOutcome::Value(MontyObject::Date(current_date()))
             } else {
-                OsCallOutcome::Error(permission_denied(clock_denied_message(function)))
+                OsCallOutcome::Error(permission_denied(clock_denied_message("date.today")))
             }
         }
-        OsFunction::DateTimeNow => {
+        OsFunctionCall::DateTimeNow(_) => {
             if policy.allow_clock {
                 OsCallOutcome::Value(MontyObject::DateTime(current_datetime()))
             } else {
-                OsCallOutcome::Error(permission_denied(clock_denied_message(function)))
+                OsCallOutcome::Error(permission_denied(clock_denied_message("datetime.now")))
             }
         }
-        OsFunction::Getenv => OsCallOutcome::Value(lookup_env(args, policy)),
-        OsFunction::GetEnviron => OsCallOutcome::Value(empty_environ()),
-        _ => OsCallOutcome::Value(MontyObject::None),
+        OsFunctionCall::Getenv(args) => {
+            OsCallOutcome::Value(lookup_env(&args.key, args.default, policy))
+        }
+        OsFunctionCall::GetEnviron => OsCallOutcome::Value(empty_environ()),
+        call @ OsFunctionCall::Open(_) => OsCallOutcome::Error(call.on_no_handler()),
+        OsFunctionCall::Exists(_)
+        | OsFunctionCall::IsFile(_)
+        | OsFunctionCall::IsDir(_)
+        | OsFunctionCall::IsSymlink(_)
+        | OsFunctionCall::ReadText(_)
+        | OsFunctionCall::ReadBytes(_)
+        | OsFunctionCall::Stat(_)
+        | OsFunctionCall::Iterdir(_)
+        | OsFunctionCall::Resolve(_)
+        | OsFunctionCall::Absolute(_)
+        | OsFunctionCall::WriteText(_)
+        | OsFunctionCall::AppendText(_)
+        | OsFunctionCall::WriteBytes(_)
+        | OsFunctionCall::AppendBytes(_)
+        | OsFunctionCall::Mkdir(_)
+        | OsFunctionCall::Unlink(_)
+        | OsFunctionCall::Rmdir(_)
+        | OsFunctionCall::Rename(_) => OsCallOutcome::Value(MontyObject::None),
+        OsFunctionCall::Used => unreachable!("OsFunctionCall::Used dispatched by fimod"),
     }
 }
 
-fn clock_denied_message(function: &OsFunction) -> String {
+fn clock_denied_message(function: &str) -> String {
     format!(
         "{function}() denied by sandbox policy — add `allow_clock = true` to your sandbox.toml (or run `fimod setup sandbox defaults`)"
     )
@@ -922,16 +1126,13 @@ fn permission_denied(msg: String) -> MontyException {
     MontyException::new(ExcType::PermissionError, Some(msg))
 }
 
-fn lookup_env(args: &[MontyObject], policy: &SandboxPolicy) -> MontyObject {
-    let Some(MontyObject::String(key)) = args.first() else {
-        return MontyObject::None;
-    };
+fn lookup_env(key: &str, default: MontyObject, policy: &SandboxPolicy) -> MontyObject {
     if !policy.env_allowed(key) {
         return MontyObject::None;
     }
     match std::env::var(key) {
         Ok(v) => MontyObject::String(v),
-        Err(_) => MontyObject::None,
+        Err(_) => default,
     }
 }
 
@@ -943,7 +1144,7 @@ fn empty_environ() -> MontyObject {
 
 /// Upgrades resource-limit exceptions (`TimeoutError`, `MemoryError`) into `SandboxLimitExceeded`
 /// so the CLI can exit with 137.
-fn translate_monty_error(err: MontyException, policy: &SandboxPolicy) -> anyhow::Error {
+pub fn translate_monty_error(err: MontyException, policy: &SandboxPolicy) -> anyhow::Error {
     match err.exc_type() {
         ExcType::TimeoutError => {
             limit_exceeded("max_duration", policy.max_duration.map(format_duration))
@@ -962,9 +1163,9 @@ fn limit_exceeded(kind: &str, limit: Option<String>) -> anyhow::Error {
 
 fn format_duration(d: std::time::Duration) -> String {
     let secs = d.as_secs();
-    if secs >= 3600 && secs % 3600 == 0 {
+    if secs >= 3600 && secs.is_multiple_of(3600) {
         format!("{}h", secs / 3600)
-    } else if secs >= 60 && secs % 60 == 0 {
+    } else if secs >= 60 && secs.is_multiple_of(60) {
         format!("{}m", secs / 60)
     } else if secs > 0 {
         format!("{secs}s")
@@ -977,11 +1178,11 @@ fn format_bytes(b: usize) -> String {
     const KB: usize = 1_000;
     const MB: usize = 1_000_000;
     const GB: usize = 1_000_000_000;
-    if b >= GB && b % GB == 0 {
+    if b >= GB && b.is_multiple_of(GB) {
         format!("{}GB", b / GB)
-    } else if b >= MB && b % MB == 0 {
+    } else if b >= MB && b.is_multiple_of(MB) {
         format!("{}MB", b / MB)
-    } else if b >= KB && b % KB == 0 {
+    } else if b >= KB && b.is_multiple_of(KB) {
         format!("{}KB", b / KB)
     } else {
         format!("{b}B")

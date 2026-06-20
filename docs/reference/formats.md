@@ -30,6 +30,12 @@ fimod s -i users.json -e 'data' --output-format ndjson
 cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 ```
 
+!!! tip "JSON array → NDJSON streams natively"
+    The exact identity conversion `-e 'data'` streams local/stdin JSON
+    top-level arrays directly to NDJSON when the output format resolves to
+    `ndjson` or `jsonl`. This bypasses Monty and avoids loading the full array
+    in memory. Non-array JSON roots keep the normal identity conversion path.
+
 !!! info "NDJSON vs Lines"
     `ndjson` parses each line as JSON. `lines` treats each line as a raw string.
 
@@ -55,7 +61,9 @@ cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 ## 📊 CSV (`.csv`, `.tsv`)
 
 - **Input**: Parsed as an **array of objects**. Each row becomes a dict where keys are column headers.
-- **Output**: Serialized from an array of objects. Keys of the first object become headers.
+- **Output**: Serialized from an array of objects. By default, keys of the
+  first object become headers. Use `--csv-header` for an explicit output schema
+  or `--csv-scan` to scan more rows for columns.
 
 !!! warning "CSV values are always strings"
     Cast in your transform: `int(row["age"])`, `float(row["price"])`
@@ -68,7 +76,8 @@ cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 | `--csv-output-delimiter <char>` | Separator for output (defaults to `--csv-delimiter`). |
 | `--csv-no-input-header` | No header in input — columns named `col0`, `col1`, ... |
 | `--csv-no-output-header` | Don't write header row in output. |
-| `--csv-header "a,b,c"` | Explicit column names (implies no header in file). |
+| `--csv-header "a,b,c"` | Explicit input column names; also an explicit output schema for object rows. |
+| `--csv-scan <N>` | Rows to scan for object-output columns (`1` default, `0` = all rows). |
 
 !!! info "Column order is preserved"
     No alphabetical sorting through transforms.
@@ -208,6 +217,10 @@ fimod s -i config.yaml -e 'data' -o config.toml          # extension → TOML
 fimod s -i data.csv -e 'data' --output-format json        # explicit → JSON
 fimod s -i users.json -e 'data' --output-format lines     # explicit → lines
 ```
+
+When `-e 'data'` is the only pipeline step, fimod treats it as a native identity
+conversion and does not start Monty. Any non-identity expression or multi-step
+chain uses the normal mold pipeline.
 
 ### JSON → shell-friendly text
 

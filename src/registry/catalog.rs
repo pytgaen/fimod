@@ -40,6 +40,9 @@ pub(super) struct CatalogEntry {
     /// Documented --arg parameters: name → description (empty string if undocumented).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) args: BTreeMap<String, String>,
+    /// Typed `--arg` metadata. Kept separate from `args` so old catalogs remain readable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) arg_specs: Vec<CatalogArgSpec>,
     /// Documented ENV variables: name → description (empty string if undocumented).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(super) envs: BTreeMap<String, String>,
@@ -51,6 +54,21 @@ pub(super) struct CatalogEntry {
     /// Downloaded alongside the main script into the mold cache directory.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) files: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub(super) struct CatalogArgSpec {
+    pub(super) name: String,
+    #[serde(rename = "type")]
+    pub(super) arg_type: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub(super) optional: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) default: Option<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 // ── local mold scanning ───────────────────────────────────────────────────────
@@ -475,6 +493,16 @@ pub fn build_catalog(registry_name: Option<&str>, direct_path: Option<&str>) -> 
             .iter()
             .map(|(n, d)| (n.clone(), d.clone().unwrap_or_default()))
             .collect();
+        let arg_specs = defaults
+            .arg_specs
+            .iter()
+            .map(|spec| CatalogArgSpec {
+                name: spec.name.clone(),
+                arg_type: spec.arg_type.label().to_string(),
+                optional: spec.optional,
+                default: spec.default.clone(),
+            })
+            .collect();
         let envs = defaults
             .envs
             .iter()
@@ -517,6 +545,7 @@ pub fn build_catalog(registry_name: Option<&str>, direct_path: Option<&str>) -> 
                 output_format: defaults.output_format,
                 options,
                 args,
+                arg_specs,
                 envs,
                 hash: mold_hash,
                 files,

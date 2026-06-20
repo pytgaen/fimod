@@ -48,7 +48,7 @@ push / pull_request
 │   └── cargo test --all-features
 │
 ├── msrv          (ubuntu-latest)
-│   └── cargo check with Rust 1.75  ← minimum supported version
+│   └── cargo check with Rust 1.95  ← minimum supported version
 │
 └── security      (ubuntu-latest)
     ├── cargo audit   (RustSec advisory database)

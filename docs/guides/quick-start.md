@@ -16,22 +16,30 @@
     | Variable | Default | Description |
     |---|---|---|
     | `FIMOD_VARIANT` | `standard` | `standard` (HTTP/HTTPS via `reqwest` + `rustls` + AWS-LC), `slim` (no HTTP/remote mold loading, smaller), or `fast` (same features as standard, speed optimized, larger/uncompressed) |
-    | `FIMOD_SET_DEFAULT` | *prompt* | For `slim`/`fast`: `yes` also installs that variant as `fimod`; `no` keeps only `fimod-slim` / `fimod-fast` |
+    | `FIMOD_SET_DEFAULT` | *prompt* | For `slim`/`fast`: `yes` also makes that variant available as `fimod`; `no` keeps only `fimod-slim` / `fimod-fast` |
     | `FIMOD_INSTALL` | `/usr/local/bin` | Install directory (falls back to `~/.local/bin` if not writable) |
     | `FIMOD_VERSION` | latest | Pin a specific version (e.g. `v0.2.1`) |
     | `FIMOD_SETUP_REGISTRY` | *prompt if needed* | `yes` / `no` answer for community registries |
     | `FIMOD_SETUP_SANDBOX` | *prompt if needed* | `yes` / `no` answer for the sandbox policy |
     | `FIMOD_SETUP_ALL` | *prompt if needed* | `yes` / `no` shortcut applied to both when granulars are unset |
 
+    !!! warning "Env vars with `curl | sh`"
+        Put installer variables on the `sh` side of the pipe, or export them first. `FIMOD_VARIANT=fast curl ... | sh` sets the variable only for `curl`, so the installer still sees the default `standard` variant.
+
+        `FIMOD_SET_DEFAULT` only controls whether `slim` / `fast` is also made available as the `fimod` command. It does not answer the post-install registry or sandbox prompts; use `FIMOD_SETUP_ALL=yes` or the granular `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX` variables for those.
+
     ```bash
     # Install the slim variant to a custom directory
-    FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh \
+      | FIMOD_VARIANT=slim FIMOD_INSTALL=~/.local/bin sh
 
-    # Install the fast variant and also make it the default fimod command
-    FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+    # Install the fast variant, make it the default fimod command, and skip setup prompts
+    curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh \
+      | FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes FIMOD_SETUP_ALL=yes sh
 
     # CI-friendly — no prompts, install everything
-    FIMOD_SETUP_ALL=yes curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh \
+      | FIMOD_SETUP_ALL=yes sh
     ```
 
 === ":material-microsoft-windows: Windows"

@@ -59,6 +59,9 @@ fimod s -i data.csv -e 'data' --output-format json     # CSV → JSON
 fimod s -i users.json -e 'data' --output-format ndjson  # JSON → NDJSON
 ```
 
+As the only pipeline step, `-e 'data'` is a native Rust identity conversion, not
+a Monty execution.
+
 ## 🔥 HTTP Input
 
 The `-i` flag accepts URLs just like file paths — fimod fetches, parses, and transforms in one command (no `curl | jq` needed):

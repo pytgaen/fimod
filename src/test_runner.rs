@@ -171,6 +171,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
     };
 
     let env_value: serde_json::Value = serde_json::to_value(&case.meta.env_vars).unwrap();
+    let defaults = crate::mold::parse_mold_defaults(script);
 
     // Temporarily inject env_vars into the process environment
     for (k, v) in &case.meta.env_vars {
@@ -189,6 +190,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
     };
     let opts = engine::MoldOptions {
         extra_args: &extra_args,
+        arg_specs: &defaults.arg_specs,
         env_value: &env_value,
         headers_value: &serde_json::Value::Null,
         debug: false,

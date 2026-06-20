@@ -9,8 +9,9 @@ use serde_json::Value;
 use fimod::format::{CsvOptions, DataFormat};
 use fimod::pipeline::{
     build_env, build_scripts, execute_chain_to_value, is_truthy, output_result, parse_input_entry,
-    path_stem, process_single_input, read_and_parse_for_slurp, read_input_list, url_filename,
-    write_bytes_to, CliResult, HttpOptions, ScriptRef, SingleRunOptions,
+    path_stem, process_identity_input, process_single_input, read_and_parse_for_slurp,
+    read_input_list, url_filename, write_bytes_to, CliResult, HttpOptions, IdentityRunOptions,
+    ScriptRef, SingleRunOptions,
 };
 use fimod::sandbox::SandboxPolicy;
 use fimod::{convert, format, http};
@@ -246,6 +247,28 @@ fn run_raw_passthrough(shape: ShapeArgs, debug: bool, is_batch: bool) -> Result<
     Ok(CliResult::Done)
 }
 
+fn is_native_identity_chain(script_refs: &[ScriptRef]) -> bool {
+    matches!(script_refs, [ScriptRef::Expr(expr)] if expr.trim() == "data")
+}
+
+fn build_cli_csv_options(shape: &ShapeArgs) -> Result<CsvOptions> {
+    let output_delim = match &shape.csv_output_delimiter {
+        Some(d) => Some(format::parse_delimiter(d)?),
+        None => None,
+    };
+    Ok(CsvOptions {
+        delimiter: format::parse_delimiter(&shape.csv_delimiter)?,
+        output_delimiter: output_delim,
+        no_input_header: shape.csv_no_input_header || shape.csv_header.is_some(),
+        no_output_header: shape.csv_no_output_header,
+        header_names: shape
+            .csv_header
+            .as_ref()
+            .map(|h| h.split(',').map(|s| s.trim().to_string()).collect()),
+        csv_scan: shape.csv_scan,
+    })
+}
+
 pub fn run_shape_pipeline(
     shape: &ShapeArgs,
     script_refs: &[ScriptRef],
@@ -255,6 +278,8 @@ pub fn run_shape_pipeline(
 ) -> Result<CliResult> {
     let is_batch = shape.input.len() > 1;
     let is_multi_slurp = is_batch && shape.slurp;
+    let native_identity = is_native_identity_chain(script_refs);
+    let mut csv_opts = build_cli_csv_options(shape)?;
 
     // Parse --arg name=value pairs
     let extra_args: Vec<(String, String)> = shape
@@ -273,92 +298,83 @@ pub fn run_shape_pipeline(
     let env_value = build_env(&shape.env_patterns);
 
     // Build scripts chain
-    let scripts = build_scripts(script_refs, shape.no_cache)?;
-
-    // First mold's defaults drive input options; last mold's defaults drive output options
-    let first_defaults = &scripts[0].defaults;
-    let last_defaults = &scripts[scripts.len() - 1].defaults;
-
-    // Build CSV options from CLI args
-    let output_delim = match &shape.csv_output_delimiter {
-        Some(d) => Some(format::parse_delimiter(d)?),
-        None => None,
-    };
-    let mut csv_opts = CsvOptions {
-        delimiter: format::parse_delimiter(&shape.csv_delimiter)?,
-        output_delimiter: output_delim,
-        no_input_header: shape.csv_no_input_header || shape.csv_header.is_some(),
-        no_output_header: shape.csv_no_output_header,
-        header_names: shape
-            .csv_header
-            .as_ref()
-            .map(|h| h.split(',').map(|s| s.trim().to_string()).collect()),
+    let scripts = if native_identity {
+        Vec::new()
+    } else {
+        build_scripts(script_refs, shape.no_cache)?
     };
 
     // Apply first mold defaults to CSV options (CLI explicit > mold defaults > code defaults)
-    if let Some(ref delim) = first_defaults.csv_delimiter {
-        if shape.csv_delimiter == "," {
-            csv_opts.delimiter = format::parse_delimiter(delim)?;
+    if let Some(first_defaults) = scripts.first().map(|step| &step.defaults) {
+        if let Some(ref delim) = first_defaults.csv_delimiter {
+            if shape.csv_delimiter == "," {
+                csv_opts.delimiter = format::parse_delimiter(delim)?;
+            }
         }
-    }
-    if first_defaults.csv_no_input_header
-        && !shape.csv_no_input_header
-        && shape.csv_header.is_none()
-    {
-        csv_opts.no_input_header = true;
-    }
-    if first_defaults.csv_no_output_header && !shape.csv_no_output_header {
-        csv_opts.no_output_header = true;
-    }
-    if let Some(ref delim) = first_defaults.csv_output_delimiter {
-        if csv_opts.output_delimiter.is_none() {
-            csv_opts.output_delimiter = Some(format::parse_delimiter(delim)?);
-        }
-    }
-    if let Some(ref header) = first_defaults.csv_header {
-        if csv_opts.header_names.is_none() {
+        if first_defaults.csv_no_input_header
+            && !shape.csv_no_input_header
+            && shape.csv_header.is_none()
+        {
             csv_opts.no_input_header = true;
-            csv_opts.header_names = Some(header.split(',').map(|s| s.trim().to_string()).collect());
+        }
+        if first_defaults.csv_no_output_header && !shape.csv_no_output_header {
+            csv_opts.no_output_header = true;
+        }
+        if let Some(ref delim) = first_defaults.csv_output_delimiter {
+            if csv_opts.output_delimiter.is_none() {
+                csv_opts.output_delimiter = Some(format::parse_delimiter(delim)?);
+            }
+        }
+        if let Some(ref header) = first_defaults.csv_header {
+            if csv_opts.header_names.is_none() {
+                csv_opts.no_input_header = true;
+                csv_opts.header_names =
+                    Some(header.split(',').map(|s| s.trim().to_string()).collect());
+            }
         }
     }
 
     // Effective input format (CLI > first mold defaults, unless directive is forced)
-    let effective_input_format = if first_defaults.forced.contains("input-format") {
-        if debug {
-            eprintln!(
-                "[debug] mold forces input-format={}",
-                first_defaults.input_format.as_deref().unwrap_or("?")
-            );
+    let effective_input_format = match scripts.first().map(|step| &step.defaults) {
+        Some(first_defaults) if first_defaults.forced.contains("input-format") => {
+            if debug {
+                eprintln!(
+                    "[debug] mold forces input-format={}",
+                    first_defaults.input_format.as_deref().unwrap_or("?")
+                );
+            }
+            first_defaults.input_format.as_deref()
         }
-        first_defaults.input_format.as_deref()
-    } else {
-        shape
+        Some(first_defaults) => shape
             .input_format
             .as_deref()
-            .or(first_defaults.input_format.as_deref())
+            .or(first_defaults.input_format.as_deref()),
+        None => shape.input_format.as_deref(),
     };
 
     // Effective output format (CLI > last mold defaults, unless directive is forced)
-    let effective_output_format = if last_defaults.forced.contains("output-format") {
-        if debug {
-            eprintln!(
-                "[debug] mold forces output-format={}",
-                last_defaults.output_format.as_deref().unwrap_or("?")
-            );
+    let effective_output_format = match scripts.last().map(|step| &step.defaults) {
+        Some(last_defaults) if last_defaults.forced.contains("output-format") => {
+            if debug {
+                eprintln!(
+                    "[debug] mold forces output-format={}",
+                    last_defaults.output_format.as_deref().unwrap_or("?")
+                );
+            }
+            last_defaults.output_format.as_deref()
         }
-        last_defaults.output_format.as_deref()
-    } else {
-        shape
+        Some(last_defaults) => shape
             .output_format
             .as_deref()
-            .or(last_defaults.output_format.as_deref())
+            .or(last_defaults.output_format.as_deref()),
+        None => shape.output_format.as_deref(),
     };
 
     // Build HTTP options
     let http_opts = HttpOptions {
         headers: shape.http_header.clone(),
         timeout: shape.timeout,
-        no_follow: shape.no_follow || first_defaults.no_follow,
+        no_follow: shape.no_follow || scripts.first().is_some_and(|step| step.defaults.no_follow),
     };
 
     // Multi-file slurp: combine all inputs into a single data structure, run mold once.
@@ -438,6 +454,22 @@ pub fn run_shape_pipeline(
                 entries.len(),
                 if has_alias { "object" } else { "array" }
             );
+        }
+
+        if native_identity {
+            if shape.check {
+                return Ok(CliResult::Exit(if is_truthy(&combined) { 0 } else { 1 }));
+            }
+            output_result(
+                &combined,
+                shape.output.as_deref(),
+                effective_output_format,
+                DataFormat::Json,
+                &csv_opts,
+                false,
+                debug,
+            )?;
+            return Ok(CliResult::Done);
         }
 
         let data = convert::json_into_monty(combined);
@@ -521,24 +553,40 @@ pub fn run_shape_pipeline(
             };
 
             // Propagate the first per-file CliResult::Exit; otherwise continue.
-            if let CliResult::Exit(code) = process_single_input(SingleRunOptions {
-                input_path: Some(input_path.as_str()),
-                no_input: false, // no_input always false in batch
-                slurp: shape.slurp,
-                effective_input_format,
-                csv_opts: &csv_opts,
-                scripts: &scripts,
-                extra_args: &extra_args,
-                env_value: &env_value,
-                debug,
-                msg_level,
-                output_path: Some(per_file_output.as_str()),
-                effective_output_format,
-                in_place: shape.in_place,
-                check: shape.check,
-                http_opts: &http_opts,
-                policy,
-            })? {
+            let per_file_result = if native_identity {
+                process_identity_input(IdentityRunOptions {
+                    input_path: Some(input_path.as_str()),
+                    no_input: false, // no_input always false in batch
+                    slurp: shape.slurp,
+                    effective_input_format,
+                    csv_opts: &csv_opts,
+                    output_path: Some(per_file_output.as_str()),
+                    effective_output_format,
+                    check: shape.check,
+                    http_opts: &http_opts,
+                    debug,
+                })?
+            } else {
+                process_single_input(SingleRunOptions {
+                    input_path: Some(input_path.as_str()),
+                    no_input: false, // no_input always false in batch
+                    slurp: shape.slurp,
+                    effective_input_format,
+                    csv_opts: &csv_opts,
+                    scripts: &scripts,
+                    extra_args: &extra_args,
+                    env_value: &env_value,
+                    debug,
+                    msg_level,
+                    output_path: Some(per_file_output.as_str()),
+                    effective_output_format,
+                    in_place: shape.in_place,
+                    check: shape.check,
+                    http_opts: &http_opts,
+                    policy,
+                })?
+            };
+            if let CliResult::Exit(code) = per_file_result {
                 return Ok(CliResult::Exit(code));
             }
         }
@@ -566,22 +614,37 @@ pub fn run_shape_pipeline(
         shape.output.as_deref()
     };
 
-    process_single_input(SingleRunOptions {
-        input_path,
-        no_input: shape.no_input,
-        slurp: shape.slurp,
-        effective_input_format,
-        csv_opts: &csv_opts,
-        scripts: &scripts,
-        extra_args: &extra_args,
-        env_value: &env_value,
-        debug,
-        msg_level,
-        output_path,
-        effective_output_format,
-        in_place: shape.in_place,
-        check: shape.check,
-        http_opts: &http_opts,
-        policy,
-    })
+    if native_identity {
+        process_identity_input(IdentityRunOptions {
+            input_path,
+            no_input: shape.no_input,
+            slurp: shape.slurp,
+            effective_input_format,
+            csv_opts: &csv_opts,
+            output_path,
+            effective_output_format,
+            check: shape.check,
+            http_opts: &http_opts,
+            debug,
+        })
+    } else {
+        process_single_input(SingleRunOptions {
+            input_path,
+            no_input: shape.no_input,
+            slurp: shape.slurp,
+            effective_input_format,
+            csv_opts: &csv_opts,
+            scripts: &scripts,
+            extra_args: &extra_args,
+            env_value: &env_value,
+            debug,
+            msg_level,
+            output_path,
+            effective_output_format,
+            in_place: shape.in_place,
+            check: shape.check,
+            http_opts: &http_opts,
+            policy,
+        })
+    }
 }

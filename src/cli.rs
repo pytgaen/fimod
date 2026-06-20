@@ -100,7 +100,7 @@ pub struct ShapeArgs {
     #[arg(long, value_name = "FORMAT", add = ArgValueCandidates::new(format_candidates))]
     pub output_format: Option<String>,
 
-    /// Pass a named string variable to the mold (can be repeated): --arg name=value
+    /// Pass a named variable to the mold (can be repeated): --arg name=value
     #[arg(long = "arg", value_name = "NAME=VALUE", action = clap::ArgAction::Append)]
     pub args: Vec<String>,
 
@@ -132,9 +132,13 @@ pub struct ShapeArgs {
     #[arg(long)]
     pub csv_no_output_header: bool,
 
-    /// CSV: explicit column names for input (comma-separated, implies no header in file)
+    /// CSV: explicit column names for input and object-row output projection
     #[arg(long, value_name = "COLS")]
     pub csv_header: Option<String>,
+
+    /// CSV: rows to scan for JSON object output columns (0 = all rows)
+    #[arg(long, default_value_t = 1)]
+    pub csv_scan: usize,
 
     /// Slurp: read multiple JSON values into a single array
     #[arg(short = 's', long = "slurp")]
@@ -209,15 +213,15 @@ pub enum SetupCategory {
         #[command(subcommand)]
         action: SetupDefaults,
     },
-    /// Write recommended sandbox policy to ~/.config/fimod/sandbox.toml
+    /// Configure sandbox policy files
     Sandbox {
         #[command(subcommand)]
-        action: SetupDefaults,
+        action: SetupSandboxAction,
     },
     /// Run registry and sandbox setup in order (stops at the first failure)
     All {
         #[command(subcommand)]
-        action: SetupDefaults,
+        action: SetupAllAction,
     },
     /// Print a shell completion script to stdout
     ///
@@ -247,6 +251,101 @@ pub enum SetupDefaults {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum SetupAllAction {
+    /// Install the recommended defaults for every setup category
+    Defaults {
+        /// Skip all prompts (non-interactive / CI)
+        #[arg(short, long)]
+        yes: bool,
+        /// Overwrite existing configuration (sandbox.toml)
+        #[arg(long)]
+        force: bool,
+        /// Only install missing defaults; leave existing configuration untouched
+        #[arg(long = "if-needed")]
+        if_needed: bool,
+        /// Sandbox preset to install
+        #[arg(long, value_enum, default_value = "recommended")]
+        preset: SetupSandboxPreset,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SetupSandboxAction {
+    /// Install a sandbox preset
+    Defaults {
+        /// Skip all prompts (non-interactive / CI)
+        #[arg(short, long)]
+        yes: bool,
+        /// Overwrite existing configuration
+        #[arg(long)]
+        force: bool,
+        /// Only install when missing; leave existing configuration untouched
+        #[arg(long = "if-needed")]
+        if_needed: bool,
+        /// Sandbox policy file to write (default: ~/.config/fimod/sandbox.toml)
+        #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        sandbox_file: Option<String>,
+        /// Preset to install
+        #[arg(long, value_enum, default_value = "recommended")]
+        preset: SetupSandboxPreset,
+    },
+    /// Print the effective sandbox policy for a file
+    Show {
+        /// Sandbox policy file to read (default: ~/.config/fimod/sandbox.toml)
+        #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        sandbox_file: Option<String>,
+    },
+    /// Print one sandbox policy value
+    Get {
+        /// Key to print
+        #[arg(value_enum)]
+        key: SetupSandboxKey,
+        /// Sandbox policy file to read (default: ~/.config/fimod/sandbox.toml)
+        #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        sandbox_file: Option<String>,
+    },
+    /// Update sandbox policy values
+    Set {
+        /// Sandbox policy file to create/update (default: ~/.config/fimod/sandbox.toml)
+        #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        sandbox_file: Option<String>,
+        /// Allow clock access (datetime.now/date.today)
+        #[arg(long, conflicts_with = "deny_clock")]
+        allow_clock: bool,
+        /// Deny clock access (datetime.now/date.today)
+        #[arg(long, conflicts_with = "allow_clock")]
+        deny_clock: bool,
+        /// Wall-clock runtime limit (for example: 30s, 10m, unlimited)
+        #[arg(long, value_name = "VALUE")]
+        max_duration: Option<String>,
+        /// Memory limit (for example: 500MB, 2GB, unlimited)
+        #[arg(long, value_name = "VALUE")]
+        max_memory: Option<String>,
+        /// Allowed environment key/glob. Repeat or comma-separate.
+        #[arg(long = "allow-env", value_name = "PATTERN", action = clap::ArgAction::Append, value_delimiter = ',')]
+        allow_env: Vec<String>,
+        /// Clear the environment allow-list
+        #[arg(long, conflicts_with = "allow_env")]
+        clear_env: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SetupSandboxPreset {
+    Recommended,
+    Strict,
+    Permissive,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SetupSandboxKey {
+    AllowClock,
+    MaxDuration,
+    MaxMemory,
+    AllowEnv,
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum CompletionShell {
     Bash,
@@ -259,7 +358,11 @@ pub enum CompletionShell {
 #[derive(Subcommand, Debug)]
 pub enum MontyAction {
     /// Start an interactive Monty Python REPL
-    Repl,
+    Repl {
+        /// Sandbox policy file (TOML). Empty (`--sandbox-file=""`) forces zero authorization.
+        #[arg(long = "sandbox-file", value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        sandbox_file: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

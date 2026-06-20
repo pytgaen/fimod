@@ -17,8 +17,8 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
-pub const HARDCODED_MAX_DURATION: Duration = Duration::from_secs(120);
-pub const HARDCODED_MAX_MEMORY: usize = 1024 * 1024 * 1024;
+pub const HARDCODED_MAX_DURATION: Duration = Duration::from_secs(600);
+pub const HARDCODED_MAX_MEMORY: usize = 2_000_000_000;
 
 pub const FIMOD_SANDBOX_FILE_ENV: &str = "FIMOD_SANDBOX_FILE";
 
@@ -196,7 +196,9 @@ pub fn parse_size(s: &str) -> Result<Option<usize>> {
     let bytes = num
         .checked_mul(multiplier)
         .ok_or_else(|| anyhow!("size overflow: {s:?}"))?;
-    Ok(Some(usize::try_from(bytes).unwrap_or(usize::MAX)))
+    let bytes =
+        usize::try_from(bytes).map_err(|_| anyhow!("size too large for this platform: {s:?}"))?;
+    Ok(Some(bytes))
 }
 
 fn split_numeric_suffix(s: &str) -> (&str, &str) {
@@ -277,6 +279,13 @@ mod tests {
         assert!(parse_size("").is_err());
         assert!(parse_size("abc").is_err());
         assert!(parse_size("1TB").is_err());
+    }
+
+    #[cfg(target_pointer_width = "32")]
+    #[test]
+    fn parse_size_rejects_values_above_usize_max() {
+        let err = parse_size("4294967296B").unwrap_err();
+        assert!(err.to_string().contains("size too large"));
     }
 
     #[test]
