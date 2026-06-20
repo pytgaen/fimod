@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.43">
+      <meta name="generator" content="zensical-0.0.45">
     
     
       
@@ -2416,11 +2416,14 @@ Use <code>FIMOD_VARIANT=fast</code> for a larger, uncompressed binary optimized 
 </div>
 <hr />
 <h2 id="setup">⚙️ Setup</h2>
-<p><code>fimod setup &lt;category&gt; defaults</code> installs the canonical configuration for a category. The install scripts call the idempotent <code>--if-needed</code> form after downloading the binary, but you can re-run it at any time.</p>
+<p><code>fimod setup</code> installs and manages local fimod configuration. The install scripts call the idempotent <code>--if-needed</code> form after downloading the binary, but you can re-run it at any time.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--if-needed<span class="w">    </span><span class="c1"># registry + sandbox, only when missing</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">          </span><span class="c1"># registry + sandbox in one go</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>all<span class="w"> </span>defaults<span class="w"> </span>--preset<span class="w"> </span>strict<span class="w"> </span>--yes
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>registry<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">     </span><span class="c1"># community registries only</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--yes<span class="w">      </span><span class="c1"># sandbox policy only</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--preset<span class="w"> </span>permissive<span class="w"> </span>--yes
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>show
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>get<span class="w"> </span>max-memory
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-duration<span class="w"> </span>20m<span class="w"> </span>--max-memory<span class="w"> </span>4GB
 </code></pre></div>
 <table>
 <thead>
@@ -2436,11 +2439,19 @@ Use <code>FIMOD_VARIANT=fast</code> for a larger, uncompressed binary optimized 
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>Overwrite an existing <code>sandbox.toml</code> (ignored for registry).</td>
+<td>Overwrite an existing <code>sandbox.toml</code> when writing defaults (ignored for registry).</td>
 </tr>
 <tr>
 <td><code>--if-needed</code></td>
 <td>Install missing defaults, skip already-configured blocks, and leave existing files untouched.</td>
+</tr>
+<tr>
+<td><code>--preset recommended\|strict\|permissive</code></td>
+<td>Sandbox preset for <code>setup sandbox defaults</code> or <code>setup all defaults</code>.</td>
+</tr>
+<tr>
+<td><code>--sandbox-file &lt;PATH&gt;</code></td>
+<td>Sandbox policy file for <code>setup sandbox defaults/show/get/set</code>; omitted means <code>~/.config/fimod/sandbox.toml</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -2474,7 +2485,7 @@ Use <code>FIMOD_VARIANT=fast</code> for a larger, uncompressed binary optimized 
 <p>What each target does:</p>
 <ul>
 <li><strong><code>registry</code></strong> — installs the community registries in <code>~/.config/fimod/sources.toml</code>. Idempotent; safe to re-run. Same effect as the legacy <code>fimod registry setup</code>.</li>
-<li><strong><code>sandbox</code></strong> — writes the recommended sandbox policy to <code>~/.config/fimod/sandbox.toml</code>. Refuses to overwrite without <code>--force</code>; with <code>--if-needed</code>, an existing file is left unchanged.</li>
+<li><strong><code>sandbox</code></strong> — writes, inspects, and updates sandbox policies. <code>defaults</code> writes a preset and refuses to overwrite without <code>--force</code>; <code>show</code> prints normalized TOML; <code>get</code> prints one value; <code>set</code> updates selected fields.</li>
 <li><strong><code>all</code></strong> — runs <code>registry</code> then <code>sandbox</code>, stopping at the first error.</li>
 </ul>
 <p>See <a href="#sandbox-policy">Sandbox policy</a> for what the sandbox file controls and how it is resolved.</p>
@@ -2711,7 +2722,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <p>Override the cache directory with <code>FIMOD_CACHE_DIR</code>. For direct-URL molds (not registry-based), cache TTL is controlled by <code>FIMOD_CACHE_TTL</code> (minutes, default <code>360</code>, <code>0</code> = infinite, negative = disabled).</p>
 <hr />
 <h2 id="sandbox-policy">🛡️ Sandbox policy</h2>
-<p>Every <code>fimod s</code> invocation runs the mold under a sandbox that limits what it can do on the host. A policy controls three things:</p>
+<p>Every <code>fimod s</code> invocation and <code>fimod monty repl</code> session runs under a sandbox that limits what Monty code can do on the host. A policy controls three things:</p>
 <ul>
 <li><strong>Clock access</strong> — whether <code>datetime.now()</code> / <code>date.today()</code> resolve to real values or raise.</li>
 <li><strong>Environment access</strong> — which <code>os.getenv(KEY)</code> calls are allowed (glob-matched).</li>
@@ -2730,7 +2741,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <li><code>--sandbox-file=""</code> (empty string) forces zero-authorization regardless of <code>$FIMOD_SANDBOX_FILE</code> or the canonical file. Portable across Linux/macOS/Windows.</li>
 <li>If <code>$FIMOD_SANDBOX_FILE</code> points to a missing path, fimod errors out explicitly rather than falling back silently.</li>
 </ul>
-<p>Bootstrap the canonical file with <a href="#setup"><code>fimod setup sandbox defaults --yes</code></a>.</p>
+<p>Bootstrap the canonical file with <a href="#setup"><code>fimod setup sandbox defaults --yes</code></a>, inspect it with <code>fimod setup sandbox show</code>, or update individual fields with <code>fimod setup sandbox set</code>.</p>
 <h3 id="hard-limits">Hard limits</h3>
 <p>Apply <strong>even with zero authorization</strong>:</p>
 <table>
@@ -2743,33 +2754,41 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <tbody>
 <tr>
 <td><code>max_duration</code></td>
-<td><code>2m</code></td>
+<td><code>10m</code></td>
 </tr>
 <tr>
 <td><code>max_memory</code></td>
-<td><code>1GB</code></td>
+<td><code>2GB</code></td>
 </tr>
 </tbody>
 </table>
-<p>On violation, fimod exits with code <code>137</code> and a stderr message like:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>sandbox exploded: max_duration exceeded (2m)
-<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>sandbox exploded: max_memory exceeded (1024 MB)
+<p>For <code>fimod s</code>, a violation exits with code <code>137</code> and a stderr message like:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>sandbox exploded: max_duration exceeded (10m)
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>sandbox exploded: max_memory exceeded (2GB)
 </code></pre></div>
+<p>In <code>fimod monty repl</code>, the same violation is printed as an error and the REPL session stays open for the next snippet.</p>
 <h3 id="sandboxtoml-schema"><code>sandbox.toml</code> schema</h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="k">[sandbox]</span>
 <a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="n">allow_clock</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">              </span><span class="c1"># allow datetime.now() / date.today()</span>
-<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">max_duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2m&quot;</span><span class="w">              </span><span class="c1"># &quot;30s&quot;, &quot;2m&quot;, &quot;unlimited&quot;</span>
-<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="n">max_memory</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1GB&quot;</span><span class="w">             </span><span class="c1"># &quot;500MB&quot;, &quot;1GB&quot;, &quot;unlimited&quot;</span>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">max_duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;10m&quot;</span><span class="w">             </span><span class="c1"># &quot;30s&quot;, &quot;10m&quot;, &quot;unlimited&quot;</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="n">max_memory</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2GB&quot;</span><span class="w">             </span><span class="c1"># &quot;500MB&quot;, &quot;2GB&quot;, &quot;unlimited&quot;</span>
 <a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="n">allow_env</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;LANG&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;TZ_*&quot;</span><span class="p">]</span><span class="w">  </span><span class="c1"># glob patterns: &quot;*&quot;, &quot;PREFIX_*&quot;, &quot;EXACT&quot;</span>
+</code></pre></div>
+<p>Common setup edits:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--deny-clock
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-duration<span class="w"> </span>30m<span class="w"> </span>--max-memory<span class="w"> </span>4GB
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--allow-env<span class="w"> </span>LANG<span class="w"> </span>--allow-env<span class="w"> </span><span class="s1">&#39;TZ_*&#39;</span>
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--clear-env
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--sandbox-file<span class="w"> </span>./ci-sandbox.toml<span class="w"> </span>--preset<span class="w"> </span>strict<span class="w"> </span>--yes
 </code></pre></div>
 <p><code>allow_env = []</code> (default) blocks every <code>os.getenv()</code> call. Patterns match the key name exactly, as a prefix (<code>TZ_*</code>), or anything (<code>*</code>).</p>
 <p>Denied calls raise <code>PermissionError</code> inside the mold — catch it if you want a graceful fallback:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="n">lang</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a><span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>    <span class="n">lang</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;LANG&quot;</span><span class="p">)</span>
-<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="k">except</span> <span class="ne">PermissionError</span><span class="p">:</span>
-<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>    <span class="k">pass</span>  <span class="c1"># sandbox forbids env access</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="n">lang</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a>    <span class="n">lang</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;LANG&quot;</span><span class="p">)</span>
+<a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a><span class="k">except</span> <span class="ne">PermissionError</span><span class="p">:</span>
+<a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a>    <span class="k">pass</span>  <span class="c1"># sandbox forbids env access</span>
 </code></pre></div>
 <hr />
 <h2 id="csv-options">📊 CSV options</h2>
@@ -2799,12 +2818,16 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 </tr>
 <tr>
 <td><code>--csv-header "a,b,c"</code></td>
-<td>Explicit column names (implies no header in file).</td>
+<td>Explicit input column names; also an explicit output schema for object rows.</td>
+</tr>
+<tr>
+<td><code>--csv-scan &lt;N&gt;</code></td>
+<td>Rows to scan for object-output columns (<code>1</code> default, <code>0</code> = all rows).</td>
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="c1"># 🔀 CSV → TSV</span>
-<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>csv<span class="w"> </span>--csv-output-delimiter<span class="w"> </span><span class="s1">&#39;\t&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># 🔀 CSV → TSV</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>csv<span class="w"> </span>--csv-output-delimiter<span class="w"> </span><span class="s1">&#39;\t&#39;</span>
 </code></pre></div>
 <div class="admonition info">
 <p class="admonition-title">Column order is preserved</p>
@@ -2817,26 +2840,26 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p>Best for one-liners:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
-<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: data[&quot;first&quot;].upper()}&#39;</span>
-<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;re_findall(r&quot;\d+&quot;, data[&quot;text&quot;])&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u for u in data if u[&quot;active&quot;]]&#39;</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: data[&quot;first&quot;].upper()}&#39;</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;re_findall(r&quot;\d+&quot;, data[&quot;text&quot;])&#39;</span>
 </code></pre></div>
 <p>Multi-statement? Write <code>def transform</code> inside <code>-e</code>.</p>
 </div>
 <div class="tabbed-block">
 <p>For reusable transforms:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># cleanup.py</span>
-<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
-<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
-<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
-<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>    <span class="k">return</span> <span class="n">data</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># cleanup.py</span>
+<a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+<a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+<a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>        <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+<a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>    <span class="k">return</span> <span class="n">data</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>clean.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>messy.csv<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>clean.json
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <p>Load from a URL:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>https://example.com/transforms/normalize.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>https://example.com/transforms/normalize.py
 </code></pre></div>
 </div>
 </div>
@@ -2844,61 +2867,69 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <hr />
 <h2 id="special-output-formats">🎛️ Special output formats</h2>
 <p>Sometimes you need to control the output format for chaining with other tools, without changing the file extension:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># 📦 Compact JSON: one-line JSON for piping</span>
-<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json-compact
-<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="c1"># {&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30}</span>
-<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>
-<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="c1"># 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)</span>
-<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
-<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
-<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>
-<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a><span class="c1"># 📑 Lines: one array element per line (shell-friendly lists)</span>
-<a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
-<a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a>
-<a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
-<a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="c1"># 📦 Compact JSON: one-line JSON for piping</span>
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json-compact
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="c1"># {&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30}</span>
+<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>
+<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="c1"># 🐚 TXT: evaluate string without JSON quotes (ideal for shell variables)</span>
+<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a><span class="nv">NAME</span><span class="o">=</span><span class="k">$(</span>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data[&quot;name&quot;]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>txt<span class="k">)</span>
+<a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Hello </span><span class="nv">$NAME</span><span class="s2">&quot;</span><span class="w">   </span><span class="c1"># Hello Alice</span>
+<a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>
+<a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a><span class="c1"># 📑 Lines: one array element per line (shell-friendly lists)</span>
+<a id="__codelineno-35-10" name="__codelineno-35-10" href="#__codelineno-35-10"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[u[&quot;email&quot;] for u in data]&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<a id="__codelineno-35-11" name="__codelineno-35-11" href="#__codelineno-35-11"></a>
+<a id="__codelineno-35-12" name="__codelineno-35-12" href="#__codelineno-35-12"></a><span class="c1"># 📃 NDJSON: exact JSON array identity conversion streams element by element</span>
+<a id="__codelineno-35-13" name="__codelineno-35-13" href="#__codelineno-35-13"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>ndjson
+<a id="__codelineno-35-14" name="__codelineno-35-14" href="#__codelineno-35-14"></a>
+<a id="__codelineno-35-15" name="__codelineno-35-15" href="#__codelineno-35-15"></a><span class="c1"># 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)</span>
+<a id="__codelineno-35-16" name="__codelineno-35-16" href="#__codelineno-35-16"></a>fimod<span class="w"> </span>shape<span class="w"> </span>-i<span class="w"> </span>https://example.com/file.bin<span class="w"> </span>--output-format<span class="w"> </span>raw<span class="w"> </span>-o<span class="w"> </span>file.bin
 </code></pre></div>
 <hr />
 <h2 id="passing-variables-arg">📎 Passing variables (<code>--arg</code>)</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;</span>
-<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="s1">  [u for u in data if u[&quot;age&quot;] &gt; int(args[&quot;threshold&quot;])]</span>
-<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="s1">&#39;</span>
-<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>
-<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="c1"># Or via mold:</span>
-<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;</span>
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="s1">  [u for u in data if u[&quot;age&quot;] &gt; int(args[&quot;threshold&quot;])]</span>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="s1">&#39;</span>
+<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>
+<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a><span class="c1"># Or via mold:</span>
+<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>filter.py<span class="w"> </span>--arg<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span><span class="m">30</span><span class="w"> </span>--arg<span class="w"> </span><span class="nv">prefix</span><span class="o">=</span><span class="s2">&quot;A&quot;</span>
 </code></pre></div>
-<p>Access via <code>args["key"]</code> in a mold signature such as <code>def transform(data, args, **_):</code>.</p>
+<p>Access via <code>args["key"]</code> in a mold signature such as <code>def transform(data, args, **_):</code>.
+Untyped args arrive as strings. A mold can declare <code># fimod: arg=threshold:int</code>
+to validate and cast the value before <code>transform()</code> runs.</p>
 <hr />
 <h2 id="format-conversion">🔀 Format conversion</h2>
 <p>Pass-through expression for pure format conversion:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>config.toml
-<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json
-<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
+<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.yaml<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>-o<span class="w"> </span>config.toml
+<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json
+<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines
 </code></pre></div>
+<p>The exact single-step identity expression <code>-e 'data'</code> is optimized as a native
+Rust format conversion. Other expressions and chains run through the Monty
+engine.</p>
 <hr />
 <h2 id="debug-mode-debug-d">🐛 Debug mode (<code>--debug</code> / <code>-d</code>)</h2>
 <p>Prints pipeline diagnostics to <strong>stderr</strong> (stdout stays clean for piping):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--debug
+<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--debug
 </code></pre></div>
 <p>Output includes: input/output format, <strong>per-step identification</strong> (<code>step N/M (label)</code>), full script, input data, output data, <strong>phase timings</strong> (<code>parse</code>, <code>execute</code>, <code>serialize</code>, <code>total</code>).</p>
 <p>Each step in a chain is logged with its 1-based index, the chain length, and a short label (the raw <code>-m</code> reference, or <code>-e '&lt;expr&gt;'</code> for inline expressions, truncated to ~50 chars). Steps injected at runtime via <code>pipeline.insert_next</code> / <code>pipeline.append</code> are annotated with <code>injected by step P</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a>[debug] step 1/3 (./normalize.py)
-<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>[debug] step 2/3 (@common/flatten)
-<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>[debug] step 3/3 (-e &#39;data&#39;, injected by step 2)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a>[debug] step 1/3 (./normalize.py)
+<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>[debug] step 2/3 (@common/flatten)
+<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>[debug] step 3/3 (-e &#39;data&#39;, injected by step 2)
 </code></pre></div>
 <p>The same identifier is prepended to runtime errors, so the failing step is always unambiguous:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a>Error: in step 2/3 (@common/flatten): Python error in mold:
-<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>KeyError: &#39;foo&#39;
+<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a>Error: in step 2/3 (@common/flatten): Python error in mold:
+<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>KeyError: &#39;foo&#39;
 </code></pre></div>
 <p>Timings are always emitted in seconds with millisecond precision (<code>0.045s</code>) for easy parsing:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a>[debug] parse: 0.002s
-<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>[debug] execute: 0.045s
-<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>[debug] serialize: 0.001s
-<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a>[debug] total: 0.048s
+<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a>[debug] parse: 0.002s
+<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a>[debug] execute: 0.045s
+<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>[debug] serialize: 0.001s
+<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a>[debug] total: 0.048s
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1"># extract execute time of a run</span>
-<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>big.json<span class="w"> </span>-m<span class="w"> </span>heavy.py<span class="w"> </span>--debug<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="m">1</span>&gt;/dev/null<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;/\[debug\] execute:/ {print $3}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="c1"># extract execute time of a run</span>
+<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>big.json<span class="w"> </span>-m<span class="w"> </span>heavy.py<span class="w"> </span>--debug<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="m">1</span>&gt;/dev/null<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>awk<span class="w"> </span><span class="s1">&#39;/\[debug\] execute:/ {print $3}&#39;</span>
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
@@ -2907,34 +2938,34 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <hr />
 <h2 id="message-verbosity-quiet-msg-level">📢 Message verbosity (<code>--quiet</code> / <code>--msg-level</code>)</h2>
 <p>Control which <code>msg_*</code> functions in mold scripts produce output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--quiet<span class="w">              </span><span class="c1"># errors only</span>
-<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>verbose<span class="w">  </span><span class="c1"># + msg_verbose()</span>
-<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>trace<span class="w">    </span><span class="c1"># + msg_trace()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--quiet<span class="w">              </span><span class="c1"># errors only</span>
+<a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>verbose<span class="w">  </span><span class="c1"># + msg_verbose()</span>
+<a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>transform.py<span class="w"> </span>--msg-level<span class="o">=</span>trace<span class="w">    </span><span class="c1"># + msg_trace()</span>
 </code></pre></div>
 <p><code>--quiet</code> and <code>--msg-level</code> are mutually exclusive. See <a href="../../reference/built-ins/#message-functions-msg_">built-ins reference</a> for the full visibility table.</p>
 <hr />
 <h2 id="in-place-editing-in-place">✏️ In-place editing (<code>--in-place</code>)</h2>
 <p>Modify the input file directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;host&quot;: data[&quot;host&quot;], &quot;port&quot;: data[&quot;port&quot;]}&#39;</span><span class="w"> </span>--in-place
+<div class="highlight"><pre><span></span><code><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>config.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;host&quot;: data[&quot;host&quot;], &quot;port&quot;: data[&quot;port&quot;]}&#39;</span><span class="w"> </span>--in-place
 </code></pre></div>
 <p>Requires <code>-i</code>. Incompatible with <code>-o</code>.</p>
 <hr />
 <h2 id="watch-mode-watch-w">👀 Watch mode (<code>--watch</code> / <code>-w</code>)</h2>
 <p>Re-runs the transform whenever the input file or a local mold script changes — handy for iterating on a mold while editing it in another window:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>out.json<span class="w"> </span>--watch
+<div class="highlight"><pre><span></span><code><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>-o<span class="w"> </span>out.json<span class="w"> </span>--watch
 </code></pre></div>
 <p>Output goes to the usual destination (<code>-o</code> file or stdout). Status messages stream on stderr, so piping still works:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>--watch<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.name
-<a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="c1"># stderr: [watch] watching data.json, cleanup.py</span>
-<a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a><span class="c1"># stderr: [watch] run #1 ok (42ms)</span>
-<a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a><span class="c1"># stderr: [watch] run #2 ok (38ms)   (after editing cleanup.py)</span>
-<a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="c1"># stdout: &quot;alice&quot;</span>
-<a id="__codelineno-45-6" name="__codelineno-45-6" href="#__codelineno-45-6"></a><span class="c1"># stdout: &quot;alice&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.json<span class="w"> </span>-m<span class="w"> </span>cleanup.py<span class="w"> </span>--watch<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.name
+<a id="__codelineno-46-2" name="__codelineno-46-2" href="#__codelineno-46-2"></a><span class="c1"># stderr: [watch] watching data.json, cleanup.py</span>
+<a id="__codelineno-46-3" name="__codelineno-46-3" href="#__codelineno-46-3"></a><span class="c1"># stderr: [watch] run #1 ok (42ms)</span>
+<a id="__codelineno-46-4" name="__codelineno-46-4" href="#__codelineno-46-4"></a><span class="c1"># stderr: [watch] run #2 ok (38ms)   (after editing cleanup.py)</span>
+<a id="__codelineno-46-5" name="__codelineno-46-5" href="#__codelineno-46-5"></a><span class="c1"># stdout: &quot;alice&quot;</span>
+<a id="__codelineno-46-6" name="__codelineno-46-6" href="#__codelineno-46-6"></a><span class="c1"># stdout: &quot;alice&quot;</span>
 </code></pre></div>
 <p>A run that fails (Python error, parse error, missing file) is reported but <strong>does not exit</strong> the watch loop — fix the script and the next save triggers another run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a>[watch] run #3 failed (12ms)
-<a id="__codelineno-46-2" name="__codelineno-46-2" href="#__codelineno-46-2"></a>  in step 1/1 (cleanup.py): Python error in mold:
-<a id="__codelineno-46-3" name="__codelineno-46-3" href="#__codelineno-46-3"></a>  NameError: name &#39;foo&#39; is not defined
+<div class="highlight"><pre><span></span><code><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a>[watch] run #3 failed (12ms)
+<a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a>  in step 1/1 (cleanup.py): Python error in mold:
+<a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a>  NameError: name &#39;foo&#39; is not defined
 </code></pre></div>
 <p><strong>What is watched</strong>:</p>
 <ul>
@@ -2982,7 +3013,7 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 </table>
 <p><strong>If the input is removed mid-watch</strong> (e.g. <code>git checkout</code> of a branch that
 deletes it, or a <code>rm</code> between two <code>cp</code> commands), the watcher logs:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a>[watch] warn: input removed, waiting for it to reappear...
+<div class="highlight"><pre><span></span><code><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a>[watch] warn: input removed, waiting for it to reappear...
 </code></pre></div>
 <p>and keeps running. The next time the file reappears, a normal re-run fires.
 Atomic saves (<code>vim</code>, VSCode <code>tmp + rename</code> pattern) stay silent — only
@@ -3015,32 +3046,37 @@ invalidate.</p>
 <p>The feature can be disabled at compile time with <code>cargo build --no-default-features --features=reqwest</code> (omits <code>notify</code> and ~25 transitive crates). A binary built without <code>watch</code> rejects the flag with a clear error.</p>
 <hr />
 <h2 id="stdin-stdout">🔌 Stdin / stdout</h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="c1"># 📥 Read from stdin</span>
-<a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a>cat<span class="w"> </span>data.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;count&quot;: len(data)}&#39;</span>
-<a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a>
-<a id="__codelineno-48-4" name="__codelineno-48-4" href="#__codelineno-48-4"></a><span class="c1"># 🔗 Pipe chain</span>
-<a id="__codelineno-48-5" name="__codelineno-48-5" href="#__codelineno-48-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>https://jsonplaceholder.typicode.com/todos<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[d for d in data if d[&quot;completed&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a><span class="c1"># 📥 Read from stdin</span>
+<a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a>cat<span class="w"> </span>data.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;{&quot;count&quot;: len(data)}&#39;</span>
+<a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a>
+<a id="__codelineno-49-4" name="__codelineno-49-4" href="#__codelineno-49-4"></a><span class="c1"># 🔗 Pipe chain</span>
+<a id="__codelineno-49-5" name="__codelineno-49-5" href="#__codelineno-49-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>https://jsonplaceholder.typicode.com/todos<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;[d for d in data if d[&quot;completed&quot;]]&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </code></pre></div>
 <hr />
 <h2 id="monty-repl-fimod-monty-repl">🐍 Monty REPL (<code>fimod monty repl</code>)</h2>
 <p>Start an interactive Python REPL powered by the embedded Monty engine — no system Python needed.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl
-<a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a><span class="c1"># Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)</span>
-<a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a><span class="c1"># &gt;&gt;&gt; 2 + 2</span>
-<a id="__codelineno-49-4" name="__codelineno-49-4" href="#__codelineno-49-4"></a><span class="c1"># 4</span>
-<a id="__codelineno-49-5" name="__codelineno-49-5" href="#__codelineno-49-5"></a><span class="c1"># &gt;&gt;&gt; [x ** 2 for x in range(5)]</span>
-<a id="__codelineno-49-6" name="__codelineno-49-6" href="#__codelineno-49-6"></a><span class="c1"># [0, 1, 4, 9, 16]</span>
-<a id="__codelineno-49-7" name="__codelineno-49-7" href="#__codelineno-49-7"></a><span class="c1"># &gt;&gt;&gt; exit</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-50-1" name="__codelineno-50-1" href="#__codelineno-50-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl
+<a id="__codelineno-50-2" name="__codelineno-50-2" href="#__codelineno-50-2"></a><span class="c1"># Monty REPL v0.0.8 — fimod v0.1.0-alpha.1 (exit or Ctrl+D to quit)</span>
+<a id="__codelineno-50-3" name="__codelineno-50-3" href="#__codelineno-50-3"></a><span class="c1"># &gt;&gt;&gt; 2 + 2</span>
+<a id="__codelineno-50-4" name="__codelineno-50-4" href="#__codelineno-50-4"></a><span class="c1"># 4</span>
+<a id="__codelineno-50-5" name="__codelineno-50-5" href="#__codelineno-50-5"></a><span class="c1"># &gt;&gt;&gt; [x ** 2 for x in range(5)]</span>
+<a id="__codelineno-50-6" name="__codelineno-50-6" href="#__codelineno-50-6"></a><span class="c1"># [0, 1, 4, 9, 16]</span>
+<a id="__codelineno-50-7" name="__codelineno-50-7" href="#__codelineno-50-7"></a><span class="c1"># &gt;&gt;&gt; exit</span>
+</code></pre></div>
+<p>Use the same sandbox policy controls as <code>fimod shape</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-51-1" name="__codelineno-51-1" href="#__codelineno-51-1"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl<span class="w"> </span>--sandbox-file<span class="w"> </span>./ci-sandbox.toml
+<a id="__codelineno-51-2" name="__codelineno-51-2" href="#__codelineno-51-2"></a>fimod<span class="w"> </span>monty<span class="w"> </span>repl<span class="w"> </span>--sandbox-file<span class="o">=</span><span class="s2">&quot;&quot;</span>
 </code></pre></div>
 <p>Features:</p>
 <ul>
 <li><strong><code>&gt;&gt;&gt;</code>/<code>...</code> prompts</strong> with automatic multi-line continuation (blocks, implicit line joins)</li>
 <li><strong>Command history</strong> (arrow keys, via rustyline)</li>
+<li><strong>Sandbox policy</strong> resolution via <code>--sandbox-file</code>, <code>$FIMOD_SANDBOX_FILE</code>, and <code>~/.config/fimod/sandbox.toml</code></li>
 <li>Exit with <code>exit</code> or ++ctrl+d++</li>
 </ul>
 <div class="admonition tip">
 <p class="admonition-title">Same engine as <code>fimod shape</code></p>
-<p>The REPL runs the exact same Monty runtime used by <code>fimod shape</code>, so you can experiment with Python expressions and data structures before putting them into a mold.</p>
+<p>The REPL runs the same Monty runtime and sandbox policy resolver used by <code>fimod shape</code>, so you can experiment with Python expressions and data structures before putting them into a mold. Mold-only helper families such as <code>re_*</code> and <code>dp_*</code> are not imported into the REPL.</p>
 </div>
 <hr />
 <h2 id="shell-completion">🐚 Shell completion</h2>
@@ -3049,23 +3085,23 @@ invalidate.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="2:5"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><input id="__tabbed_2_4" name="__tabbed_2" type="radio" /><input id="__tabbed_2_5" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Bash</label><label for="__tabbed_2_2">Zsh</label><label for="__tabbed_2_3">Fish</label><label for="__tabbed_2_4">Elvish</label><label for="__tabbed_2_5">PowerShell</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-50-1" name="__codelineno-50-1" href="#__codelineno-50-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval &quot;$(fimod setup completions --shell bash)&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<div class="highlight"><pre><span></span><code><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval &quot;$(fimod setup completions --shell bash)&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-51-1" name="__codelineno-51-1" href="#__codelineno-51-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval &quot;$(fimod setup completions --shell zsh)&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.zshrc
+<div class="highlight"><pre><span></span><code><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval &quot;$(fimod setup completions --shell zsh)&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.zshrc
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>completions<span class="w"> </span>--shell<span class="w"> </span>fish<span class="w"> </span>&gt;<span class="w"> </span>~/.config/fish/completions/fimod.fish
+<div class="highlight"><pre><span></span><code><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>completions<span class="w"> </span>--shell<span class="w"> </span>fish<span class="w"> </span>&gt;<span class="w"> </span>~/.config/fish/completions/fimod.fish
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval (fimod setup completions --shell elvish | slurp)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.elvish/rc.elv
+<div class="highlight"><pre><span></span><code><a id="__codelineno-55-1" name="__codelineno-55-1" href="#__codelineno-55-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;eval (fimod setup completions --shell elvish | slurp)&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.elvish/rc.elv
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="nb">Add-Content</span> <span class="nv">$PROFILE</span> <span class="s1">&#39;fimod setup completions --shell powershell | Out-String | Invoke-Expression&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-56-1" name="__codelineno-56-1" href="#__codelineno-56-1"></a><span class="nb">Add-Content</span> <span class="nv">$PROFILE</span> <span class="s1">&#39;fimod setup completions --shell powershell | Out-String | Invoke-Expression&#39;</span>
 </code></pre></div>
 </div>
 </div>

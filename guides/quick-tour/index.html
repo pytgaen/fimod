@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.43">
+      <meta name="generator" content="zensical-0.0.45">
     
     
       
@@ -1489,6 +1489,8 @@
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w">     </span><span class="c1"># CSV → JSON</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>ndjson<span class="w">  </span><span class="c1"># JSON → NDJSON</span>
 </code></pre></div>
+<p>As the only pipeline step, <code>-e 'data'</code> is a native Rust identity conversion, not
+a Monty execution.</p>
 <h2 id="http-input">🔥 HTTP Input</h2>
 <p>The <code>-i</code> flag accepts URLs just like file paths — fimod fetches, parses, and transforms in one command (no <code>curl | jq</code> needed):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Fetch and transform in one shot</span>

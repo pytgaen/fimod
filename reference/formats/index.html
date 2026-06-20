@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.43">
+      <meta name="generator" content="zensical-0.0.45">
     
     
       
@@ -1496,6 +1496,13 @@
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># 🔗 Slurp + NDJSON</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>cat<span class="w"> </span>*.json<span class="w"> </span><span class="p">|</span><span class="w"> </span>fimod<span class="w"> </span>s<span class="w"> </span>--slurp<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>ndjson
 </code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">JSON array → NDJSON streams natively</p>
+<p>The exact identity conversion <code>-e 'data'</code> streams local/stdin JSON
+top-level arrays directly to NDJSON when the output format resolves to
+<code>ndjson</code> or <code>jsonl</code>. This bypasses Monty and avoids loading the full array
+in memory. Non-array JSON roots keep the normal identity conversion path.</p>
+</div>
 <div class="admonition info">
 <p class="admonition-title">NDJSON vs Lines</p>
 <p><code>ndjson</code> parses each line as JSON. <code>lines</code> treats each line as a raw string.</p>
@@ -1520,7 +1527,9 @@
 <h2 id="csv-csv-tsv">📊 CSV (<code>.csv</code>, <code>.tsv</code>)</h2>
 <ul>
 <li><strong>Input</strong>: Parsed as an <strong>array of objects</strong>. Each row becomes a dict where keys are column headers.</li>
-<li><strong>Output</strong>: Serialized from an array of objects. Keys of the first object become headers.</li>
+<li><strong>Output</strong>: Serialized from an array of objects. By default, keys of the
+  first object become headers. Use <code>--csv-header</code> for an explicit output schema
+  or <code>--csv-scan</code> to scan more rows for columns.</li>
 </ul>
 <div class="admonition warning">
 <p class="admonition-title">CSV values are always strings</p>
@@ -1553,7 +1562,11 @@
 </tr>
 <tr>
 <td><code>--csv-header "a,b,c"</code></td>
-<td>Explicit column names (implies no header in file).</td>
+<td>Explicit input column names; also an explicit output schema for object rows.</td>
+</tr>
+<tr>
+<td><code>--csv-scan &lt;N&gt;</code></td>
+<td>Rows to scan for object-output columns (<code>1</code> default, <code>0</code> = all rows).</td>
 </tr>
 </tbody>
 </table>
@@ -1694,6 +1707,9 @@ or conditional logic on the response</strong>.</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>data.csv<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w">        </span><span class="c1"># explicit → JSON</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>fimod<span class="w"> </span>s<span class="w"> </span>-i<span class="w"> </span>users.json<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;data&#39;</span><span class="w"> </span>--output-format<span class="w"> </span>lines<span class="w">     </span><span class="c1"># explicit → lines</span>
 </code></pre></div>
+<p>When <code>-e 'data'</code> is the only pipeline step, fimod treats it as a native identity
+conversion and does not start Monty. Any non-identity expression or multi-step
+chain uses the normal mold pipeline.</p>
 <h3 id="json-shell-friendly-text">JSON → shell-friendly text</h3>
 <p>A common need: extract values from JSON and feed them to shell tools. Use <code>--output-format lines</code> for lists, <code>--output-format txt</code> for single values:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># 📋 List all names, one per line — ready for xargs, while read, etc.</span>
