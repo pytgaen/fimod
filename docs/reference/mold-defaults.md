@@ -24,14 +24,63 @@ Running this with just `fimod s -i data.csv -m script.py` automatically uses `;`
 | `output-format=<fmt>` | value | Output format |
 | `csv-delimiter=<char>` | value | CSV input delimiter character |
 | `csv-output-delimiter=<char>` | value | CSV output delimiter character |
-| `csv-header=<cols>` | value | Explicit column names (comma-separated) |
+| `csv-header=<cols>` | value | Explicit CSV column names (comma-separated) |
 | `csv-no-input-header` | flag | Input has no header row |
 | `csv-no-output-header` | flag | Don't write header in output |
 | `no-follow` | flag | Don't follow HTTP redirects |
-| `arg=<name> [desc]` | value | Document an `--arg` parameter (name + optional description) |
+| `arg=<name>[:<type>[?][=<default>]] [desc]` | value | Document and optionally type an `--arg` parameter |
 | `env=<VAR> [desc]` | value | Document an `--env` variable (name + optional description) |
 
 ---
+
+## Typed Args
+
+Plain `arg=<name>` keeps the historical behavior: it documents the parameter,
+and `--arg name=value` reaches the mold as a string.
+
+Add a type to validate and cast before `transform()` runs:
+
+```python
+# fimod: arg=threshold:int "Minimum score"
+# fimod: arg=dry_run:bool?=false
+# fimod: arg=filter:json?
+def transform(data, args, **_):
+    if args["dry_run"]:
+        return data
+    threshold = args["threshold"]
+    return [row for row in data if row["score"] >= threshold]
+```
+
+Supported V1 types:
+
+| Type | Example input | Value in `args` |
+|------|---------------|-----------------|
+| `str` | `--arg name=alice` | string |
+| `int` | `--arg threshold=30` | integer |
+| `float` | `--arg ratio=0.75` | float |
+| `bool` | `--arg dry_run=true` | boolean |
+| `json` | `--arg filter={"active":true}` | JSON value |
+
+Required and optional forms:
+
+```python
+# required; missing arg fails before mold execution
+# fimod: arg=threshold:int
+
+# optional; missing arg is absent from args
+# fimod: arg=threshold:int?
+
+# optional with default; missing arg is injected
+# fimod: arg=threshold:int?=10
+
+# explicit None default
+# fimod: arg=threshold:int?=None
+```
+
+`?` only allows the argument to be omitted. If the caller provides a value, it
+must still parse as the declared type. Runtime pipeline args created with
+`Step.create(args={...})` are validated by the target mold's directives after
+they are merged with CLI args.
 
 ## 📏 Priority and parsing rules
 

@@ -3,10 +3,11 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes FIMOD_SETUP_ALL=yes sh
 #
 # Options (environment variables):
 #   FIMOD_VARIANT   standard (default), slim (without HTTP), or fast (speed optimized)
-#   FIMOD_SET_DEFAULT yes=also install slim/fast as the default `fimod` command, no=skip, unset=interactive prompt
+#   FIMOD_SET_DEFAULT yes=also make slim/fast the default `fimod` command, no=skip, unset=interactive prompt (does not answer setup prompts)
 #   FIMOD_INSTALL   install directory (default: /usr/local/bin, falls back to ~/.local/bin)
 #   FIMOD_VERSION   specific version to install (default: latest)
 #   FIMOD_SOURCE    github (default) or gitlab
@@ -246,7 +247,7 @@ else
   mv "$EXTRACTED_BIN" "$TARGET_BIN"
 fi
 
-# ── Optional default command copy for slim/fast ──────────────────────
+# ── Optional default command link/copy for slim/fast ─────────────────
 
 set_default_pref() {
   case "${FIMOD_SET_DEFAULT:-}" in
@@ -255,9 +256,19 @@ set_default_pref() {
   echo "ask"
 }
 
-copy_as_default() {
-  cp "$TARGET_BIN" "$CANONICAL_TARGET"
-  chmod +x "$CANONICAL_TARGET"
+make_default_command() {
+  LINK_TMP="${CANONICAL_TARGET}.tmp.$$"
+  rm -f "$LINK_TMP"
+
+  if ln -s "$BIN_NAME" "$LINK_TMP" 2>/dev/null; then
+    mv -f "$LINK_TMP" "$CANONICAL_TARGET"
+    DEFAULT_INSTALL_MODE="symlink"
+  else
+    rm -f "$LINK_TMP"
+    cp "$TARGET_BIN" "$CANONICAL_TARGET"
+    chmod +x "$CANONICAL_TARGET"
+    DEFAULT_INSTALL_MODE="copy"
+  fi
   DEFAULT_INSTALLED=1
 }
 
@@ -265,7 +276,7 @@ if [ "$VARIANT" != "standard" ]; then
   DEFAULT_PREF=$(set_default_pref)
   case "$DEFAULT_PREF" in
     yes)
-      copy_as_default
+      make_default_command
       ;;
     no)
       ;;
@@ -277,7 +288,7 @@ if [ "$VARIANT" != "standard" ]; then
         read -r REPLY </dev/tty
         case "$REPLY" in
           [yY]*)
-            copy_as_default
+            make_default_command
             ;;
         esac
       fi
@@ -293,7 +304,11 @@ echo "✅ ${BIN_BASENAME} installed to ${TARGET_BIN}"
 echo "   ${INSTALLED}"
 if [ "$DEFAULT_INSTALLED" -eq 1 ]; then
   DEFAULT_VERSION=$("$CANONICAL_TARGET" --version 2>/dev/null || echo "unknown")
-  echo "✅ fimod installed to ${CANONICAL_TARGET}"
+  if [ "${DEFAULT_INSTALL_MODE:-copy}" = "symlink" ]; then
+    echo "✅ fimod linked to ${BIN_NAME} at ${CANONICAL_TARGET}"
+  else
+    echo "✅ fimod installed to ${CANONICAL_TARGET} (copy fallback)"
+  fi
   echo "   ${DEFAULT_VERSION}"
 fi
 

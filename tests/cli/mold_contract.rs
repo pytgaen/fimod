@@ -107,6 +107,35 @@ fn test_arg_values_passed_as_strings_no_type_coercion() {
 }
 
 #[test]
+fn test_mold_show_displays_typed_args() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "typed_show.py",
+        r#"# fimod: arg=limit:int?=10 "Maximum rows"
+def transform(data, args, **_):
+    return data
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["mold", "show", "--path", &mold])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("limit:int?=10"))
+        .stdout(predicate::str::contains("Maximum rows"));
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["mold", "show", "--path", &mold, "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""name": "limit""#))
+        .stdout(predicate::str::contains(r#""type": "int""#))
+        .stdout(predicate::str::contains(r#""optional": true"#))
+        .stdout(predicate::str::contains(r#""default": "10""#));
+}
+
+#[test]
 fn test_mold_signature_full_kwargs_data_args_env_headers() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x":1}"#);

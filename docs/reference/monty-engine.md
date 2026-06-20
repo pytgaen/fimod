@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
+Fimod uses Monty (v0.0.18) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -35,6 +35,7 @@ Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 | Named keyword args | `str.split(sep=",")`, `max(items, key=...)` |
 | Set/frozenset operators | `s1 | s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
+| Context managers (`with`) | Supported, including `with open(...) as f:` when the host permits `open()` |
 
 ### Not Yet Supported
 
@@ -42,7 +43,6 @@ Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 |---------|--------|
 | Classes | Coming soon |
 | Match statements | Coming soon |
-| Context managers (`with`) | Coming soon |
 | Dict merge operator | `a | b` not supported — use `{**a, **b}` or `a.update(b)` |
 | Third-party packages | Will probably never be supported |
 | Full standard library | Only selected modules |
@@ -51,7 +51,9 @@ Fimod uses Monty (v0.0.17) as its execution engine for mold scripts.
 
 Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `sorted`, `reversed`, `sum`, `min`, `max` (with `key=` and `default=`), `abs`, `round`, `isinstance`, `getattr`, `hasattr`, `setattr`, `type`, `id`, `repr`, `str`, `int`, `float`, `bool`, `list`, `dict`, `set`, `tuple`, `print`, `hash`, etc.
 
-**Not available**: `open`, `exec`, `eval`, `compile`, `__import__`, `input`.
+`open()` is syntactically available, but fimod denies it through the sandbox until filesystem mounts exist.
+
+**Not available**: `exec`, `eval`, `compile`, `__import__`, `input`.
 
 ### Standard Library Modules
 
@@ -60,7 +62,7 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `sys` | Partial (version info) |
 | `typing` | Supported (TYPE_CHECKING, annotations) |
 | `asyncio` | Supported (gather, run) |
-| `pathlib` | Supported (via OsAccess — see Security section) |
+| `pathlib` | Supported (via `OsFunctionCall` — see Security section) |
 | `os` | Partial (getenv only — see Security section) |
 | `re` | Supported — compile, search, match, fullmatch, findall, sub, split, finditer, escape; flags: IGNORECASE, MULTILINE, DOTALL, ASCII |
 | `math` | Supported — ~50 functions (floor, ceil, sqrt, log, sin, cos, factorial, gcd, lcm, comb…) + constants (pi, e, tau, inf, nan) |
@@ -102,35 +104,35 @@ Traditional sandboxes start with full access and try to restrict. Monty inverts 
 
 By default, Monty code has:
 
-- No filesystem access
 - No network access
 - No environment variable access
 - No process spawning
-- No `open()`, `exec()`, `eval()`
+- No direct filesystem access. `open()` and `Path.*` route through the host and are denied by fimod unless explicitly implemented.
+- No `exec()`, `eval()`
 - Strict resource limits (memory, recursion, execution time)
 
-### The OsAccess Mechanism
+### The OsFunctionCall Mechanism
 
-Since Monty v0.0.7 (PR [#85](https://github.com/pydantic/monty/pull/85)), Monty supports a **sandboxed filesystem** through `pathlib` and `os` modules. Here's how it works:
+Monty exposes host-sensitive operations through typed `OsFunctionCall` suspensions. Here's how it works:
 
 1. Sandbox code uses standard Python: `Path("/data/file.csv").read_text()`
-2. Monty yields a `RunProgress::OsCall` to the host
+2. Monty yields `RunProgress::OsCall` with a typed operation such as `ReadText`, `Open`, `Getenv`, or `DateTimeNow`
 3. The **host decides** what to do:
-   - **Grant access**: Implement `OsAccess` trait to serve files (e.g., from a virtual filesystem)
-   - **Deny access**: Return `None` (what fimod does)
+   - **Grant access**: return the requested value
+   - **Deny access**: return `None` for legacy `Path.*` calls or a `PermissionError` for calls that need an object such as `open()`
 
-This means `pathlib` and `os.getenv()` are **syntactically valid** in mold scripts, but their behavior is entirely controlled by the host application.
+This means `pathlib`, `open()`, `os.getenv()`, and clock calls are **syntactically valid** in mold scripts, but their behavior is entirely controlled by the host application.
 
-### How Fimod Handles OsAccess
+### How Fimod Handles OsFunctionCall
 
-Fimod **does not implement filesystem access**. All `OsCall` requests return `None`:
+Fimod implements clock and selected environment access through `sandbox.toml`, but **does not implement filesystem access** yet:
 
 ```rust
 // engine.rs
-RunProgress::OsCall(call) => {
-    progress = call
-        .resume(MontyObject::None, print)  // always returns None
-        .map_err(|e| anyhow::anyhow!("Python error in mold:\n{e}"))?;
+RunProgress::OsCall(mut call) => {
+    let function_call = call.take_function_call();
+    let result = dispatch_os_call(function_call, ctx.policy);
+    progress = call.resume(result, print)?;
 }
 ```
 
@@ -142,7 +144,7 @@ RunProgress::OsCall(call) => {
 | `Path("/etc/passwd").read_text()` | `"None"` | `test_sandbox_pathlib_read_text_returns_null` |
 | `os.getenv("HOME")` | `null` | `test_sandbox_os_getenv_returns_null` |
 | `os.getenv("PATH")` | `null` | `test_sandbox_os_getenv_returns_null` |
-| `open("/etc/passwd")` | `NameError` | `test_sandbox_open_not_defined` |
+| `open("/etc/passwd")` | `PermissionError` | `test_sandbox_open_is_denied` |
 | `import subprocess` | Fails | `test_sandbox_no_subprocess` |
 | `import socket` | Fails | `test_sandbox_no_socket` |
 
@@ -155,7 +157,7 @@ Monty supports configurable limits through the `LimitTracker` trait:
 - **Recursion depth**: Prevent stack overflow
 - **Execution time/steps**: Prevent infinite loops
 
-Fimod uses `LimitedTracker` with hard defaults (`max_duration = 2m`, `max_memory = 1GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
+Fimod uses `LimitedTracker` with hard defaults (`max_duration = 10m`, `max_memory = 2GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
 
 ## Performance
 
@@ -181,7 +183,7 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 7. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
 8. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
 9. **You cannot read files** — `Path(...)` calls return `None` in fimod
-10. **You cannot access env vars via os** — `os.getenv(...)` returns `None`; use the `env` parameter with `--env PATTERN` instead
+10. **You cannot access env vars via os unless sandbox policy allows them** — denied `os.getenv(...)` calls return `None`; the `env` parameter with `--env PATTERN` is still the portable fimod-native path
 11. **You cannot import pip packages** — no `requests`, `pandas`, etc.
 12. **You cannot define classes** — use dicts and functions instead
 13. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
@@ -189,11 +191,11 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 
 ## Interactive REPL
 
-The `fimod monty repl` command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform.
+The `fimod monty repl` command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform. The REPL resolves the same sandbox policy as `fimod shape`, including `--sandbox-file <path>` and `--sandbox-file=""`. Mold-only helper families such as `re_*` and `dp_*` are not imported into the REPL.
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.17 — fimod v0.5.0 (exit or Ctrl+D to quit)
+Monty REPL v0.0.18 — fimod v0.8.0 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

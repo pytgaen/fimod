@@ -73,7 +73,9 @@ src/
 ├── registry/          registry submodules — split from the former monolithic registry.rs
 │
 ├── pipeline.rs        orchestration: read → parse → execute_chain → serialize → write.
-│                      `run_pipeline_core` is the single source of truth.
+│                      `run_pipeline_core` is the single source of truth for
+│                      mold execution; `process_identity_input` handles the
+│                      native single-step `-e 'data'` conversion exception.
 ├── engine.rs          Monty execution loop (start / FunctionCall / OsCall / NameLookup),
 │                      external-function dispatch, sandbox enforcement
 ├── mold.rs            script resolution: MoldSource (File / Url / Inline),

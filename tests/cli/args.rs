@@ -197,6 +197,152 @@ def transform(data, args, env, headers, **_):
 }
 
 #[test]
+fn test_typed_arg_int_casts_before_mold() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(
+        &dir,
+        "data.json",
+        r#"[{"name": "Alice", "score": 25}, {"name": "Bob", "score": 35}]"#,
+    );
+    let script = r#"# fimod: arg=threshold:int Minimum score
+def transform(data, args, **_):
+    return [row for row in data if row["score"] >= args["threshold"]]
+"#;
+    let mold = setup_mold(&dir, "typed_filter.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold, "--arg", "threshold=30"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Bob"))
+        .stdout(predicate::str::contains("Alice").not());
+}
+
+#[test]
+fn test_typed_arg_missing_required_fails_before_mold() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=threshold:int
+def transform(data, args, **_):
+    return args["threshold"]
+"#;
+    let mold = setup_mold(&dir, "typed_required.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "arg error: threshold is required (expected int)",
+        ));
+}
+
+#[test]
+fn test_typed_arg_invalid_value_fails_before_mold() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=threshold:int
+def transform(data, args, **_):
+    return args["threshold"]
+"#;
+    let mold = setup_mold(&dir, "typed_invalid.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold, "--arg", "threshold=abc"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "arg error: threshold expected int, got \"abc\"",
+        ));
+}
+
+#[test]
+fn test_typed_arg_optional_missing_is_absent() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=threshold:int?
+def transform(data, args, **_):
+    return args
+"#;
+    let mold = setup_mold(&dir, "typed_optional.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold, "--output-format", "json-compact"])
+        .assert()
+        .success()
+        .stdout("{}\n");
+}
+
+#[test]
+fn test_typed_arg_optional_default_injected() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=threshold:int?=10
+def transform(data, args, **_):
+    return args
+"#;
+    let mold = setup_mold(&dir, "typed_default.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold, "--output-format", "json-compact"])
+        .assert()
+        .success()
+        .stdout("{\"threshold\":10}\n");
+}
+
+#[test]
+fn test_typed_arg_optional_none_default_injected() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=threshold:int?=None
+def transform(data, args, **_):
+    return args
+"#;
+    let mold = setup_mold(&dir, "typed_none_default.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &mold, "--output-format", "json-compact"])
+        .assert()
+        .success()
+        .stdout("{\"threshold\":null}\n");
+}
+
+#[test]
+fn test_typed_arg_bool_and_json_cast() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"{"score": 35}"#);
+    let script = r#"# fimod: arg=dry_run:bool, arg=filter:json
+def transform(data, args, **_):
+    return {"dry_run": args["dry_run"], "filter": args["filter"]}
+"#;
+    let mold = setup_mold(&dir, "typed_bool_json.py", script);
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "-m",
+            &mold,
+            "--arg",
+            "dry_run=true",
+            "--arg",
+            r#"filter={"active":true}"#,
+            "--output-format",
+            "json-compact",
+        ])
+        .assert()
+        .success()
+        .stdout("{\"dry_run\":true,\"filter\":{\"active\":true}}\n");
+}
+
+#[test]
 fn test_arg_multiple() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"name": "world"}"#);
@@ -271,7 +417,7 @@ fn test_debug_shows_formats_on_stderr() {
         .success()
         .stderr(predicate::str::contains("[debug] input format: json"))
         .stderr(predicate::str::contains("[debug] output format: json"))
-        .stderr(predicate::str::contains("[debug] step 1/1 (-e 'data')"))
+        .stderr(predicate::str::contains("[debug] step 1/1").not())
         .stdout(predicate::str::contains("\"name\": \"Alice\""));
 }
 
@@ -282,7 +428,7 @@ fn test_debug_shows_phase_timings() {
 
     assert_cmd::cargo_bin_cmd!("fimod")
         .arg("shape")
-        .args(["-i", &input, "-e", "data", "--debug"])
+        .args(["-i", &input, "-e", r#"{"x": data["x"]}"#, "--debug"])
         .assert()
         .success()
         .stderr(predicate::str::is_match(r"\[debug\] parse: \d+\.\d{3}s").unwrap())

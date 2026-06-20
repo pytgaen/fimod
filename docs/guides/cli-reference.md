@@ -240,20 +240,25 @@ fi
 
 ## ⚙️ Setup
 
-`fimod setup <category> defaults` installs the canonical configuration for a category. The install scripts call the idempotent `--if-needed` form after downloading the binary, but you can re-run it at any time.
+`fimod setup` installs and manages local fimod configuration. The install scripts call the idempotent `--if-needed` form after downloading the binary, but you can re-run it at any time.
 
 ```bash
 fimod setup all defaults --if-needed    # registry + sandbox, only when missing
-fimod setup all defaults --yes          # registry + sandbox in one go
+fimod setup all defaults --preset strict --yes
 fimod setup registry defaults --yes     # community registries only
-fimod setup sandbox defaults --yes      # sandbox policy only
+fimod setup sandbox defaults --preset permissive --yes
+fimod setup sandbox show
+fimod setup sandbox get max-memory
+fimod setup sandbox set --max-duration 20m --max-memory 4GB
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--yes` | Non-interactive (required on CI / non-TTY). |
-| `--force` | Overwrite an existing `sandbox.toml` (ignored for registry). |
+| `--force` | Overwrite an existing `sandbox.toml` when writing defaults (ignored for registry). |
 | `--if-needed` | Install missing defaults, skip already-configured blocks, and leave existing files untouched. |
+| `--preset recommended\|strict\|permissive` | Sandbox preset for `setup sandbox defaults` or `setup all defaults`. |
+| `--sandbox-file <PATH>` | Sandbox policy file for `setup sandbox defaults/show/get/set`; omitted means `~/.config/fimod/sandbox.toml`. |
 
 Setup prompts can also be answered with environment variables. Granular values win over `FIMOD_SETUP_ALL`.
 
@@ -266,7 +271,7 @@ Setup prompts can also be answered with environment variables. Granular values w
 What each target does:
 
 - **`registry`** — installs the community registries in `~/.config/fimod/sources.toml`. Idempotent; safe to re-run. Same effect as the legacy `fimod registry setup`.
-- **`sandbox`** — writes the recommended sandbox policy to `~/.config/fimod/sandbox.toml`. Refuses to overwrite without `--force`; with `--if-needed`, an existing file is left unchanged.
+- **`sandbox`** — writes, inspects, and updates sandbox policies. `defaults` writes a preset and refuses to overwrite without `--force`; `show` prints normalized TOML; `get` prints one value; `set` updates selected fields.
 - **`all`** — runs `registry` then `sandbox`, stopping at the first error.
 
 See [Sandbox policy](#sandbox-policy) for what the sandbox file controls and how it is resolved.
@@ -510,7 +515,7 @@ Override the cache directory with `FIMOD_CACHE_DIR`. For direct-URL molds (not r
 
 ## 🛡️ Sandbox policy
 
-Every `fimod s` invocation runs the mold under a sandbox that limits what it can do on the host. A policy controls three things:
+Every `fimod s` invocation and `fimod monty repl` session runs under a sandbox that limits what Monty code can do on the host. A policy controls three things:
 
 - **Clock access** — whether `datetime.now()` / `date.today()` resolve to real values or raise.
 - **Environment access** — which `os.getenv(KEY)` calls are allowed (glob-matched).
@@ -530,7 +535,7 @@ Special cases:
 - `--sandbox-file=""` (empty string) forces zero-authorization regardless of `$FIMOD_SANDBOX_FILE` or the canonical file. Portable across Linux/macOS/Windows.
 - If `$FIMOD_SANDBOX_FILE` points to a missing path, fimod errors out explicitly rather than falling back silently.
 
-Bootstrap the canonical file with [`fimod setup sandbox defaults --yes`](#setup).
+Bootstrap the canonical file with [`fimod setup sandbox defaults --yes`](#setup), inspect it with `fimod setup sandbox show`, or update individual fields with `fimod setup sandbox set`.
 
 ### Hard limits
 
@@ -538,24 +543,36 @@ Apply **even with zero authorization**:
 
 | Limit | Default |
 |-------|---------|
-| `max_duration` | `2m` |
-| `max_memory` | `1GB` |
+| `max_duration` | `10m` |
+| `max_memory` | `2GB` |
 
-On violation, fimod exits with code `137` and a stderr message like:
+For `fimod s`, a violation exits with code `137` and a stderr message like:
 
 ```
-sandbox exploded: max_duration exceeded (2m)
-sandbox exploded: max_memory exceeded (1024 MB)
+sandbox exploded: max_duration exceeded (10m)
+sandbox exploded: max_memory exceeded (2GB)
 ```
+
+In `fimod monty repl`, the same violation is printed as an error and the REPL session stays open for the next snippet.
 
 ### `sandbox.toml` schema
 
 ```toml
 [sandbox]
 allow_clock  = true              # allow datetime.now() / date.today()
-max_duration = "2m"              # "30s", "2m", "unlimited"
-max_memory   = "1GB"             # "500MB", "1GB", "unlimited"
+max_duration = "10m"             # "30s", "10m", "unlimited"
+max_memory   = "2GB"             # "500MB", "2GB", "unlimited"
 allow_env    = ["LANG", "TZ_*"]  # glob patterns: "*", "PREFIX_*", "EXACT"
+```
+
+Common setup edits:
+
+```bash
+fimod setup sandbox set --deny-clock
+fimod setup sandbox set --max-duration 30m --max-memory 4GB
+fimod setup sandbox set --allow-env LANG --allow-env 'TZ_*'
+fimod setup sandbox set --clear-env
+fimod setup sandbox defaults --sandbox-file ./ci-sandbox.toml --preset strict --yes
 ```
 
 `allow_env = []` (default) blocks every `os.getenv()` call. Patterns match the key name exactly, as a prefix (`TZ_*`), or anything (`*`).
@@ -581,7 +598,8 @@ except PermissionError:
 | `--csv-output-delimiter <char>` | Separator for output (defaults to `--csv-delimiter`). |
 | `--csv-no-input-header` | First line is data, not header. Columns: `col0`, `col1`, ... |
 | `--csv-no-output-header` | Don't write header row in output. |
-| `--csv-header "a,b,c"` | Explicit column names (implies no header in file). |
+| `--csv-header "a,b,c"` | Explicit input column names; also an explicit output schema for object rows. |
+| `--csv-scan <N>` | Rows to scan for object-output columns (`1` default, `0` = all rows). |
 
 ```bash
 # 🔀 CSV → TSV
@@ -651,6 +669,9 @@ echo "Hello $NAME"   # Hello Alice
 # 📑 Lines: one array element per line (shell-friendly lists)
 fimod s -i users.json -e '[u["email"] for u in data]' --output-format lines
 
+# 📃 NDJSON: exact JSON array identity conversion streams element by element
+fimod s -i users.json -e 'data' --output-format ndjson
+
 # 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)
 fimod shape -i https://example.com/file.bin --output-format raw -o file.bin
 ```
@@ -669,6 +690,8 @@ fimod s -i data.json -m filter.py --arg threshold=30 --arg prefix="A"
 ```
 
 Access via `args["key"]` in a mold signature such as `def transform(data, args, **_):`.
+Untyped args arrive as strings. A mold can declare `# fimod: arg=threshold:int`
+to validate and cast the value before `transform()` runs.
 
 ---
 
@@ -681,6 +704,10 @@ fimod s -i config.yaml -e 'data' -o config.toml
 fimod s -i data.csv -e 'data' --output-format json
 fimod s -i users.json -e 'data' --output-format lines
 ```
+
+The exact single-step identity expression `-e 'data'` is optimized as a native
+Rust format conversion. Other expressions and chains run through the Monty
+engine.
 
 ---
 
@@ -854,14 +881,22 @@ fimod monty repl
 # >>> exit
 ```
 
+Use the same sandbox policy controls as `fimod shape`:
+
+```bash
+fimod monty repl --sandbox-file ./ci-sandbox.toml
+fimod monty repl --sandbox-file=""
+```
+
 Features:
 
 - **`>>>`/`...` prompts** with automatic multi-line continuation (blocks, implicit line joins)
 - **Command history** (arrow keys, via rustyline)
+- **Sandbox policy** resolution via `--sandbox-file`, `$FIMOD_SANDBOX_FILE`, and `~/.config/fimod/sandbox.toml`
 - Exit with `exit` or ++ctrl+d++
 
 !!! tip "Same engine as `fimod shape`"
-    The REPL runs the exact same Monty runtime used by `fimod shape`, so you can experiment with Python expressions and data structures before putting them into a mold.
+    The REPL runs the same Monty runtime and sandbox policy resolver used by `fimod shape`, so you can experiment with Python expressions and data structures before putting them into a mold. Mold-only helper families such as `re_*` and `dp_*` are not imported into the REPL.
 
 ---
 

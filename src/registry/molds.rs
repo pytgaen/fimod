@@ -4,7 +4,8 @@ use anyhow::{bail, Context, Result};
 use clap::ValueEnum;
 
 use super::catalog::{
-    effective_description, fetch_catalog, fetch_script_docs, scan_local_molds, CatalogEntry,
+    effective_description, fetch_catalog, fetch_script_docs, scan_local_molds, CatalogArgSpec,
+    CatalogEntry,
 };
 use super::config::{
     load_config, ordered_sources, priority_label, Source, SourceType, SourcesConfig,
@@ -291,6 +292,98 @@ pub(super) fn format_defaults_options(d: &crate::mold::MoldDefaults) -> Vec<Stri
     opts
 }
 
+fn local_arg_declaration(defaults: &crate::mold::MoldDefaults, name: &str) -> String {
+    defaults
+        .arg_specs
+        .iter()
+        .find(|spec| spec.name == name)
+        .map(crate::mold::MoldArgSpec::declaration)
+        .unwrap_or_else(|| name.to_string())
+}
+
+fn catalog_arg_declaration(spec: &CatalogArgSpec) -> String {
+    let mut out = format!("{}:{}", spec.name, spec.arg_type);
+    if spec.optional {
+        out.push('?');
+    }
+    if let Some(default) = &spec.default {
+        out.push('=');
+        out.push_str(default);
+    }
+    out
+}
+
+fn remote_arg_declaration(entry: &CatalogEntry, name: &str) -> String {
+    entry
+        .arg_specs
+        .iter()
+        .find(|spec| spec.name == name)
+        .map(catalog_arg_declaration)
+        .unwrap_or_else(|| name.to_string())
+}
+
+fn local_arg_json(
+    defaults: &crate::mold::MoldDefaults,
+    name: &str,
+    desc: Option<&str>,
+) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "name".to_string(),
+        serde_json::Value::String(name.to_string()),
+    );
+    obj.insert(
+        "description".to_string(),
+        serde_json::Value::String(desc.unwrap_or("").to_string()),
+    );
+    if let Some(spec) = defaults.arg_specs.iter().find(|spec| spec.name == name) {
+        obj.insert(
+            "type".to_string(),
+            serde_json::Value::String(spec.arg_type.label().to_string()),
+        );
+        obj.insert(
+            "optional".to_string(),
+            serde_json::Value::Bool(spec.optional),
+        );
+        if let Some(default) = &spec.default {
+            obj.insert(
+                "default".to_string(),
+                serde_json::Value::String(default.clone()),
+            );
+        }
+    }
+    serde_json::Value::Object(obj)
+}
+
+fn remote_arg_json(entry: &CatalogEntry, name: &str, desc: &str) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "name".to_string(),
+        serde_json::Value::String(name.to_string()),
+    );
+    obj.insert(
+        "description".to_string(),
+        serde_json::Value::String(desc.to_string()),
+    );
+    if let Some(spec) = entry.arg_specs.iter().find(|spec| spec.name == name) {
+        obj.insert(
+            "type".to_string(),
+            serde_json::Value::String(spec.arg_type.clone()),
+        );
+        obj.insert(
+            "optional".to_string(),
+            serde_json::Value::Bool(spec.optional),
+        );
+        if let Some(default) = &spec.default {
+            obj.insert(
+                "default".to_string(),
+                serde_json::Value::String(default.clone()),
+            );
+        }
+    }
+    serde_json::Value::Object(obj)
+}
+
 enum MoldDetail {
     Local {
         script_path: PathBuf,
@@ -401,9 +494,10 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
             if !defaults.args.is_empty() {
                 println!("  Args:");
                 for (name, desc) in &defaults.args {
+                    let arg_name = local_arg_declaration(defaults, name);
                     match desc {
-                        Some(d) => println!("    {name:<16}  {d}"),
-                        None => println!("    {name}"),
+                        Some(d) => println!("    {arg_name:<16}  {d}"),
+                        None => println!("    {arg_name}"),
                     }
                 }
             }
@@ -453,10 +547,11 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
             if !entry.args.is_empty() {
                 println!("  Args:");
                 for (name, desc) in &entry.args {
+                    let arg_name = remote_arg_declaration(entry, name);
                     if desc.is_empty() {
-                        println!("    {name}");
+                        println!("    {arg_name}");
                     } else {
-                        println!("    {name:<16}  {desc}");
+                        println!("    {arg_name:<16}  {desc}");
                     }
                 }
             }
@@ -601,9 +696,11 @@ fn mold_match_to_json(mold_name: &str, m: &MoldMatch) -> serde_json::Value {
                 .map(|p| p.join("README.md"))
                 .filter(|p| p.exists())
                 .map(|p| p.display().to_string());
-            let args: Vec<serde_json::Value> = defaults.args.iter().map(|(name, desc)| {
-                serde_json::json!({ "name": name, "description": desc.as_deref().unwrap_or("") })
-            }).collect();
+            let args: Vec<serde_json::Value> = defaults
+                .args
+                .iter()
+                .map(|(name, desc)| local_arg_json(defaults, name, desc.as_deref()))
+                .collect();
             serde_json::json!({
                 "name": mold_name,
                 "registry": m.reg_name,
@@ -627,7 +724,7 @@ fn mold_match_to_json(mold_name: &str, m: &MoldMatch) -> serde_json::Value {
             let args: Vec<serde_json::Value> = entry
                 .args
                 .iter()
-                .map(|(name, desc)| serde_json::json!({ "name": name, "description": desc }))
+                .map(|(name, desc)| remote_arg_json(entry, name, desc))
                 .collect();
             serde_json::json!({
                 "name": mold_name,

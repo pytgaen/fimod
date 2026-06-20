@@ -106,7 +106,7 @@ jobs:
 
             Install:
             ```
-            FIMOD_VERSION=${{ github.ref_name }} curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
+            curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | FIMOD_VERSION=${{ github.ref_name }} sh
             ```
           prerelease: true
           draft: false

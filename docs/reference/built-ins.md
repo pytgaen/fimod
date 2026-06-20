@@ -321,11 +321,14 @@ Fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments. Decl
 
 ### `args`
 
-Dict of `--arg name=value` pairs. Empty dict `{}` when no `--arg` is passed:
+Dict of `--arg name=value` pairs. Empty dict `{}` when no `--arg` is passed.
+Untyped args arrive as strings; typed arg directives can validate and cast them
+before the mold runs:
 
 ```python
+# fimod: arg=threshold:int
 def transform(data, args, **_):
-    limit  = int(args["threshold"])
+    limit  = args["threshold"]
     prefix = args.get("prefix", "")   # with default
     return [u for u in data if u["name"].startswith(prefix) and u["age"] > limit]
 ```

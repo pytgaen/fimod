@@ -48,7 +48,10 @@ The script downloads the right binary, installs it, then runs `fimod setup all d
 
 > 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
 >
-> Variants install as separate commands by default: `standard` → `fimod`, `slim` → `fimod-slim`, `fast` → `fimod-fast`. For `slim` or `fast`, answer the prompt or set `FIMOD_SET_DEFAULT=yes` to also install that variant as the default `fimod` command.
+> With `curl | sh`, put env vars on the `sh` side of the pipe: `curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes FIMOD_SETUP_ALL=yes sh`. Prefixing `curl` configures `curl`, not the installer.
+>
+> Variants install as separate commands by default: `standard` → `fimod`, `slim` → `fimod-slim`, `fast` → `fimod-fast`. For `slim` or `fast`, answer the prompt or set `FIMOD_SET_DEFAULT=yes` to also make that variant the default `fimod` command.
+> `FIMOD_SET_DEFAULT` does not answer the registry or sandbox setup prompts; use `FIMOD_SETUP_ALL=yes` or `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX` for post-install setup.
 >
 > The standard build includes HTTP/HTTPS and proxy support through `reqwest` + `rustls` + AWS-LC. Use `FIMOD_VARIANT=slim` when binary size matters more than HTTP input or remote mold loading.
 >
@@ -401,19 +404,19 @@ Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls/AWS-LC 
 
 ## 🛡️ Security model
 
-Mold scripts run under a **zero-authorization sandbox** by default. All I/O stays in Rust — a mold cannot read/write files, reach the network, or inspect the host process. Every `fimod s` invocation also enforces hard limits (`max_duration = 2m`, `max_memory = 1GB`) and exits with code `137` on violation. Safe for remote and untrusted molds.
+Mold scripts and Monty REPL snippets run under a **zero-authorization sandbox** by default. All I/O stays in Rust — a mold cannot read/write files, reach the network, or inspect the host process. Every `fimod s` invocation also enforces hard limits (`max_duration = 10m`, `max_memory = 2GB`) and exits with code `137` on violation. REPL violations are printed as errors and the session continues. Safe for remote and untrusted molds.
 
 Opt in to the bits your molds need by writing `~/.config/fimod/sandbox.toml`:
 
 ```toml
 [sandbox]
 allow_clock  = true              # enable datetime.now() / date.today()
-max_duration = "2m"
-max_memory   = "1GB"
+max_duration = "10m"
+max_memory   = "2GB"
 allow_env    = ["LANG", "TZ_*"]  # glob-matched os.getenv() keys
 ```
 
-Bootstrap it with `fimod setup sandbox defaults --yes`, then tune. Override per-invocation with `--sandbox-file <path>`; force zero-authorization with `--sandbox-file=""`. See [Sandbox policy](docs/guides/cli-reference.md#sandbox-policy) for the full reference.
+Bootstrap it with `fimod setup sandbox defaults --yes`, then tune it with `fimod setup sandbox set --max-duration 20m --max-memory 4GB` or inspect it with `fimod setup sandbox show`. Override a shape or REPL run with `--sandbox-file <path>`; force zero-authorization with `--sandbox-file=""`. See [Sandbox policy](docs/guides/cli-reference.md#sandbox-policy) for the full reference.
 
 ## ⚙️ How it works
 

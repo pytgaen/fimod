@@ -40,6 +40,8 @@ mod json;
 mod lines;
 #[path = "cli/mold_contract.rs"]
 mod mold_contract;
+#[path = "cli/monty.rs"]
+mod monty;
 #[path = "cli/msg.rs"]
 mod msg;
 #[path = "cli/multi_slurp.rs"]

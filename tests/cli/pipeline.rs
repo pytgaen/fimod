@@ -560,6 +560,38 @@ def transform(data, pipeline, **_):
         .stdout("STEP|CLI");
 }
 
+#[test]
+fn test_p1_step_create_args_are_cast_by_target_mold_directives() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"1"#);
+    let target = setup_mold(
+        &dir,
+        "target_typed.py",
+        r#"# fimod: arg=limit:int
+def transform(data, args, **_):
+    return args["limit"] + data
+"#,
+    );
+    let injector = setup_mold(
+        &dir,
+        "inject_typed.py",
+        &format!(
+            r#"
+def transform(data, pipeline, **_):
+    pipeline.append(Step.create(mold={target:?}, args={{"limit": "41"}}))
+    return data
+"#
+        ),
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-m", &injector, "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout("42\n");
+}
+
 // ─── C3: bare-kwargs path on insert_next/append is removed (single contract) ─
 
 #[test]

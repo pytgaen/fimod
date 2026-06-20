@@ -9,7 +9,7 @@ homepage = "https://pytgaen.github.io/fimod"
 documentation = "https://pytgaen.github.io/fimod"
 categories = ["command-line-utilities", "development-tools"]
 keywords = ["cli", "data-shaper", "data-transformation", "json", "yaml"]
-rust-version = "1.75"
+rust-version = "1.95"
 
 [features]
 default = ["reqwest", "watch"]
@@ -29,13 +29,13 @@ path = "src/main.rs"
 required-features = ["fast"]
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.17" }
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.18" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde-saphyr = "0.0.26"  # pure-Rust YAML (replaces deprecated serde_yaml)
+serde-saphyr = "0.0.27"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "1", features = ["preserve_order"] }
 csv = "1.4"
 reqwest = { version = "0.13", features = ["blocking", "rustls", "system-proxy"], default-features = false, optional = true }
@@ -90,3 +90,10 @@ assert_fs = "1"
 predicates = "3"
 tempfile = "3"
 httpmock = "0.8"
+
+[patch.crates-io]
+# jiter 0.15.0 on crates.io is pinned to pyo3 0.28.x, which trips
+# RUSTSEC-2026-0176/RUSTSEC-2026-0177 in cargo-audit. Upstream main keeps the
+# same jiter version but has already moved the optional Python bindings to
+# pyo3 0.29.0; remove this patch after the next jiter crate release.
+jiter = { git = "https://github.com/pydantic/jiter", rev = "6d57715e01ec78859c62fc5447073c0b5902de39" }

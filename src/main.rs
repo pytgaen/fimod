@@ -15,8 +15,8 @@ mod cmd;
 #[cfg(feature = "watch")]
 mod watch;
 
-use cli::{Cli, Commands, MoldAction, MontyAction, SetupCategory, SetupDefaults};
-use cmd::setup::SetupOptions;
+use cli::{Cli, Commands, MoldAction, MontyAction, SetupAllAction, SetupCategory, SetupDefaults};
+use cmd::setup::{SandboxSetOptions, SetupOptions};
 
 fn main() -> Result<()> {
     CompleteEnv::with_factory(Cli::command).complete();
@@ -64,7 +64,7 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
         Commands::Registry { action } => cmd::registry::dispatch(action),
         Commands::Mold { action } => cmd::mold::dispatch(action),
         Commands::Monty { action } => match action {
-            MontyAction::Repl => cmd::monty::run_monty_repl(),
+            MontyAction::Repl { sandbox_file } => cmd::monty::run_monty_repl(sandbox_file),
         },
         Commands::Setup { category } => match category {
             SetupCategory::Registry {
@@ -77,20 +77,53 @@ fn dispatch_other(cmd: Commands) -> Result<()> {
             } => cmd::setup::registry_defaults(SetupOptions::new(yes, force, if_needed)),
             SetupCategory::Sandbox {
                 action:
-                    SetupDefaults::Defaults {
+                    cli::SetupSandboxAction::Defaults {
                         yes,
                         force,
                         if_needed,
+                        sandbox_file,
+                        preset,
                     },
-            } => cmd::setup::sandbox_defaults(SetupOptions::new(yes, force, if_needed)),
+            } => cmd::setup::sandbox_defaults(
+                SetupOptions::new(yes, force, if_needed),
+                preset,
+                sandbox_file,
+            ),
+            SetupCategory::Sandbox {
+                action: cli::SetupSandboxAction::Show { sandbox_file },
+            } => cmd::setup::sandbox_show(sandbox_file),
+            SetupCategory::Sandbox {
+                action: cli::SetupSandboxAction::Get { key, sandbox_file },
+            } => cmd::setup::sandbox_get(key, sandbox_file),
+            SetupCategory::Sandbox {
+                action:
+                    cli::SetupSandboxAction::Set {
+                        sandbox_file,
+                        allow_clock,
+                        deny_clock,
+                        max_duration,
+                        max_memory,
+                        allow_env,
+                        clear_env,
+                    },
+            } => cmd::setup::sandbox_set(SandboxSetOptions {
+                sandbox_file,
+                allow_clock,
+                deny_clock,
+                max_duration,
+                max_memory,
+                allow_env,
+                clear_env,
+            }),
             SetupCategory::All {
                 action:
-                    SetupDefaults::Defaults {
+                    SetupAllAction::Defaults {
                         yes,
                         force,
                         if_needed,
+                        preset,
                     },
-            } => cmd::setup::all_defaults(SetupOptions::new(yes, force, if_needed)),
+            } => cmd::setup::all_defaults(SetupOptions::new(yes, force, if_needed), preset),
             SetupCategory::Completions { shell } => {
                 cmd::completions::print_completion_script(shell)
             }
