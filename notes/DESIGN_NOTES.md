@@ -25,8 +25,11 @@ The single source of truth is `run_pipeline_core()` in `pipeline.rs`. `process_s
 Exception: the exact single-step identity expression `-e 'data'` is a native
 format-conversion path. It keeps the explicit identity syntax, but runs
 **Read → Parse → Serialize → Write** in Rust without converting to
-`MontyObject` and without starting Monty. Any other expression, mold, or
-multi-step chain uses the normal mold pipeline.
+`MontyObject` and without starting Monty. JSON-array → NDJSON and NDJSON →
+JSON/JSON-compact conversions stream item by item when their input/output paths
+are distinct; JSON-array → CSV uses its existing streaming writer and column
+scan window. Any other expression, mold, or multi-step chain uses the normal
+mold pipeline.
 
 ### Security: parsing in Rust, logic in Python
 
@@ -145,6 +148,13 @@ defaults to input). `--csv-no-input-header`, `--csv-no-output-header`,
 `--input-format http` fetches a URL via reqwest (blocking) and builds an `HttpResponse` struct with status, headers, body (or `null` for binary), `body_bytes`, `body_size`, `content_type`. Content-Type is mapped to a `DataFormat` for auto-detection.
 
 `--output-format raw` writes bytes directly (no serialization). With `-O` (`--url-filename`), output filenames are derived from URLs.
+
+### Process-wide in-memory caches
+
+Compiled regexes, inline templates and HTTP clients use fixed-capacity LRU
+caches, including during a single pipeline invocation: 256 regexes, 64
+templates and 16 HTTP clients. Eviction only lowers the hit rate; a missing
+entry is compiled or created again, so results do not depend on cache state.
 
 ### MoldDefaults: metadata from mold scripts
 

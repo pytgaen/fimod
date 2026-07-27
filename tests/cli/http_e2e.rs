@@ -183,6 +183,52 @@ fn test_http_content_type_with_charset_suffix_is_parsed() {
 }
 
 #[test]
+fn test_http_envelope_treats_mime_case_insensitively() {
+    let server = MockServer::start();
+    let mock = server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/readme");
+        then.status(200)
+            .header("content-type", "Text/Markdown; charset=utf-8")
+            .body("# Hello");
+    });
+    let url = format!("{}/readme", server.base_url());
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &url,
+            "--input-format",
+            "http",
+            "-e",
+            "data[\"body\"]",
+            "--output-format",
+            "txt",
+        ])
+        .assert()
+        .success()
+        .stdout("# Hello");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &url,
+            "--input-format",
+            "http",
+            "-e",
+            "data",
+            "--output-format",
+            "json-compact",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"body\":\"# Hello\""));
+
+    mock.assert_calls(2);
+}
+
+#[test]
 fn test_http_auth_header_kept_on_same_origin_redirect() {
     let server = MockServer::start();
 

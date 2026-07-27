@@ -26,15 +26,26 @@ fimod s -i events.ndjson -e '[e for e in data if e["level"] == "error"]'
 # 🔀 JSON array → NDJSON
 fimod s -i users.json -e 'data' --output-format ndjson
 
+# 🔀 NDJSON → compact JSON array
+fimod s -i events.ndjson -e 'data' --output-format json-compact
+
 # 🔗 Slurp + NDJSON
 cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 ```
 
-!!! tip "JSON array → NDJSON streams natively"
+!!! tip "Identity JSON ↔ NDJSON conversions stream natively"
     The exact identity conversion `-e 'data'` streams local/stdin JSON
     top-level arrays directly to NDJSON when the output format resolves to
-    `ndjson` or `jsonl`. This bypasses Monty and avoids loading the full array
-    in memory. Non-array JSON roots keep the normal identity conversion path.
+    `ndjson` or `jsonl`. In the other direction, local/stdin NDJSON streams
+    directly to `json` or `json-compact`, ignoring empty lines and preserving
+    exact JSON integers. Both paths bypass Monty and keep memory bounded by the
+    largest item. Non-array JSON roots keep the normal identity conversion path.
+    Eligible regular-file destinations are written through a temporary sibling
+    and replaced only after the complete input succeeds; existing Unix file
+    permissions are preserved. Existing symbolic links, and existing files on
+    Windows, use the buffered identity path to preserve normal file-write
+    semantics. When writing to stdout, values emitted before a later parse error
+    cannot be retracted, as with any streaming pipe.
 
 !!! info "NDJSON vs Lines"
     `ndjson` parses each line as JSON. `lines` treats each line as a raw string.
@@ -133,10 +144,28 @@ fimod s -i users.json -e '[u["email"] for u in data]' --output-format lines
 
 ## 📥 Raw (`--output-format raw`)
 
-An **output-only** format for downloading binary streams or raw bytes. Bypasses the normal data serialization pipeline completely.
+An **output-only** format for copying binary streams or raw bytes. It bypasses
+the normal parsing, mold, and serialization pipeline completely.
 
-- **Input**: Not supported.
-- **Output**: The raw byte stream (e.g. from an HTTP response payload). Requires `--input-format http`.
+- **Input**: stdin, a local file, or an HTTP(S) URL.
+- **Output**: the unchanged byte stream. A single input writes to stdout by
+  default or to `-o PATH`. Multiple inputs require `-O`; each file is written
+  in the current directory using its input path or URL basename.
+
+```bash
+# Copy one local binary without parsing it
+fimod s -i archive.bin --output-format raw -o archive-copy.bin
+
+# Copy multiple local files, preserving each basename
+fimod s -i first/a.bin second/b.bin --output-format raw -O
+
+# Download using the URL filename
+fimod s -i https://example.com/archive.tar.gz --output-format raw -O
+```
+
+`--output-format raw` cannot be combined with a mold or expression. The
+separate `set_output_format("raw")` mold API can pass through the original HTTP
+body and therefore requires an HTTP envelope input.
 
 ---
 

@@ -44,9 +44,13 @@ fimod s -i logs/*.json -m normalize.py -o cleaned/
 curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
 ```
 
+Pre-built macOS archives are available for Apple Silicon (`arm64`) only. On an Intel Mac, use the [source build](#from-source).
+
 The script downloads the right binary, installs it, then runs `fimod setup all defaults --if-needed` for **community registries** (example molds) and the **recommended sandbox policy** (`~/.config/fimod/sandbox.toml`). Already-configured blocks are skipped; missing blocks ask unless you answer with env vars. When installing `slim` or `fast`, the script may also ask whether to install that variant as the default `fimod` command.
 
-> 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=0.1.0` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
+Before extraction, the installer requires the release checksum manifest and an exact entry for the selected asset. Missing manifests, missing entries, and SHA-256 mismatches stop installation. The optional GitLab mirror may lag behind GitHub: `FIMOD_SOURCE=gitlab` therefore also requires an explicit `FIMOD_VERSION`, and that package must contain the selected asset and checksum manifest.
+
+> 💡 Options via env vars: `FIMOD_VARIANT=standard|slim|fast` · `FIMOD_SET_DEFAULT=yes|no` · `FIMOD_INSTALL=~/.local/bin` · `FIMOD_VERSION=X.Y.Z` · `FIMOD_SOURCE=github|gitlab` · `FIMOD_SETUP_ALL=yes|no` (or per category: `FIMOD_SETUP_REGISTRY` / `FIMOD_SETUP_SANDBOX`)
 >
 > With `curl | sh`, put env vars on the `sh` side of the pipe: `curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | FIMOD_VARIANT=fast FIMOD_SET_DEFAULT=yes FIMOD_SETUP_ALL=yes sh`. Prefixing `curl` configures `curl`, not the installer.
 >
@@ -96,7 +100,7 @@ fimod setup all defaults --if-needed
 <details>
 <summary><strong>Option 2 — PowerShell script (execution policy / antivirus may block)</strong></summary>
 
-> ⚠️ If your antivirus blocks this script, use **Option 1 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
+> ⚠️ If your antivirus blocks this script, use **Option 1 (ubi)** instead — it downloads a prebuilt binary directly from GitHub Releases with no installer-script execution.
 
 Download first, then run:
 
@@ -105,7 +109,9 @@ Invoke-RestMethod https://raw.githubusercontent.com/pytgaen/fimod/main/install.p
 & "$env:TEMP\fimod-install.ps1"
 ```
 
-> 💡 Same env var options as Linux: `$env:FIMOD_VARIANT`, `$env:FIMOD_SET_DEFAULT`, `$env:FIMOD_INSTALL`, `$env:FIMOD_VERSION`
+The PowerShell installer applies the same mandatory checksum-manifest and exact-asset verification before extraction.
+
+> 💡 Same env var options as Linux: `$env:FIMOD_VARIANT`, `$env:FIMOD_SET_DEFAULT`, `$env:FIMOD_INSTALL`, `$env:FIMOD_VERSION`, `$env:FIMOD_SOURCE`
 
 </details>
 
@@ -311,7 +317,7 @@ fimod s -i data.json \
 | `gk_*` | fail, assert, warn (validation gates) | `gk_assert(data.get("version"), "missing version")` |
 | `env_subst` | `${VAR}` substitution in templates | `env_subst("Hello ${NAME}", env)` |
 
-> Helpers are implemented in Rust. Regex patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex) (PCRE2). `re_sub` accepts Python `\1`/`\g<name>` syntax; `re_sub_fancy` uses `$1`/`${name}`.
+> Helpers are implemented in Rust. Regex patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex), whose syntax builds on Rust's `regex` crate and Oniguruma. `re_sub` accepts Python `\1`/`\g<name>` syntax; `re_sub_fancy` uses `$1`/`${name}`.
 
 ### 📦 Reusable molds & registries
 
@@ -404,7 +410,7 @@ Powered by [reqwest](https://github.com/seanmonstar/reqwest) with rustls/AWS-LC 
 
 ## 🛡️ Security model
 
-Mold scripts and Monty REPL snippets run under a **zero-authorization sandbox** by default. All I/O stays in Rust — a mold cannot read/write files, reach the network, or inspect the host process. Every `fimod s` invocation also enforces hard limits (`max_duration = 10m`, `max_memory = 2GB`) and exits with code `137` on violation. REPL violations are printed as errors and the session continues. Safe for remote and untrusted molds.
+Mold scripts and Monty REPL snippets run under a **zero-authorization sandbox** by default. All I/O stays in Rust — a mold cannot read/write files, reach the network, or inspect the host process. Every `fimod s` invocation also enforces hard limits (`max_duration = 10m`, `max_memory = 2GB`) and exits with code `137` on violation. REPL violations are printed as errors and the session continues. Remote molds therefore start without host capabilities; review them before granting permissions. Resource limits are local guardrails, not a hostile-code or multi-tenant isolation boundary.
 
 Opt in to the bits your molds need by writing `~/.config/fimod/sandbox.toml`:
 
@@ -452,9 +458,9 @@ Design decisions, invariants, and architectural boundaries stay explicit — see
 
 - **Monty** (the embedded Python runtime) is an early-stage project by Pydantic. It is not CPython, and its API may change between releases.
 - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
-- Versioning follows [Semantic Release](https://semver.org/) - breaking changes bump the major version.
+- Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
 - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
-- Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour), **not** Python's `re` module - see [Built-ins Reference](docs/reference/built-ins.md).
+- Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax, based on Rust's `regex` crate and Oniguruma, **not** Python's `re` module - see [Built-ins Reference](docs/reference/built-ins.md).
 
 > [!NOTE]
 > **Regex: Fimod built-ins vs Monty's `re` module**

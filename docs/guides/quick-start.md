@@ -8,8 +8,10 @@
     curl -fsSL https://raw.githubusercontent.com/pytgaen/fimod/main/install.sh | sh
     ```
 
-    Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS ARM).
+    Downloads the latest pre-built binary for your platform (Linux x86_64/aarch64, macOS Apple Silicon). Pre-built macOS archives are Apple Silicon only; Intel Mac users must install from source.
     After installing the binary, the script runs `fimod setup all defaults --if-needed` for the **community registries** and the **recommended sandbox policy**. Already-configured blocks are skipped; missing blocks ask unless you answer with env vars. When installing `slim` or `fast`, it may also ask whether to install that variant as the default `fimod` command.
+
+    The installer requires the release checksum manifest and an exact checksum entry for the selected asset before extraction. A missing manifest, missing entry, or SHA-256 mismatch aborts installation. The optional GitLab mirror may lag behind GitHub, so `FIMOD_SOURCE=gitlab` also requires an explicit `FIMOD_VERSION` and a complete matching package.
 
     **Options** (environment variables):
 
@@ -19,6 +21,7 @@
     | `FIMOD_SET_DEFAULT` | *prompt* | For `slim`/`fast`: `yes` also makes that variant available as `fimod`; `no` keeps only `fimod-slim` / `fimod-fast` |
     | `FIMOD_INSTALL` | `/usr/local/bin` | Install directory (falls back to `~/.local/bin` if not writable) |
     | `FIMOD_VERSION` | latest | Pin a specific version (e.g. `v0.2.1`) |
+    | `FIMOD_SOURCE` | `github` | Release source: `github` or the optional pinned `gitlab` mirror; GitLab requires `FIMOD_VERSION` |
     | `FIMOD_SETUP_REGISTRY` | *prompt if needed* | `yes` / `no` answer for community registries |
     | `FIMOD_SETUP_SANDBOX` | *prompt if needed* | `yes` / `no` answer for the sandbox policy |
     | `FIMOD_SETUP_ALL` | *prompt if needed* | `yes` / `no` shortcut applied to both when granulars are unset |
@@ -81,7 +84,7 @@
     <details>
     <summary><strong>Option 2 — PowerShell script (execution policy / antivirus may block)</strong></summary>
 
-    > ⚠️ If your antivirus blocks this script, use **Option 1 (ubi)** instead — it downloads a signed binary directly from GitHub Releases with no script execution.
+    > ⚠️ If your antivirus blocks this script, use **Option 1 (ubi)** instead — it downloads a prebuilt binary directly from GitHub Releases with no installer-script execution.
 
     Download first, then run:
 
@@ -90,7 +93,9 @@
     & "$env:TEMP\fimod-install.ps1"
     ```
 
-    Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_SET_DEFAULT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION`
+    The PowerShell installer applies the same mandatory checksum-manifest and exact-asset verification before extraction.
+
+    Same env var options: `$env:FIMOD_VARIANT` · `$env:FIMOD_SET_DEFAULT` · `$env:FIMOD_INSTALL` · `$env:FIMOD_VERSION` · `$env:FIMOD_SOURCE`
 
     The script checks whether the install directory is in your PATH. If not, it displays the commands to add it — copy and run them to make `fimod` available in new terminals.
 

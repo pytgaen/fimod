@@ -48,6 +48,37 @@ jobs:
       - name: cargo test
         run: cargo test --all-features
 
+  installer-posix:
+    name: Installer checksums (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test fail-closed checksum verification
+        run: sh tests/installers.sh
+
+  windows-smoke:
+    name: Windows installer + binary smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build fimod
+        run: cargo build
+
+      - name: Test PowerShell installer and run binary smoke
+        shell: pwsh
+        run: ./tests/installers.ps1 -BinaryPath ./target/debug/fimod.exe
+
   msrv:
     name: MSRV (Rust 1.95)
     runs-on: ubuntu-latest

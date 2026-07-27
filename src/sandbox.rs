@@ -159,14 +159,17 @@ pub fn parse_duration(s: &str) -> Result<Option<Duration>> {
         anyhow!("invalid duration: {s:?} (expected N{{ms|s|m|h}} or \"unlimited\")")
     })?;
 
-    let d = match unit.to_ascii_lowercase().as_str() {
-        "ms" => Duration::from_millis(num),
-        "s" | "" => Duration::from_secs(num),
-        "m" => Duration::from_secs(num * 60),
-        "h" => Duration::from_secs(num * 3600),
+    let multiplier = match unit.to_ascii_lowercase().as_str() {
+        "ms" => return Ok(Some(Duration::from_millis(num))),
+        "s" | "" => 1,
+        "m" => 60,
+        "h" => 3_600,
         other => bail!("invalid duration unit: {other:?} (expected ms|s|m|h)"),
     };
-    Ok(Some(d))
+    let seconds = num
+        .checked_mul(multiplier)
+        .ok_or_else(|| anyhow!("duration overflow: {s:?}"))?;
+    Ok(Some(Duration::from_secs(seconds)))
 }
 
 /// Parse a size string like `"500KB"`, `"1GB"`, `"unlimited"`. Binary units (KiB/MiB/GiB) accepted.
@@ -260,6 +263,8 @@ mod tests {
         assert!(parse_duration("abc").is_err());
         assert!(parse_duration("1d").is_err());
         assert!(parse_duration("-5s").is_err());
+        assert!(parse_duration(&format!("{}m", u64::MAX)).is_err());
+        assert!(parse_duration(&format!("{}h", u64::MAX)).is_err());
     }
 
     #[test]

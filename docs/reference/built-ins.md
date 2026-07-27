@@ -6,7 +6,7 @@ fimod injects the following functions and globals into every mold — **no `impo
 
 ## 🔍 Regex functions (`re_*`)
 
-Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — supports PCRE2 features: lookahead, lookbehind, backreferences, atomic groups.
+Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — syntax based on Rust's `regex` crate and Oniguruma, with lookahead, lookbehind, backreferences, and atomic groups.
 
 **Two functions for replacements** — `re_sub` uses Python syntax (`\1`, `\g<name>`); `re_sub_fancy` uses fancy-regex syntax (`$1`, `${name}`).
 

@@ -105,7 +105,7 @@ pub fn run_shape(mut shape: ShapeArgs, script_refs: Vec<ScriptRef>) -> Result<Cl
     // This intercepts before the regular batch loop.
     let is_multi_slurp = is_batch && shape.slurp;
 
-    validate_post_input_list(&shape, is_batch, is_multi_slurp)?;
+    validate_post_input_list(&shape, is_batch, is_multi_slurp, is_raw_output)?;
 
     if is_raw_output {
         return run_raw_passthrough(shape, debug, is_batch);
@@ -123,7 +123,12 @@ pub fn run_shape(mut shape: ShapeArgs, script_refs: Vec<ScriptRef>) -> Result<Cl
 
 /// Validation pass after `--input-list` has been resolved into `shape.input`.
 /// Checks `--no-input`, `--in-place`, and batch-mode constraints.
-fn validate_post_input_list(shape: &ShapeArgs, is_batch: bool, is_multi_slurp: bool) -> Result<()> {
+fn validate_post_input_list(
+    shape: &ShapeArgs,
+    is_batch: bool,
+    is_multi_slurp: bool,
+    is_raw_output: bool,
+) -> Result<()> {
     if shape.no_input {
         if shape.in_place {
             bail!("--no-input is incompatible with --in-place");
@@ -149,7 +154,7 @@ fn validate_post_input_list(shape: &ShapeArgs, is_batch: bool, is_multi_slurp: b
     }
 
     // Batch validation is skipped for multi-file slurp (it has its own rules).
-    if is_batch && !is_multi_slurp {
+    if is_batch && !is_multi_slurp && !is_raw_output {
         if !shape.in_place && shape.output.is_none() {
             bail!("Batch mode requires -o/--output directory or --in-place");
         }

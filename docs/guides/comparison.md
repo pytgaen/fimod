@@ -22,12 +22,14 @@ fimod s -i data.json -e '[{"id": u["id"], "name": u["name"]} for u in data]' \
 ```
 
 ```bash
-# yq: convert YAML → JSON (yq can't output TOML or CSV)
+# yq: convert YAML → JSON
 yq -o json config.yaml
 
 # fimod: any format → any format
 fimod s -i config.yaml -e 'data' -o config.toml
 ```
+
+yq also supports [CSV/TSV encode, decode, and round-trips](https://mikefarah.gitbook.io/yq/usage/csv-tsv), plus [TOML input](https://mikefarah.gitbook.io/yq/usage/toml). Fimod's distinction is one Python-shaped transform and mold workflow across its supported formats, not the absence of those formats in yq.
 
 **Python one-liner** — works but painful boilerplate:
 
@@ -52,18 +54,18 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **TOML** | ❌ | ✅ (read-only) | manual I/O | 🟢 built-in |
 | **CSV** | ❌ | ✅ (limited) | manual I/O | 🟢 built-in |
 | **NDJSON** | ✅ (--slurp) | ❌ | manual I/O | 🟢 built-in (--slurp) |
-| **Cross-format** | ❌ | YAML↔JSON↔XML | manual | 🟢 any → any |
+| **Cross-format** | ❌ | multiple formats (limits vary) | manual | 🟢 any → any |
 | **Dependencies** | jq binary | yq binary | Python + pip | 🟢 **single binary** |
 | **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~3.3 MB** standard (UPX-compressed; `slim` is smaller) |
 | **Speed-tuned build** | n/a | n/a | custom packaging | 🟢 `fimod-fast` (~15-25% faster on CPU-heavy smoke tests; larger, uncompressed) |
-| **Regex** | limited | limited | `import re` | 🟢 `re_*` built-in (PCRE2) |
+| **Regex** | built-in | RE2 | `import re` | 🟢 `re_*` built-in (fancy-regex) |
 | **Deep access** | `.a.b.c` | `.a.b.c` | manual | 🟢 `dp_get(data, "a.b.c")` |
 | **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `it_unique_by` |
 | **Hashing** | ❌ | ❌ | `import hashlib` | 🟢 `hs_sha256`, `hs_md5`, `hs_sha1` |
 | **In-place edit** | sponge hack | `-i` | manual | 🟢 `--in-place` |
 | **Batch files** | loop | loop | loop | 🟢 `fimod s -i *.json -m t.py -o out/` |
 | **Chaining** | `|` (inside jq) | `|` (inside yq) | manual | 🟢 `-e expr1 -e expr2` |
-| **Exit codes** | ❌ | ❌ | `sys.exit()` | 🟢 `--check` + `set_exit()` |
+| **Exit codes** | ✅ `-e` | ✅ `-e` | `sys.exit()` | 🟢 `--check` + `set_exit()` |
 | **Reusable scripts** | ❌ | ❌ | yes | 🟢 mold scripts + registry |
 | **Remote scripts** | ❌ | ❌ | ❌ | 🟢 `-m https://...` |
 | **HTTP input** | ❌ | ❌ | `requests` + boilerplate | 🟢 `-i https://...` (replaces curl) |

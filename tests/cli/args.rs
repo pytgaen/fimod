@@ -1171,6 +1171,39 @@ fn test_raw_mode_binary_file() {
 }
 
 #[test]
+fn test_raw_mode_batch_uses_input_filenames() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let first_dir = dir.child("first");
+    let second_dir = dir.child("second");
+    first_dir.create_dir_all().unwrap();
+    second_dir.create_dir_all().unwrap();
+    let first = first_dir.child("one.bin");
+    let second = second_dir.child("two.bin");
+    first.write_binary(b"first").unwrap();
+    second.write_binary(b"second").unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .current_dir(dir.path())
+        .arg("shape")
+        .args([
+            "-i",
+            first.path().to_str().unwrap(),
+            second.path().to_str().unwrap(),
+            "--output-format",
+            "raw",
+            "-O",
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(std::fs::read(dir.path().join("one.bin")).unwrap(), b"first");
+    assert_eq!(
+        std::fs::read(dir.path().join("two.bin")).unwrap(),
+        b"second"
+    );
+}
+
+#[test]
 fn test_raw_mode_binary_rejects_mold() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"{"x": 1}"#);

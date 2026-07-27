@@ -37,6 +37,11 @@ Fimod uses Monty (v0.0.18) as its execution engine for mold scripts.
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
 | Context managers (`with`) | Supported, including `with open(...) as f:` when the host permits `open()` |
 
+Monty's runtime integers are arbitrary precision. At the JSON boundary, fimod
+preserves the complete native JSON integer range from `i64::MIN` through
+`u64::MAX` as numeric values. Results outside that bridge range are serialized
+as decimal strings instead of being rounded through `f64`.
+
 ### Not Yet Supported
 
 | Feature | Status |

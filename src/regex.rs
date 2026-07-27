@@ -1,13 +1,14 @@
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use fancy_regex::RegexBuilder;
 use monty::{DictPairs, MontyObject};
 
+use crate::lru_cache::LruCache;
 use crate::monty_args::expect_string;
 
 const DEFAULT_BACKTRACK_LIMIT: usize = 100_000;
+const REGEX_CACHE_CAPACITY: usize = 256;
 
 static BACKTRACK_LIMIT: OnceLock<usize> = OnceLock::new();
 
@@ -25,9 +26,10 @@ fn backtrack_limit() -> usize {
 /// 100k rows would recompile the regex on every iteration. The cache holds an
 /// `Arc` so callers can borrow without locking.
 ///
-/// Bounded only by the set of distinct patterns the running molds use; in
-/// practice that's a handful of strings per pipeline run.
-static REGEX_CACHE: OnceLock<Mutex<HashMap<String, Arc<fancy_regex::Regex>>>> = OnceLock::new();
+/// The 256-entry LRU bound applies process-wide, including within one pipeline
+/// invocation. Eviction only causes a later recompilation.
+type RegexCache = LruCache<String, Arc<fancy_regex::Regex>>;
+static REGEX_CACHE: OnceLock<Mutex<RegexCache>> = OnceLock::new();
 
 /// Compile a regex with a configurable backtrack limit (ReDoS protection).
 /// Override the default (100 000) via `FIMOD_REGEX_BACKTRACK_LIMIT` env var.
@@ -36,9 +38,9 @@ static REGEX_CACHE: OnceLock<Mutex<HashMap<String, Arc<fancy_regex::Regex>>>> = 
 /// (typical inside a mold loop over many rows) reuse the previously built
 /// `Regex`.
 fn compile_regex(pattern: &str) -> Result<Arc<fancy_regex::Regex>> {
-    let cache = REGEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache = REGEX_CACHE.get_or_init(|| Mutex::new(LruCache::new(REGEX_CACHE_CAPACITY)));
     {
-        let guard = cache.lock().unwrap();
+        let mut guard = cache.lock().unwrap();
         if let Some(re) = guard.get(pattern) {
             return Ok(Arc::clone(re));
         }
@@ -413,6 +415,13 @@ mod tests {
             }
             _ => panic!("Expected dict, got {dict:?}"),
         }
+    }
+
+    #[test]
+    fn compiled_regex_cache_reuses_entry() {
+        let first = compile_regex(r"fimod-cache-reuse-\d+").unwrap();
+        let second = compile_regex(r"fimod-cache-reuse-\d+").unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
     }
 
     // ── re_search ──

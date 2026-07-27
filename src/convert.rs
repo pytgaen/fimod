@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use monty::{DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTimeDelta, MontyTimeZone};
 use serde::ser::{SerializeMap, SerializeSeq};
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 fn fmt_date(d: &MontyDate) -> String {
     format!("{:04}-{:02}-{:02}", d.year, d.month, d.day)
@@ -49,22 +49,23 @@ fn fmt_timezone(tz: &MontyTimeZone) -> String {
     }
 }
 
+fn json_number_to_monty(number: &Number) -> MontyObject {
+    if let Some(i) = number.as_i64() {
+        MontyObject::Int(i)
+    } else if let Some(u) = number.as_u64() {
+        MontyObject::BigInt(u.into())
+    } else {
+        MontyObject::Float(number.as_f64().unwrap_or(0.0))
+    }
+}
+
 /// Convert a serde_json::Value into a MontyObject for Monty consumption.
 /// All serde stays in Rust — Monty only sees Python dicts/lists/primitives.
 pub fn json_to_monty(value: &Value) -> MontyObject {
     match value {
         Value::Null => MontyObject::None,
         Value::Bool(b) => MontyObject::Bool(*b),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                MontyObject::Int(i)
-            } else if let Some(f) = n.as_f64() {
-                MontyObject::Float(f)
-            } else {
-                // Fallback for u64 values that don't fit in i64
-                MontyObject::Float(n.as_f64().unwrap_or(0.0))
-            }
-        }
+        Value::Number(n) => json_number_to_monty(n),
         Value::String(s) => MontyObject::String(s.clone()),
         Value::Array(arr) => MontyObject::List(arr.iter().map(json_to_monty).collect()),
         Value::Object(map) => {
@@ -83,15 +84,7 @@ pub fn json_into_monty(value: Value) -> MontyObject {
     match value {
         Value::Null => MontyObject::None,
         Value::Bool(b) => MontyObject::Bool(b),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                MontyObject::Int(i)
-            } else if let Some(f) = n.as_f64() {
-                MontyObject::Float(f)
-            } else {
-                MontyObject::Float(n.as_f64().unwrap_or(0.0))
-            }
-        }
+        Value::Number(n) => json_number_to_monty(&n),
         Value::String(s) => MontyObject::String(s),
         Value::Array(arr) => MontyObject::List(arr.into_iter().map(json_into_monty).collect()),
         Value::Object(map) => {
@@ -113,9 +106,10 @@ pub fn monty_to_json(obj: MontyObject) -> Result<Value> {
         MontyObject::Bool(b) => Ok(Value::Bool(b)),
         MontyObject::Int(i) => Ok(Value::Number(i.into())),
         MontyObject::BigInt(bi) => {
-            // Try to fit into i64, otherwise use string representation
-            if let Ok(i) = i64::try_from(bi.clone()) {
+            if let Ok(i) = i64::try_from(&bi) {
                 Ok(Value::Number(i.into()))
+            } else if let Ok(u) = u64::try_from(&bi) {
+                Ok(Value::Number(u.into()))
             } else {
                 Ok(Value::String(bi.to_string()))
             }
@@ -163,8 +157,10 @@ impl serde::Serialize for MontySerialize<'_> {
             MontyObject::Bool(b) => serializer.serialize_bool(*b),
             MontyObject::Int(i) => serializer.serialize_i64(*i),
             MontyObject::BigInt(bi) => {
-                if let Ok(i) = i64::try_from(bi.clone()) {
+                if let Ok(i) = i64::try_from(bi) {
                     serializer.serialize_i64(i)
+                } else if let Ok(u) = u64::try_from(bi) {
+                    serializer.serialize_u64(u)
                 } else {
                     serializer.serialize_str(&bi.to_string())
                 }
@@ -222,6 +218,25 @@ mod tests {
         ]);
         let monty = json_into_monty(input);
         roundtrip_eq(&monty);
+    }
+
+    #[test]
+    fn json_integer_roundtrip_preserves_u64_range() {
+        for input in [
+            "9007199254740993",
+            "9223372036854775808",
+            "18446744073709551615",
+        ] {
+            let value: Value = serde_json::from_str(input).unwrap();
+
+            for monty in [json_to_monty(&value), json_into_monty(value.clone())] {
+                assert_eq!(
+                    serde_json::to_string(&MontySerialize(&monty)).unwrap(),
+                    input
+                );
+                assert_eq!(monty_to_json(monty).unwrap(), value);
+            }
+        }
     }
 
     #[test]

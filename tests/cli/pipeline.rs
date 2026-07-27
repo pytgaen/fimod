@@ -1,5 +1,6 @@
 use super::helpers::{setup_input, setup_mold};
 use predicates::prelude::*;
+use std::time::Duration;
 
 // ─── pipeline.current_step() ─────────────────────────────────────────────────
 
@@ -205,6 +206,66 @@ def transform(data, pipeline, **_):
         .assert()
         .success()
         .stdout("105\n");
+}
+
+#[test]
+fn test_pipeline_max_duration_is_shared_by_the_whole_chain() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let sandbox = setup_input(
+        &dir,
+        "sandbox.toml",
+        "[sandbox]\nmax_duration = \"20ms\"\nmax_memory = \"unlimited\"\n",
+    );
+    let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+    cmd.arg("shape")
+        .args(["--no-input", "--sandbox-file", &sandbox]);
+    for _ in 0..2_000 {
+        cmd.args(["-e", "data"]);
+    }
+    cmd.timeout(Duration::from_secs(5))
+        .assert()
+        .code(137)
+        .stderr(predicate::str::contains("max_duration"));
+}
+
+#[test]
+fn test_pipeline_rejects_an_exhausted_duration_before_starting_a_step() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let sandbox = setup_input(
+        &dir,
+        "sandbox.toml",
+        "[sandbox]\nmax_duration = \"0ms\"\nmax_memory = \"unlimited\"\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "--sandbox-file", &sandbox, "-e", "1"])
+        .assert()
+        .code(137)
+        .stderr(predicate::str::contains("max_duration"));
+}
+
+#[test]
+fn test_pipeline_self_injection_hits_global_step_limit() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let sandbox = setup_input(
+        &dir,
+        "sandbox.toml",
+        "[sandbox]\nmax_duration = \"unlimited\"\nmax_memory = \"unlimited\"\n",
+    );
+    let recursive = r#"[pipeline.append(Step.create(expr=args["loop"], args={"loop": args["loop"]})) for _ in range(100)] and data"#;
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "--sandbox-file", &sandbox])
+        .args(["--arg", &format!("loop={recursive}")])
+        .args(["-e", recursive])
+        .timeout(Duration::from_secs(5))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dynamic pipeline step limit exceeded",
+        ));
 }
 
 #[test]

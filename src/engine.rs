@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use monty::{
@@ -155,6 +156,7 @@ struct MoldContext<'a> {
     format_override: Arc<Mutex<Option<String>>>,
     output_file: Arc<Mutex<Option<String>>>,
     policy: &'a SandboxPolicy,
+    chain_started_at: Option<Instant>,
     pending_steps: Arc<Mutex<Vec<PendingStep>>>,
     pending_mutations: Arc<Mutex<Vec<PendingMutation>>>,
     current_step_idx: usize,
@@ -812,6 +814,16 @@ fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyOb
 /// Takes `data` as an owned `MontyObject` to avoid the json_to_monty conversion
 /// when the caller has already built a MontyObject directly (e.g. csv_to_monty path).
 pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> MoldResult {
+    execute_mold_with_chain_start(script, data, opts, None)
+}
+
+/// Execute one mold while charging its runtime to a chain-wide duration budget.
+pub(crate) fn execute_mold_with_chain_start(
+    script: &str,
+    data: MontyObject,
+    opts: &MoldOptions<'_>,
+    chain_started_at: Option<Instant>,
+) -> MoldResult {
     let merged_args = build_args_value(opts)?;
     let args_dict = json_to_monty(&merged_args);
 
@@ -857,6 +869,7 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         format_override: Arc::new(Mutex::new(opts.format_override_init.clone())),
         output_file: Arc::new(Mutex::new(opts.output_file_override.clone())),
         policy: opts.policy,
+        chain_started_at,
         pending_steps: Arc::new(Mutex::new(Vec::new())),
         pending_mutations: Arc::new(Mutex::new(Vec::new())),
         current_step_idx: opts.current_step_idx,
@@ -896,7 +909,19 @@ fn run_loop(
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
     let mut sp = StderrPrint;
-    let tracker = LimitedTracker::new(sandbox_resource_limits(ctx.policy));
+    let mut limits = sandbox_resource_limits(ctx.policy);
+    if let (Some(started_at), Some(max_duration)) = (ctx.chain_started_at, ctx.policy.max_duration)
+    {
+        let elapsed = started_at.elapsed();
+        if elapsed >= max_duration {
+            return Err(limit_exceeded(
+                "max_duration",
+                Some(format_duration(max_duration)),
+            ));
+        }
+        limits = limits.max_duration(max_duration - elapsed);
+    }
+    let tracker = LimitedTracker::new(limits);
     let mut progress = runner
         .start(
             inputs,

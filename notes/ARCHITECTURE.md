@@ -98,7 +98,7 @@ graph TB
 | **CLI** | `main.rs`, `cli.rs`, `cmd/*.rs` | `main.rs` parses and dispatches; `cli.rs` owns the clap definitions; `cmd/<name>.rs` holds one handler per subcommand (`shape`, `registry`, `mold`, `monty`, `setup`, `completions`). No business logic in `main.rs` itself. |
 | **Orchestration** | `pipeline.rs` | The pipeline contract: read → parse → chain execute → serialize → write. `run_pipeline_core()` is the single source of truth for mold execution; `process_identity_input()` is the explicit native exception for single-step `-e 'data'` format conversion. |
 | **Script resolution** | `mold.rs`, `registry/*.rs` | Turn `-m foo.py` / `-m https://…` / `-m @name` into a loaded script + base_dir + mold defaults. `registry/config.rs` owns `sources.toml`, `registry/resolve.rs` does `@name` resolution, `registry/catalog.rs` owns `catalog.toml` + cache, `registry/molds.rs` powers the listing/show queries. |
-| **Engine** | `engine.rs` | `execute_mold()` compiles the script via Monty, then drives `run_loop` — yielding on `FunctionCall` (dispatched to built-ins), `OsCall` (denied for now), `NameLookup` (resolved against the external-function catalog). |
+| **Engine** | `engine.rs` | `execute_mold()` compiles the script via Monty, then drives `run_loop` — yielding on `FunctionCall` (dispatched to built-ins), `OsCall` (gated by `SandboxPolicy`), `NameLookup` (resolved against the external-function catalog). |
 | **Built-ins** | `regex.rs`, `dotpath.rs`, `iter_helpers.rs`, `hash.rs`, `gatekeeper.rs`, `msg.rs`, `template.rs`, `env_helpers.rs`, `exit_control.rs`, `format_control.rs` | Rust-implemented helpers exposed to molds. Each module exports `EXTERNAL_FUNCTIONS: &[&str]` + `dispatch(name, args, …)`. Adding a new helper = extend both and wire it into `engine::is_external_function` + `engine::dispatch_external`. |
 | **I/O** | `format.rs`, `http.rs`, `convert.rs`, `serde_compat.rs` | Everything that touches bytes. `DataFormat` is the enum; `Value ↔ MontyObject` conversion is centralised. HTTP is feature-gated behind `reqwest`. |
 | **Testing** | `test_runner.rs` | `fimod mold test` discovers `*.input.*` / `*.expected.*` pairs plus optional `*.run-test.toml`, runs the pipeline, diffs the output. |
@@ -139,7 +139,7 @@ sequenceDiagram
         eng-->>monty: resume(result)
         monty-->>eng: RunProgress::OsCall(...)
         eng-->>monty: resume(None)
-        Note over eng: deny-all today; sandbox.toml in 0.5.0
+        Note over eng: SandboxPolicy gates capabilities and resource limits
         monty-->>eng: RunProgress::Complete(result)
     end
     eng-->>pipe: MoldExecResult (MontyObject + overrides)
@@ -151,7 +151,7 @@ sequenceDiagram
 ## Key invariants
 
 - **`serde_json::Value` is the I/O representation.** Every `parse()` returns it; every `serialize()` consumes it. Monty operates on `MontyObject`; chain steps now thread `MontyObject` directly and convert back to `Value` only at the output boundary or when a re-parse is explicitly requested.
-- **`-e 'data'` is a native identity conversion when it is the whole chain.** It stays in `serde_json::Value` and bypasses Monty entirely; inside multi-step chains it remains a normal inline expression so pipeline step metadata is stable.
+- **`-e 'data'` is a native identity conversion when it is the whole chain.** It bypasses Monty entirely; JSON-array → NDJSON/CSV and NDJSON → JSON/JSON-compact can stream item by item, while other formats stay in `serde_json::Value`. Inside multi-step chains it remains a normal inline expression so pipeline step metadata is stable.
 - **Monty never sees I/O.** `RunProgress::OsCall` yields are routed through `engine.rs::dispatch_os_call` and gated by `SandboxPolicy`. The primitive "Monty calls back, Rust decides" stays.
 - **External functions are dispatched, not imported.** The mold writes `dp_get(data, "a.b.c")` without any `import`. Monty yields `NameLookup` → engine replies with `Function` → subsequent call yields `FunctionCall` → engine dispatches to `dotpath::dispatch`.
 - **Mold chain re-parses on `set_input_format`.** Between chained steps, if a mold called `set_input_format("yaml")`, the current result is re-serialized and re-parsed through the new format (`pipeline.rs:execute_chain`). `"raw"` is only legal as a final-step override.
@@ -166,7 +166,7 @@ sequenceDiagram
 | Add a new subcommand (e.g. `fimod setup`) | New variant in `cli::Commands`, handler in `src/cmd/<name>.rs`, wire through `main::dispatch` / `dispatch_other` | `tests/cli/<name>.rs` |
 | Add a mold defaults directive (e.g. `# fimod: sandbox=`) | Extend `MoldDefaults` struct + `parse_mold_defaults` in `mold.rs` | `tests/cli/mold_defaults.rs` |
 | Add a registry backend (e.g. Bitbucket) | New variant in `registry::config::SourceType` + resolver function in `registry::resolve` | `tests/cli/registry.rs` |
-| Extend the sandbox surface | `engine.rs` `OsCall` branch + new schema in the upcoming `sandbox.rs` | `tests/cli/sandbox.rs` |
+| Extend the sandbox surface | `engine.rs` `OsCall` branch + schema/enforcement in `sandbox.rs` | `tests/cli/sandbox.rs` |
 
 ## What's NOT in this doc
 

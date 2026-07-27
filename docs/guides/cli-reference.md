@@ -179,10 +179,6 @@ fimod s -i defaults.json: -i prod.toml: -s \
 fimod s -i config/base.json:base -i other/base.json:fallback -s \
   -e 'data["fallback"]["host"]'
 
-# 🔍 Diff two files (with df_ helpers, once implemented)
-fimod s -i before.json:old -i after.json:new -s \
-  -e 'df_diff(data["old"], data["new"])'
-
 # 💾 Write result to a file
 fimod s -i a.yaml -i b.yaml -s -e 'data[0]' -o merged.yaml
 ```
@@ -546,6 +542,10 @@ Apply **even with zero authorization**:
 | `max_duration` | `10m` |
 | `max_memory` | `2GB` |
 
+`max_duration` is a budget for the whole mold chain, including steps injected
+at runtime. Each step receives only the time remaining from the original
+invocation budget; starting a new step does not reset the clock.
+
 For `fimod s`, a violation exits with code `137` and a stderr message like:
 
 ```
@@ -671,6 +671,9 @@ fimod s -i users.json -e '[u["email"] for u in data]' --output-format lines
 
 # 📃 NDJSON: exact JSON array identity conversion streams element by element
 fimod s -i users.json -e 'data' --output-format ndjson
+
+# 📋 NDJSON → compact JSON array also streams line by line
+fimod s -i events.ndjson -e 'data' --output-format json-compact
 
 # 📥 Raw: download binary streams or raw bytes (no parsing, bypass pipeline)
 fimod shape -i https://example.com/file.bin --output-format raw -o file.bin

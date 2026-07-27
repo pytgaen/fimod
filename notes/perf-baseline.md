@@ -86,6 +86,46 @@ courtes. Distribution : `fimod` avec UPX, `fimod-fast` sans UPX.
 
 ---
 
+## Mesure locale 0.9.1-dev — 2026-07-10
+
+Cette section est un instantané de la machine de développement, pas une
+promesse de performance portable : AMD Ryzen AI 9 HX 370, Linux WSL2 x86_64.
+Les valeurs sont les médianes de cinq exécutions après warm-up.
+
+```text
+mise exec -- cargo test --release --test performance -- --ignored --nocapture
+mise exec -- cargo test --profile release-fast --features fast --test performance -- --ignored --nocapture
+```
+
+### Conversions identité CLI
+
+| Conversion | Jeu actuel | `release` | `release-fast` | Budget |
+| --- | ---: | ---: | ---: | ---: |
+| NDJSON → JSON compact | 20 000 lignes | 45.765 ms | 29.044 ms | 250 ms |
+| JSON → NDJSON | 20 000 objets | 56.953 ms | 30.767 ms | 250 ms |
+| JSON → CSV | 20 000 objets | 57.871 ms | 31.119 ms | 300 ms |
+
+Les conversions JSON → NDJSON/CSV et NDJSON → JSON sont exécutées en streaming
+par le chemin identité `-e data`. Les trois sorties ont été vérifiées pendant
+la mesure (nombre de lignes ou tableau JSON analysable).
+
+### Autres mesures du même passage
+
+| Test | `release` | `release-fast` |
+| --- | ---: | ---: |
+| JSON parse + Monty round-trip + compact serialize (20 000 objets) | 90.848 ms | 70.669 ms |
+| CSV direct Monty round-trip + serialize (20 000 lignes) | 65.163 ms | 39.945 ms |
+| Chaîne de 3 molds (1 500 objets) | 25.600 ms | 14.220 ms |
+| Filtre JSON vs jq | 76.473 ms / 1.39x | 57.666 ms / 0.97x |
+| YAML → JSON vs yq | 75.937 ms / 0.87x | 46.472 ms / 0.50x |
+| Filtre lignes vs awk | 43.049 ms / 3.47x | 22.749 ms / 1.77x |
+
+Ce passage ne couvre pas encore une matrice 10/100/1 000 MB, la mémoire RSS,
+ni plusieurs machines. Ces mesures de volume et de mémoire restent un protocole
+futur ; elles ne doivent pas être déduites des chiffres ci-dessus.
+
+---
+
 ## Optimisations restantes envisagées
 
-1. Fast-path output `json` (pretty) — gain faible (~5-8 %), peu prioritaire
+1. Matrice 10/100/1 000 MB avec temps, débit et RSS sur plusieurs formats.

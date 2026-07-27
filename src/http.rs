@@ -1,6 +1,18 @@
 use std::collections::HashMap;
+#[cfg(feature = "reqwest")]
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{bail, Result};
+
+#[cfg(feature = "reqwest")]
+use crate::lru_cache::LruCache;
+
+#[cfg(feature = "reqwest")]
+const HTTP_CLIENT_POOL_CAPACITY: usize = 16;
+#[cfg(feature = "reqwest")]
+type ClientPool = LruCache<(u64, bool), reqwest::blocking::Client>;
+#[cfg(feature = "reqwest")]
+static CLIENT_POOL: OnceLock<Mutex<ClientPool>> = OnceLock::new();
 
 /// Result of an HTTP fetch operation.
 pub struct HttpResponse {
@@ -22,8 +34,13 @@ pub fn is_url(s: &str) -> bool {
 /// Returns `None` for unrecognized content types.
 pub fn content_type_to_format(ct: &str) -> Option<&'static str> {
     // Extract the MIME type before any parameters (e.g. charset)
-    let mime = ct.split(';').next().unwrap_or(ct).trim();
-    match mime {
+    let mime = ct
+        .split(';')
+        .next()
+        .unwrap_or(ct)
+        .trim()
+        .to_ascii_lowercase();
+    match mime.as_str() {
         "application/json" => Some("json"),
         "application/x-ndjson" => Some("ndjson"),
         "text/csv" => Some("csv"),
@@ -33,6 +50,11 @@ pub fn content_type_to_format(ct: &str) -> Option<&'static str> {
         "text/plain" | "text/html" => Some("txt"),
         _ => None,
     }
+}
+
+pub(crate) fn is_binary_content_type(ct: &str) -> bool {
+    let mime = ct.split(';').next().unwrap_or(ct).trim();
+    content_type_to_format(mime).is_none() && !mime.to_ascii_lowercase().starts_with("text/")
 }
 
 #[cfg(feature = "reqwest")]
@@ -45,13 +67,11 @@ fn parse_header(h: &str) -> Result<(&str, &str)> {
 
 #[cfg(feature = "reqwest")]
 fn build_client(timeout: u64, no_follow: bool) -> Result<reqwest::blocking::Client> {
-    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
-    static CLIENT_POOL: OnceLock<Mutex<HashMap<(u64, bool), reqwest::blocking::Client>>> =
-        OnceLock::new();
-
-    let pool = CLIENT_POOL.get_or_init(|| Mutex::new(HashMap::new()));
+    // Keep at most 16 connection pools process-wide. Eviction only creates a
+    // fresh client on the next request with the same options.
+    let pool = CLIENT_POOL.get_or_init(|| Mutex::new(LruCache::new(HTTP_CLIENT_POOL_CAPACITY)));
     let key = (timeout, no_follow);
     let mut pool = pool.lock().unwrap();
     if let Some(client) = pool.get(&key) {
@@ -137,21 +157,21 @@ pub fn fetch_url(
         }
     }
 
+    // Reject an error response before reading a potentially large body.
+    if status >= 400 {
+        bail!("HTTP {status} for {url}");
+    }
+
     let bytes = resp
         .bytes()
         .map_err(|e| anyhow::anyhow!("Failed to read HTTP response body: {e}"))?;
     let body_bytes = bytes.to_vec();
 
-    // For non-redirect statuses, check for errors (but allow 3xx when no_follow is set)
-    if status >= 400 {
-        bail!("HTTP {status} for {url}");
-    }
-
     // Detect binary content: if the content-type maps to no known text format and
     // doesn't start with "text/", expose body as empty string (raw bytes are in body_bytes).
     let is_binary = content_type
         .as_deref()
-        .map(|ct| content_type_to_format(ct).is_none() && !ct.starts_with("text/"))
+        .map(is_binary_content_type)
         .unwrap_or(false);
 
     let body = if is_binary {
@@ -237,6 +257,41 @@ pub fn fetch_url(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "reqwest")]
+    #[test]
+    fn fetch_url_rejects_error_status_before_reading_body() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (release_tx, release_rx) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let request_len = stream.read(&mut request).unwrap();
+            assert!(request_len > 0);
+            stream
+                .write_all(
+                    b"HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+            stream.flush().unwrap();
+            release_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        });
+
+        let url = format!("http://{address}/large-error");
+        let error = fetch_url(&url, &[], 1, false, false)
+            .err()
+            .expect("500 response must fail");
+        release_tx.send(()).unwrap();
+        server.join().unwrap();
+
+        assert_eq!(error.to_string(), format!("HTTP 500 for {url}"));
+    }
+
     #[test]
     fn test_is_url() {
         assert!(is_url("http://example.com"));
@@ -254,6 +309,8 @@ mod tests {
             Some("json")
         );
         assert_eq!(content_type_to_format("text/csv"), Some("csv"));
+        assert_eq!(content_type_to_format("Text/CSV"), Some("csv"));
+        assert_eq!(content_type_to_format("Application/JSON"), Some("json"));
         assert_eq!(content_type_to_format("text/yaml"), Some("yaml"));
         assert_eq!(content_type_to_format("application/toml"), Some("toml"));
         assert_eq!(content_type_to_format("text/plain"), Some("txt"));
@@ -264,5 +321,7 @@ mod tests {
         );
         assert_eq!(content_type_to_format("application/octet-stream"), None);
         assert_eq!(content_type_to_format("image/png"), None);
+        assert!(!is_binary_content_type("Text/Markdown; charset=utf-8"));
+        assert!(is_binary_content_type("Application/Octet-Stream"));
     }
 }

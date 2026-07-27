@@ -36,10 +36,20 @@ tasks:
     cmds:
       - cargo test --test cli
 
+  test:installers:
+    desc: Test POSIX installer checksum enforcement without network access
+    cmds:
+      - sh tests/installers.sh
+
   test:performance:
     desc: Run opt-in performance smoke tests in release mode
     cmds:
       - mise exec -- cargo test --release --test performance -- --ignored --nocapture
+
+  test:performance:fast:
+    desc: Run opt-in performance smoke tests with the speed-optimized release-fast profile
+    cmds:
+      - mise exec -- cargo test --profile release-fast --features fast --test performance -- --ignored --nocapture
 
   test:ci:
     desc: Run tests with JUnit XML report (requires cargo-nextest)

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -8,8 +7,11 @@ use minijinja::Environment;
 use monty::MontyObject;
 
 use crate::convert::monty_to_json;
+use crate::lru_cache::LruCache;
 use crate::monty_args::expect_string_owned;
 use crate::serde_compat::NativeNumbers;
+
+const TEMPLATE_CACHE_CAPACITY: usize = 64;
 
 /// Process-wide cache of compiled `minijinja::Environment`s, keyed by
 /// `(hash(template_source), auto_escape)` to avoid cloning the source on
@@ -17,10 +19,9 @@ use crate::serde_compat::NativeNumbers;
 /// hit to detect collisions (rare but theoretically possible with the std
 /// SipHash). On collision, we recompile (correctness preserved, cache lossy).
 ///
-/// Unbounded by design — same rationale as `regex.rs::REGEX_CACHE`: CLI runs
-/// are short-lived; long-running library users with data-derived templates
-/// should clear the cache themselves.
-type TemplateCache = HashMap<(u64, bool), (Arc<str>, Arc<Environment<'static>>)>;
+/// The 64-entry LRU bound applies process-wide, including within one pipeline
+/// invocation. Eviction only causes a later recompilation.
+type TemplateCache = LruCache<(u64, bool), (Arc<str>, Arc<Environment<'static>>)>;
 static TPL_CACHE: OnceLock<Mutex<TemplateCache>> = OnceLock::new();
 
 fn hash_template(s: &str) -> u64 {
@@ -85,7 +86,7 @@ fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<Mon
 }
 
 fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Environment<'static>>> {
-    let cache = TPL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let cache = TPL_CACHE.get_or_init(|| Mutex::new(LruCache::new(TEMPLATE_CACHE_CAPACITY)));
     let key = (hash_template(template_str), auto_escape);
     let mut cache = cache.lock().unwrap();
     if let Some((stored, env)) = cache.get(&key) {
@@ -182,6 +183,13 @@ mod tests {
                 .map(|(k, v)| (MontyObject::String(k.to_string()), v))
                 .collect::<Vec<_>>(),
         ))
+    }
+
+    #[test]
+    fn compiled_template_cache_reuses_entry() {
+        let first = get_or_compile_env("fimod cache reuse {{ value }}", false).unwrap();
+        let second = get_or_compile_env("fimod cache reuse {{ value }}", false).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
     }
 
     #[test]

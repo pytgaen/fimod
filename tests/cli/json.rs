@@ -17,6 +17,26 @@ fn test_json_to_json() {
 }
 
 #[test]
+fn test_json_large_integers_remain_exact_numbers() {
+    let input = "[9007199254740993,9223372036854775808,18446744073709551615]";
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "json",
+            "-e",
+            "[n + 0 for n in data]",
+            "--output-format",
+            "json-compact",
+        ])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .stdout(format!("{input}\n"));
+}
+
+#[test]
 fn test_json_to_yaml() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "test.json", r#"{"name": "Alice", "age": 30}"#);

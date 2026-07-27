@@ -281,7 +281,7 @@ Note: `it_group_by`, `it_sort_by`, and `it_unique_by` take a **string field name
 - **`it_flatten(list)`**: Recursively flatten nested arrays `[[1, 2], [3]]` -> `[1, 2, 3]`.
 
 ### Regex (`re_*`)
-Patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex) (PCRE2 flavour: lookahead, lookbehind, atomic groups). Each function has a `_fancy` variant that uses fancy-regex replacement syntax (`$1`/`${name}`) instead of Python syntax (`\1`/`\g<name>`).
+Patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex), whose syntax builds on Rust's `regex` crate and Oniguruma (including lookahead, lookbehind, and atomic groups). Each function has a `_fancy` variant that uses fancy-regex replacement syntax (`$1`/`${name}`) instead of Python syntax (`\1`/`\g<name>`).
 - **`re_search(r"...", text)`**: Returns `{"match": str, "start": int, "end": int, "groups": [...], "named": {...}}` or `None`.
 - **`re_match(r"...", text)`**: Same as `re_search`, anchored to start of text.
 - **`re_findall(r"...", text)`**: No groups -> `[str, ...]`. 1 group -> `[group_val, ...]`. N groups -> `[[g1, g2], ...]`.
