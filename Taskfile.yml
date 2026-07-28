@@ -71,9 +71,10 @@ tasks:
       - mise exec -- cargo-deny check
 
   outdated:
-    desc: Check root dependencies are up-to-date (cargo-outdated via mise; fails if any are stale)
+    desc: Check root dependencies are up-to-date (except documented compatibility pins)
     cmds:
-      - mise exec -- cargo outdated --root-deps-only --exit-code 1
+      # Monty 0.0.19's Ruff dependency requires get-size2 0.10.1; 0.10.3 is incompatible.
+      - mise exec -- cargo outdated --root-deps-only --ignore get-size2 --exit-code 1
 
   install:nextest:
     desc: Install cargo-nextest

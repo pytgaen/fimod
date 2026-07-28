@@ -40,6 +40,4 @@ skip-tree = []
 unknown-registry = "warn"
 unknown-git = "allow"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = [
-  "https://github.com/pydantic/monty",
-]
+allow-git = []

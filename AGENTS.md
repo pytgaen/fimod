@@ -72,7 +72,8 @@ The intermediate representation between formats is always `serde_json::Value`. M
 - Mold description is extracted from the module-level docstring (`"""..."""`) by `parse_mold_defaults()` into `MoldDefaults.docs`, used by `fimod mold list` (local scan) and `catalog.toml` (remote registries). `# fimod: description=` is no longer supported.
 - `--output-format raw` short-circuits the entire transform pipeline (no mold allowed): fetches URL bytes directly or reads a file as binary and writes to `-o`. `set_output_format("raw")` from within a mold triggers the same binary pass-through but requires `--input-format http` to have populated `http_raw_bytes`.
 - `DataFormat::Txt` serializes `Value::String` as a bare string (no JSON quotes); non-strings fall back to compact JSON. Use `--output-format txt` when piping a mold's string output to another command or to `-i`.
-- Monty is a git dependency (not a stable crate) — its API may change.
+- Monty is consumed from crates.io through the `monty` and `monty-types` crates.
+  Its pre-1.0 API may change between releases.
 
 ## Testing
 

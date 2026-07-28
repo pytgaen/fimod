@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 use serde_json::Value;
 
 pub use crate::engine::PipelineMetadata;

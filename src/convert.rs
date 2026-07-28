@@ -1,5 +1,7 @@
 use anyhow::{bail, Result};
-use monty::{DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTimeDelta, MontyTimeZone};
+use monty_types::{
+    DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTimeDelta, MontyTimeZone,
+};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde_json::{Number, Value};
 
@@ -198,7 +200,7 @@ impl serde::Serialize for MontySerialize<'_> {
 
 #[cfg(test)]
 mod tests {
-    use monty::{MontyDate, MontyDateTime, MontyTimeDelta, MontyTimeZone};
+    use monty_types::{MontyDate, MontyDateTime, MontyTimeDelta, MontyTimeZone};
     use serde_json::json;
 
     use super::*;

@@ -29,7 +29,10 @@ path = "src/main.rs"
 required-features = ["fast"]
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.18" }
+monty = "0.0.19"
+monty-types = "0.0.19"
+# Ruff 0.0.3 is incompatible with get-size2 0.10.3's compact_str 0.10 dependency.
+get-size2 = "=0.10.1"
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
@@ -92,8 +95,8 @@ tempfile = "3"
 httpmock = "0.8"
 
 [patch.crates-io]
-# jiter 0.15.0 on crates.io is pinned to pyo3 0.28.x, which trips
-# RUSTSEC-2026-0176/RUSTSEC-2026-0177 in cargo-audit. Upstream main keeps the
-# same jiter version but has already moved the optional Python bindings to
-# pyo3 0.29.0; remove this patch after the next jiter crate release.
+# Monty 0.0.19 requires jiter ^0.15.0, whose crates.io release resolves its
+# optional Python bindings to pyo3 0.28.x and trips RUSTSEC-2026-0176/0177.
+# This upstream revision keeps jiter at 0.15.0 while upgrading pyo3 to 0.29.0.
+# Remove once a published Monty version accepts jiter 0.16+.
 jiter = { git = "https://github.com/pydantic/jiter", rev = "6d57715e01ec78859c62fc5447073c0b5902de39" }

@@ -1,5 +1,9 @@
 use anyhow::Result;
-use monty::{ExcType, LimitedTracker, MontyObject, MontyRepl, NameLookupResult, ReplProgress};
+use monty::{MontyRepl, ReplProgress};
+use monty_types::{
+    CompileOptions, ExcType, LimitedTracker, MontyException, MontyObject, NameLookupResult,
+    PrintWriter,
+};
 
 use fimod::{sandbox::SandboxPolicy, MONTY_VERSION};
 
@@ -25,6 +29,7 @@ pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
     let mut repl = Some(MontyRepl::new(
         "repl.py",
         LimitedTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
+        CompileOptions::default(),
     ));
     let mut pending_snippet = String::new();
     let mut continuation_mode = ReplContinuationMode::Complete;
@@ -106,7 +111,7 @@ fn repl_feed(repl: &mut Option<FimodRepl>, snippet: &str, policy: &SandboxPolicy
 }
 
 fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) -> ReplRunResult {
-    let mut progress = match repl.feed_start(snippet, vec![], monty::PrintWriter::Stdout) {
+    let mut progress = match repl.feed_start(snippet, vec![], PrintWriter::Stdout) {
         Ok(progress) => progress,
         Err(err) => return Err(Box::new((err.repl, format_repl_error(err.error, policy)))),
     };
@@ -114,16 +119,16 @@ fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) 
     loop {
         match progress {
             ReplProgress::Complete { repl, value } => return Ok((repl, value)),
-            ReplProgress::OsCall(mut call) => {
-                let function_call = call.take_function_call();
-                let result = fimod::engine::sandbox_os_call_result(function_call, policy);
+            ReplProgress::OsCall(call) => {
                 progress = call
-                    .resume(result, monty::PrintWriter::Stdout)
+                    .resume_with(PrintWriter::Stdout, |function_call| {
+                        fimod::engine::sandbox_os_call_result(function_call, policy)
+                    })
                     .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
             }
             ReplProgress::NameLookup(lookup) => {
                 progress = lookup
-                    .resume(NameLookupResult::Undefined, monty::PrintWriter::Stdout)
+                    .resume(NameLookupResult::Undefined, PrintWriter::Stdout)
                     .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
             }
             ReplProgress::FunctionCall(call) => {
@@ -142,7 +147,7 @@ fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) 
     }
 }
 
-fn format_repl_error(err: monty::MontyException, policy: &SandboxPolicy) -> String {
+fn format_repl_error(err: MontyException, policy: &SandboxPolicy) -> String {
     match err.exc_type() {
         ExcType::TimeoutError | ExcType::MemoryError => {
             fimod::engine::translate_monty_error(err, policy).to_string()

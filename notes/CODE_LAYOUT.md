@@ -12,7 +12,7 @@ Where every file lives and what it owns. Companion to `ARCHITECTURE.md` (how the
 fimod/
 ├── Cargo.toml            crate manifest + features (watch, http)
 ├── Cargo.lock            checked in (binary crate)
-├── build.rs              extracts Monty git tag → MONTY_VERSION env at build time
+├── build.rs              extracts Monty crate version → MONTY_VERSION env at build time
 ├── rust-toolchain.toml   pinned toolchain
 ├── mise.toml             local tool versions (cargo-nextest, cargo-deny, etc.)
 ├── Taskfile.yml          high-level commands (task lint / test / build:release / outdated …)
@@ -237,6 +237,7 @@ Read these before any decision on architecture, tooling, or release flow.
 ```
 notes/
 ├── VISION.md                  long-term direction, what we refuse to build
+├── ROADMAP.md                 canonical version themes and decision criteria
 ├── ARCHITECTURE.md            module map, layer responsibilities, end-to-end flow
 ├── DESIGN_NOTES.md            concrete design decisions + tooling conventions
 ├── CODE_LAYOUT.md             this file — where every file lives

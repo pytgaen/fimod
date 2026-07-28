@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &[

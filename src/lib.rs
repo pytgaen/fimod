@@ -22,5 +22,5 @@ pub mod serde_compat;
 pub mod template;
 pub mod test_runner;
 
-/// Monty engine version — extracted from the `tag` in Cargo.toml by build.rs.
+/// Monty engine version — extracted from Cargo.toml by build.rs.
 pub const MONTY_VERSION: &str = env!("MONTY_VERSION");

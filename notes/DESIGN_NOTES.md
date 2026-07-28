@@ -236,9 +236,9 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.18 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.19 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.18` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.19` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.

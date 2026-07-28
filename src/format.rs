@@ -4,7 +4,7 @@ use std::io::{BufRead, Cursor, Read, Write};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use monty::{DictPairs, MontyObject};
+use monty_types::{DictPairs, MontyObject};
 use serde::de::{DeserializeSeed, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::Serializer as _;

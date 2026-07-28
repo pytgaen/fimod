@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use minijinja::Environment;
-use monty::MontyObject;
+#[cfg(test)]
+use monty_types::DictPairs;
+use monty_types::MontyObject;
 
 use crate::convert::monty_to_json;
 use crate::lru_cache::LruCache;
@@ -177,7 +179,7 @@ mod tests {
     }
 
     fn dict(pairs: Vec<(&str, MontyObject)>) -> MontyObject {
-        MontyObject::Dict(monty::DictPairs::from(
+        MontyObject::Dict(DictPairs::from(
             pairs
                 .into_iter()
                 .map(|(k, v)| (MontyObject::String(k.to_string()), v))

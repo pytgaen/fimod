@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 
 use crate::monty_args::expect_string_owned;
 

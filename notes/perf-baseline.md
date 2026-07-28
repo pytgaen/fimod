@@ -126,6 +126,41 @@ futur ; elles ne doivent pas être déduites des chiffres ci-dessus.
 
 ---
 
+## Mesure locale après Monty 0.0.19 — 2026-07-28
+
+Les neuf tests de `tests/performance.rs` passent en profils `release` et
+`release-fast`. Ce passage utilise `--test-threads=1` pour éviter que les tests
+se concurrencent pendant les comparaisons :
+
+```text
+mise exec -- cargo test --release --test performance -- --ignored --nocapture --test-threads=1
+mise exec -- cargo test --profile release-fast --features fast --test performance -- --ignored --nocapture --test-threads=1
+```
+
+| Scénario | `release` | `release-fast` |
+| --- | ---: | ---: |
+| JSON → Monty → JSON compact, 20 000 objets | 53,763 ms | 37,022 ms |
+| CSV → Monty → CSV, 20 000 lignes | 31,813 ms | 24,403 ms |
+| Chaîne de trois molds, 1 500 objets | 9,938 ms | 7,162 ms |
+| JSON → NDJSON, identité native, 20 000 objets | 29,117 ms | 17,324 ms |
+| Filtre JSON | 61,075 ms, soit 1,32× `jq` | 41,051 ms, soit 0,87× `jq` |
+
+### Probes exploratoires de temps et de mémoire
+
+| Scénario | Temps | Pic RSS |
+| --- | ---: | ---: |
+| `it_sort_by(data, "name")`, 100 000 objets | 0,49 s | 390 Mio |
+| `sorted(data, key=lambda row: row["name"])`, 100 000 objets | 0,24 s | 249 Mio |
+| JSON → NDJSON, identité native, 100 000 objets | 0,03 s | 13 Mio |
+| CSV → NDJSON, identité matérialisée, 100 000 lignes | 0,06 s | 85 Mio |
+
+Ces probes localisent des coûts, mais ne comparent pas des contrats strictement
+identiques : les deux tris diffèrent sur certains cas hétérogènes, et les deux
+conversions n'utilisent pas le même parseur. Ces valeurs sont des mesures
+locales, pas une promesse portable.
+
+---
+
 ## Optimisations restantes envisagées
 
 1. Matrice 10/100/1 000 MB avec temps, débit et RSS sur plusieurs formats.

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use fancy_regex::RegexBuilder;
-use monty::{DictPairs, MontyObject};
+use monty_types::{DictPairs, MontyObject};
 
 use crate::lru_cache::LruCache;
 use crate::monty_args::expect_string;
