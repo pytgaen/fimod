@@ -1,13 +1,13 @@
 use anyhow::Result;
 use monty::{MontyRepl, ReplProgress};
 use monty_types::{
-    CompileOptions, ExcType, LimitedTracker, MontyException, MontyObject, NameLookupResult,
-    PrintWriter,
+    CompileOptions, ExcType, MontyException, MontyObject, NameLookupResult, PrintWriter,
+    ResourceTracker,
 };
 
 use fimod::{sandbox::SandboxPolicy, MONTY_VERSION};
 
-type FimodRepl = MontyRepl<LimitedTracker>;
+type FimodRepl = MontyRepl;
 type ReplRunResult = Result<(FimodRepl, MontyObject), Box<(FimodRepl, String)>>;
 
 pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
@@ -28,7 +28,7 @@ pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut repl = Some(MontyRepl::new(
         "repl.py",
-        LimitedTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
+        ResourceTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
         CompileOptions::default(),
     ));
     let mut pending_snippet = String::new();

@@ -1,5 +1,5 @@
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static GLOBAL: mem_limit::CountingMiMalloc = mem_limit::CountingMiMalloc;
 
 use std::process;
 
@@ -12,6 +12,7 @@ use clap_complete::CompleteEnv;
 
 mod cli;
 mod cmd;
+mod mem_limit;
 #[cfg(feature = "watch")]
 mod watch;
 
@@ -19,6 +20,10 @@ use cli::{Cli, Commands, MoldAction, MontyAction, SetupAllAction, SetupCategory,
 use cmd::setup::{SandboxSetOptions, SetupOptions};
 
 fn main() -> Result<()> {
+    // Before any real work, so `max_memory` budgets what molds allocate rather
+    // than what starting fimod costs.
+    mem_limit::arm_baseline();
+
     CompleteEnv::with_factory(Cli::command).complete();
 
     let matches = Cli::command().get_matches();

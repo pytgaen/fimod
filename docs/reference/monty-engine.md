@@ -157,12 +157,14 @@ These tests serve as a **regression guard**: if Monty's behavior changes or fimo
 
 ### Resource Limits
 
-Monty supports configurable limits through the `LimitTracker` trait:
+Monty supports configurable limits through its `ResourceTracker`:
 - **Memory**: Cap total allocation
 - **Recursion depth**: Prevent stack overflow
 - **Execution time/steps**: Prevent infinite loops
 
-Fimod uses `LimitedTracker` with hard defaults (`max_duration = 10m`, `max_memory = 2GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
+Fimod uses `ResourceTracker` with hard defaults (`max_duration = 10m`, `max_memory = 2GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
+
+Since Monty 0.0.20, `max_memory` is **allocator-backed**: the interpreter reads live-byte counters that only a charging global allocator writes. Fimod installs one in `src/mem_limit.rs` — mimalloc wrapped to feed those counters — so the limit stays enforced without giving up mimalloc's performance. A mold that exceeds it is stopped at the interpreter's next checkpoint and reported as `sandbox exploded: max_memory exceeded`.
 
 ## Performance
 
@@ -185,14 +187,18 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 4. **You can use `import re`** — native regex module available; `re.search`, `re.sub`, `re.findall`, etc.
 5. **You can use `import math`** — `math.floor`, `math.sqrt`, `math.factorial`, `math.pi`, etc.
 6. **You can use `import datetime`** — `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`. Datetime objects returned in the output are automatically serialized as ISO 8601 strings
-7. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
-8. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
-9. **You cannot read files** — `Path(...)` calls return `None` in fimod
-10. **You cannot access env vars via os unless sandbox policy allows them** — denied `os.getenv(...)` calls return `None`; the `env` parameter with `--env PATTERN` is still the portable fimod-native path
-11. **You cannot import pip packages** — no `requests`, `pandas`, etc.
-12. **You cannot define classes** — use dicts and functions instead
-13. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
-14. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
+7. **You can use `import collections`** (Monty 0.0.20+) — `Counter`, `defaultdict`, `deque`, `namedtuple`. The `User*` classes are not implemented
+8. **You can use `import itertools`** (Monty 0.0.20+) — `count`, `repeat`, `pairwise`, `compress`, `islice`, `chain`, `cycle`
+9. **You can use `import dataclasses`** (Monty 0.0.20+) — `@dataclass` and `is_dataclass` work on classes defined in the mold itself; `__post_init__` is not supported and is rejected rather than silently skipped
+10. **You can define classes and use decorators** — plain `class` with `__init__` and methods works, and so do function decorators
+11. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
+12. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
+13. **You cannot read files** — `Path(...)` calls return `None` in fimod
+14. **You cannot access env vars via os unless sandbox policy allows them** — denied `os.getenv(...)` calls return `None`; the `env` parameter with `--env PATTERN` is still the portable fimod-native path
+15. **You cannot import pip packages** — no `requests`, `pandas`, etc.
+16. **Use `import x`, not `__import__("x")`** — fimod resolves external functions by name and rejects `__import__`
+17. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
+18. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
 
 ## Interactive REPL
 

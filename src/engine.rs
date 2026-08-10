@@ -5,9 +5,9 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use monty::{MontyRun, RunProgress};
 use monty_types::{
-    CompileOptions, DictPairs, ExcType, ExtFunctionResult, LimitedTracker, MontyDate,
-    MontyDateTime, MontyException, MontyObject, NameLookupResult, OsFunctionCall, PrintWriter,
-    PrintWriterCallback, ResourceLimits,
+    CompileOptions, DictPairs, ExcType, ExtFunctionResult, MontyDate, MontyDateTime,
+    MontyException, MontyObject, NameLookupResult, OsFunctionCall, PrintWriter,
+    PrintWriterCallback, ResourceLimits, ResourceTracker,
 };
 use serde_json::{Number, Value};
 
@@ -927,7 +927,7 @@ fn run_loop(
         }
         limits = limits.max_duration(max_duration - elapsed);
     }
-    let tracker = LimitedTracker::new(limits);
+    let tracker = ResourceTracker::new(limits);
     let mut progress = runner
         .start(
             inputs,
@@ -1031,7 +1031,7 @@ fn run_loop(
 
 /// Build `ResourceLimits` from a `SandboxPolicy`.
 pub fn sandbox_resource_limits(policy: &SandboxPolicy) -> ResourceLimits {
-    let mut limits = ResourceLimits::new();
+    let mut limits = ResourceLimits::default();
     if let Some(d) = policy.max_duration {
         limits = limits.max_duration(d);
     }
