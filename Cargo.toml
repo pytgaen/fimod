@@ -29,17 +29,17 @@ path = "src/main.rs"
 required-features = ["fast"]
 
 [dependencies]
-monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.18" }
+monty = { git = "https://github.com/pydantic/monty", tag = "v0.0.19" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 anyhow = "1"
-serde-saphyr = "0.0.27"  # pure-Rust YAML (replaces deprecated serde_yaml)
+serde-saphyr = "1.0.1"  # pure-Rust YAML (replaces deprecated serde_yaml)
 toml = { version = "1", features = ["preserve_order"] }
 csv = "1.4"
 reqwest = { version = "0.13", features = ["blocking", "rustls", "system-proxy"], default-features = false, optional = true }
-fancy-regex = "0.18"
+fancy-regex = "0.19"
 rustyline = "18"
 md-5 = "0.11"
 sha1 = "0.11"
