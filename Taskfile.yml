@@ -73,7 +73,7 @@ tasks:
   outdated:
     desc: Check root dependencies are up-to-date (except documented compatibility pins)
     cmds:
-      # Monty 0.0.19's Ruff dependency requires get-size2 0.10.1; 0.10.3 is incompatible.
+      # get-size2 is pinned to 0.10.1 for Ruff compatibility; see Cargo.toml.
       - mise exec -- cargo outdated --root-deps-only --ignore get-size2 --exit-code 1
 
   install:nextest:

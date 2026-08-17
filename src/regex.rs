@@ -150,7 +150,7 @@ fn capture_group_count(re: &fancy_regex::Regex) -> usize {
 /// Returns (groups_list, named_dict_or_none).
 fn extract_groups(
     re: &fancy_regex::Regex,
-    caps: &fancy_regex::Captures,
+    caps: &fancy_regex::Captures<'_, str>,
 ) -> (MontyObject, MontyObject) {
     // Numbered groups: 1..N (skip group 0 = full match)
     let num_groups = capture_group_count(re);
@@ -186,7 +186,7 @@ fn extract_groups(
 
 /// Build a match result dict with capture groups:
 /// {"match": str, "start": int, "end": int, "groups": [str|None, ...], "named": {str: str} | None}
-fn captures_to_dict(re: &fancy_regex::Regex, caps: &fancy_regex::Captures) -> MontyObject {
+fn captures_to_dict(re: &fancy_regex::Regex, caps: &fancy_regex::Captures<'_, str>) -> MontyObject {
     let full = caps.get(0).expect("group 0 always exists");
     let (groups, named) = extract_groups(re, caps);
 
