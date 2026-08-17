@@ -109,6 +109,10 @@ container_start() {
             docker run -d --name "$CONTAINER_NAME" "$IMAGE" sleep infinity >/dev/null
             # wait for container to be ready
             docker exec "$CONTAINER_NAME" true
+            # ubuntu:24.04 ships without a trust store, so reqwest cannot even
+            # build its HTTPS client and remote-mold tests fail as "not found"
+            docker exec "$CONTAINER_NAME" apt-get update -qq >/dev/null
+            docker exec "$CONTAINER_NAME" apt-get install -y -qq ca-certificates curl >/dev/null 2>&1
             ;;
         incus)
             incus rm "$CONTAINER_NAME" --force 2>/dev/null || true
