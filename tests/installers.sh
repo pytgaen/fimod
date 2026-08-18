@@ -8,7 +8,32 @@ TEST_ROOT=$(mktemp -d)
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 VERSION="v0.0.0-test"
-ASSET="fimod-${VERSION}-x86_64-unknown-linux-musl.tar.gz"
+
+# install.sh derives its asset name from uname, so the fixture has to follow the
+# same mapping. Hardcoding the linux triple made the mock curl reject every URL
+# on any other runner.
+# Windows is covered by install.ps1 and its own job, so only the tar.gz targets
+# install.sh serves over POSIX are mapped here.
+case "$(uname -s)" in
+  Linux*)  TEST_OS="linux" ;;
+  Darwin*) TEST_OS="macos" ;;
+  *) echo "installer test: unsupported OS $(uname -s)" >&2; exit 1 ;;
+esac
+
+case "$(uname -m)" in
+  x86_64|amd64)  TEST_ARCH="x86_64" ;;
+  aarch64|arm64) TEST_ARCH="aarch64" ;;
+  *) echo "installer test: unsupported arch $(uname -m)" >&2; exit 1 ;;
+esac
+
+case "${TEST_OS}-${TEST_ARCH}" in
+  linux-x86_64)  TEST_TARGET="x86_64-unknown-linux-musl" ;;
+  linux-aarch64) TEST_TARGET="aarch64-unknown-linux-musl" ;;
+  macos-aarch64) TEST_TARGET="aarch64-apple-darwin" ;;
+  *) echo "installer test: no target mapping for ${TEST_OS}/${TEST_ARCH}" >&2; exit 1 ;;
+esac
+
+ASSET="fimod-${VERSION}-${TEST_TARGET}.tar.gz"
 FIXTURE_DIR="${TEST_ROOT}/fixture"
 MOCK_BIN_DIR="${TEST_ROOT}/mock-bin"
 mkdir -p "${FIXTURE_DIR}/package" "$MOCK_BIN_DIR"
