@@ -21,6 +21,7 @@
 - **http:** detect MIME types case-insensitively in parsed and structured HTTP inputs, and keep unknown `text/*` response bodies textual.
 - **http:** reject HTTP error statuses before reading potentially large response bodies.
 - **library:** return an explicit error when `run_pipeline()` receives a configuration with no mold or expression step.
+- **registry:** stop presenting an unreachable registry as proof that a mold does not exist. `@mold` resolution silently discarded every per-registry error, so a network or TLS failure surfaced as `Mold 'x' not found in any configured registry` and sent offline users hunting for a typo. Failures are now classified: when no registry could be queried the error says so, and otherwise each registry is listed as either queried without a match or unreachable, so a partial answer is visible as such.
 
 ### Security
 
@@ -55,4 +56,5 @@
 - **deps:** drop the `jiter` Git patch as its comment anticipated — v0.0.21 resolves `jiter` 0.16.0 from the registry, leaving no Git source in the lockfile.
 - **deps:** refresh the full lockfile and upgrade `serde-saphyr` to 1.1 and `fancy-regex` to 0.19, the only root dependencies left behind. fancy-regex 0.19 makes `Captures` generic over its input type so it can back both `str` and `[u8]` matching; fimod only ever matches against `str`.
 - **deps:** document why `get-size2` stays pinned at 0.10.1 — 0.10.2 already moves to `compact_str` 0.10 while Ruff is still on 0.9, putting two `CompactString` types in the graph and breaking Ruff's `derive(GetSize)`.
+- **tooling:** track the stable toolchain in `mise.toml` instead of pinning the MSRV. CI lints and tests on `rust-toolchain.toml`'s stable channel, so pinning 1.95 locally made `task lint` pass on trees CI rejected — clippy lints introduced after 1.95 simply do not exist there. The floor stays guarded by the dedicated MSRV job and the new `task lint:msrv`.
 - **build:** scope the `unsafe_code` derogation to `src/mem_limit.rs` alone via a module-level `#![expect(...)]`, where the allocator charges Monty's memory counters; it stays denied everywhere else.
