@@ -132,6 +132,14 @@ fn test_watch_debounces_rapid_writes_into_single_rerun() {
     let output = dir.child("out.json");
     input.write_str(r#"{"n":0}"#).unwrap();
 
+    // The burst below must fit inside one quiet window for the coalescing to be
+    // observable. The 500ms default is enough locally but not on a loaded CI
+    // runner, where five create+write+rename cycles can outlast it — and then
+    // two reruns are correct behaviour rather than a broken debounce. Pin a
+    // generous window so the assertion stays strict and tests the invariant
+    // instead of the runner's speed.
+    const BURST_QUIET_MS: u64 = 2_000;
+
     let bin = assert_cmd::cargo::cargo_bin("fimod");
     let mut child = Command::new(bin)
         .arg("shape")
@@ -144,6 +152,7 @@ fn test_watch_debounces_rapid_writes_into_single_rerun() {
             "data",
             "--watch",
         ])
+        .env("FIMOD_WATCH_QUIET_MS", BURST_QUIET_MS.to_string())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -179,7 +188,8 @@ fn test_watch_debounces_rapid_writes_into_single_rerun() {
         "debounced rerun to write n=5",
     );
 
-    thread::sleep(Duration::from_millis(500));
+    // Outlast a full quiet window so a straggling third run would be observed.
+    thread::sleep(Duration::from_millis(BURST_QUIET_MS + 500));
 
     let lines = stderr_lines.lock().unwrap();
     let run_count = lines.iter().filter(|l| l.contains("[watch] run #")).count();

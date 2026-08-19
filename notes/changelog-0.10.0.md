@@ -48,6 +48,7 @@
 - **ci:** add fail-closed installer fixtures and a Windows job that exercises the PowerShell installer plus a real binary transformation.
 - **installers:** derive the fixture asset target from `uname` instead of a hardcoded linux triple, so the fail-closed checksum suite actually exercises macOS rather than failing on an asset name the installer never requests.
 - **e2e:** provision `ca-certificates` in the docker container of the local prerelease harness. `ubuntu:24.04` ships without a trust store, so remote-mold tests failed there regardless of the binary under test.
+- **watch:** pin the quiet window in the debounce coalescing test instead of relying on the 500ms default. Five create+write+rename cycles can outlast that window on a loaded CI runner, where two reruns are correct behaviour, so the test failed intermittently on macOS while the debounce itself was sound.
 - **sandbox:** cover gradual memory accumulation against `max_memory`, closing the gap that let the enforcement regression build green — only limit parsing was covered before, never the limit itself.
 
 ### Housekeeping
