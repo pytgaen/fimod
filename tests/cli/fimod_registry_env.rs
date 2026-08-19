@@ -251,3 +251,73 @@ fn test_fimod_registry_unknown_named_falls_to_sources_toml() {
         .failure()
         .stderr(predicate::str::contains("Registry 'ghost' not found"));
 }
+
+// ── unqueryable vs absent registries ────────────────────────────────────────
+
+/// A registry that cannot be queried must never be reported as proof that the
+/// mold does not exist — the resolver has no idea either way.
+#[test]
+fn test_unqueryable_registry_does_not_claim_mold_is_absent() {
+    let home = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "-m", "@normalize"])
+        .env("HOME", home.path())
+        .env("FIMOD_REGISTRY", "down=https://unreachable.invalid/molds")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no registry could be queried"))
+        .stderr(predicate::str::contains("down"))
+        .stderr(predicate::str::contains("not found in any configured registry").not());
+}
+
+/// A registry that answers and does not carry the mold is genuine evidence of
+/// absence, so the wording stays assertive.
+#[test]
+fn test_queried_registry_reports_mold_as_absent() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let molds_dir = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "-m", "@normalize"])
+        .env("HOME", home.path())
+        .env(
+            "FIMOD_REGISTRY",
+            format!("local={}", molds_dir.path().to_str().unwrap()),
+        )
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "not found in any configured registry",
+        ))
+        .stderr(predicate::str::contains("queried, no match"));
+}
+
+/// Mixed outcome: one registry answered, so "not found" holds, but the silent
+/// one is still listed so the user knows the answer is partial.
+#[test]
+fn test_mixed_registries_report_both_outcomes() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let molds_dir = assert_fs::TempDir::new().unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["--no-input", "-m", "@normalize"])
+        .env("HOME", home.path())
+        .env(
+            "FIMOD_REGISTRY",
+            format!(
+                "down=https://unreachable.invalid/molds,local={}",
+                molds_dir.path().to_str().unwrap()
+            ),
+        )
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "not found in any configured registry",
+        ))
+        .stderr(predicate::str::contains("unreachable:"))
+        .stderr(predicate::str::contains("queried, no match"));
+}

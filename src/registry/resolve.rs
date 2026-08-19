@@ -101,8 +101,46 @@ pub(super) fn env_display_name(entry: &EnvRegistry, anon_index: &mut usize) -> S
 
 // ── mold resolution ───────────────────────────────────────────────────────────
 
+/// Why a single registry did not yield the mold.
+///
+/// The distinction drives the final error message: a registry that answered and
+/// does not carry the mold is evidence of absence, while one that could not be
+/// queried at all says nothing about whether the mold exists.
+pub(super) enum SourceMiss {
+    /// The registry was queried successfully and does not carry this mold.
+    Absent(anyhow::Error),
+    /// The registry could not be queried: network failure, TLS problem,
+    /// misconfiguration, or a catalog that could not be read.
+    Unqueryable(anyhow::Error),
+}
+
+impl SourceMiss {
+    /// The underlying error, whatever the reason.
+    fn into_error(self) -> anyhow::Error {
+        match self {
+            SourceMiss::Absent(e) | SourceMiss::Unqueryable(e) => e,
+        }
+    }
+
+    /// Short one-line reason for the per-registry breakdown.
+    fn reason(&self) -> String {
+        match self {
+            SourceMiss::Absent(_) => "queried, no match".to_string(),
+            SourceMiss::Unqueryable(e) => format!("unreachable: {e}"),
+        }
+    }
+
+    fn is_unqueryable(&self) -> bool {
+        matches!(self, SourceMiss::Unqueryable(_))
+    }
+}
+
 /// Try resolving a mold name against a single source.
-fn resolve_source(source: &Source, mold_name: &str, no_cache: bool) -> Result<MoldSource> {
+fn resolve_source(
+    source: &Source,
+    mold_name: &str,
+    no_cache: bool,
+) -> std::result::Result<MoldSource, SourceMiss> {
     let token = effective_token(source);
     match &source.kind {
         SourceType::Local => resolve_local(source, mold_name),
@@ -132,7 +170,8 @@ pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
         // Try named FIMOD_REGISTRY entries first
         for entry in &env_entries {
             if entry.name.as_deref() == Some(source_name) {
-                return resolve_source(&entry.source, mold_name, no_cache);
+                return resolve_source(&entry.source, mold_name, no_cache)
+                    .map_err(SourceMiss::into_error);
             }
         }
 
@@ -142,21 +181,29 @@ pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
                 "Registry '{source_name}' not found. Use 'fimod registry list' to see available registries."
             )
         })?;
-        return resolve_source(source, mold_name, no_cache);
+        return resolve_source(source, mold_name, no_cache).map_err(SourceMiss::into_error);
     }
 
-    // Bare @name — try FIMOD_REGISTRY entries first (env overrides config)
+    // Bare @name — try FIMOD_REGISTRY entries first (env overrides config).
+    // Every miss is recorded: a registry that could not be queried must not be
+    // reported as proof that the mold does not exist.
     let mold_name = spec;
+    let mut misses: Vec<(String, SourceMiss)> = Vec::new();
+    let mut anon_index = 0usize;
+
     for entry in &env_entries {
-        if let Ok(result) = resolve_source(&entry.source, mold_name, no_cache) {
-            return Ok(result);
+        let label = env_display_name(entry, &mut anon_index);
+        match resolve_source(&entry.source, mold_name, no_cache) {
+            Ok(result) => return Ok(result),
+            Err(miss) => misses.push((label, miss)),
         }
     }
 
     // Then try all sources.toml registries in priority order
-    for (_, source, _) in ordered_sources(&cfg) {
-        if let Ok(result) = resolve_source(source, mold_name, no_cache) {
-            return Ok(result);
+    for (name, source, _) in ordered_sources(&cfg) {
+        match resolve_source(source, mold_name, no_cache) {
+            Ok(result) => return Ok(result),
+            Err(miss) => misses.push((name.to_string(), miss)),
         }
     }
 
@@ -167,10 +214,43 @@ pub fn resolve(spec: &str, no_cache: bool) -> Result<MoldSource> {
              Use 'fimod registry add' or set FIMOD_REGISTRY."
         );
     }
-    bail!(
-        "Mold '{mold_name}' not found in any configured registry. \
-         Use 'fimod mold list' to see available molds."
-    );
+    Err(unresolved_error(mold_name, &misses))
+}
+
+/// Build the error for a bare `@mold` that no registry produced.
+///
+/// When no registry could be queried at all, the mold's existence is simply
+/// unknown and saying "not found" would be a lie; the message says so and points
+/// at connectivity. Otherwise at least one registry answered, "not found" holds,
+/// and any registry that stayed silent is still listed so the user knows the
+/// answer is partial.
+fn unresolved_error(mold_name: &str, misses: &[(String, SourceMiss)]) -> anyhow::Error {
+    let width = misses
+        .iter()
+        .map(|(name, _)| name.chars().count())
+        .max()
+        .unwrap_or(0);
+    let breakdown = misses
+        .iter()
+        .map(|(name, miss)| format!("  {name:<width$}  {}", miss.reason(), width = width))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let all_unqueryable = misses.iter().all(|(_, miss)| miss.is_unqueryable());
+    if all_unqueryable {
+        anyhow::anyhow!(
+            "Mold '{mold_name}' could not be resolved: no registry could be queried.\n\n\
+             {breakdown}\n\n\
+             None of them could answer, so the mold may well exist.\n\
+             Fix the failures above, then retry."
+        )
+    } else {
+        anyhow::anyhow!(
+            "Mold '{mold_name}' not found in any configured registry.\n\n\
+             {breakdown}\n\n\
+             Use 'fimod mold list' to see available molds."
+        )
+    }
 }
 
 /// Determine the effective auth token for a source.
@@ -237,19 +317,29 @@ pub fn token_for_url(url: &str) -> Option<String> {
 
 // ── per-type resolution helpers ───────────────────────────────────────────────
 
-fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
-    let base = source
-        .path
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("Local registry has no path configured"))?;
+fn resolve_local(source: &Source, mold_name: &str) -> std::result::Result<MoldSource, SourceMiss> {
+    let Some(base) = source.path.as_deref() else {
+        return Err(SourceMiss::Unqueryable(anyhow::anyhow!(
+            "Local registry has no path configured"
+        )));
+    };
     let base = Path::new(base);
 
     if let Some(path) = crate::mold::find_script(base, mold_name) {
         return Ok(MoldSource::file(path.to_string_lossy().into_owned()));
     }
 
+    // A local directory that does not exist cannot be searched, so its silence
+    // is not evidence that the mold is absent.
+    if !base.is_dir() {
+        return Err(SourceMiss::Unqueryable(anyhow::anyhow!(
+            "local registry directory does not exist: {}",
+            base.display()
+        )));
+    }
+
     let last = mold_name.split('/').next_back().unwrap_or(mold_name);
-    bail!(
+    Err(SourceMiss::Absent(anyhow::anyhow!(
         "Mold '{}' not found in registry '{}' (tried {}.py, {}/{}.py, {}/__main__.py)",
         mold_name,
         base.display(),
@@ -257,7 +347,7 @@ fn resolve_local(source: &Source, mold_name: &str) -> Result<MoldSource> {
         mold_name,
         last,
         mold_name
-    )
+    )))
 }
 
 /// `(script_rel_path, content_hash, companion_files)`
@@ -273,21 +363,25 @@ fn remote_catalog_entry(
     source: &Source,
     mold_name: &str,
     no_cache: bool,
-) -> Result<Option<CatalogLookup>> {
-    let catalog = match fetch_catalog(source, no_cache)? {
+) -> std::result::Result<Option<CatalogLookup>, SourceMiss> {
+    // A catalog that cannot be fetched or parsed leaves the registry unqueried.
+    let catalog = match fetch_catalog(source, no_cache).map_err(SourceMiss::Unqueryable)? {
         Some(c) => c,
         None => return Ok(None),
     };
     let catalog_url = catalog_url_for(source).unwrap_or_else(|_| "(unknown)".to_string());
-    let entry = catalog
-        .molds
-        .get(mold_name)
-        .ok_or_else(|| anyhow::anyhow!("Mold '{mold_name}' not found in catalog: {catalog_url}"))?;
+    let entry = catalog.molds.get(mold_name).ok_or_else(|| {
+        SourceMiss::Absent(anyhow::anyhow!(
+            "Mold '{mold_name}' not found in catalog: {catalog_url}"
+        ))
+    })?;
+    // The mold is listed but the entry is unusable: the registry answered, yet
+    // this is a broken catalog rather than an absent mold.
     let path = entry.path.clone().ok_or_else(|| {
-        anyhow::anyhow!(
+        SourceMiss::Unqueryable(anyhow::anyhow!(
             "Mold '{mold_name}' has no 'path' field in catalog: {catalog_url}\n\
                  Hint: regenerate the catalog with 'fimod registry build-catalog'"
-        )
+        ))
     })?;
     Ok(Some((path, entry.hash.clone(), entry.files.clone())))
 }
@@ -300,13 +394,15 @@ fn resolve_remote(
     mold_name: &str,
     token: Option<String>,
     no_cache: bool,
-) -> Result<MoldSource> {
-    let base_url = source
-        .url
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("{} registry has no URL configured", source.kind))?;
+) -> std::result::Result<MoldSource, SourceMiss> {
+    let Some(base_url) = source.url.as_deref() else {
+        return Err(SourceMiss::Unqueryable(anyhow::anyhow!(
+            "{} registry has no URL configured",
+            source.kind
+        )));
+    };
     let resolved_base = match source.kind {
-        SourceType::Github => github_to_raw(base_url)?,
+        SourceType::Github => github_to_raw(base_url).map_err(SourceMiss::Unqueryable)?,
         _ => base_url.to_string(),
     };
     resolve_via_catalog(source, mold_name, &resolved_base, token, no_cache)
@@ -319,7 +415,7 @@ fn resolve_via_catalog(
     base: &str,
     token: Option<String>,
     no_cache: bool,
-) -> Result<MoldSource> {
+) -> std::result::Result<MoldSource, SourceMiss> {
     let (rel, catalog_hash, files) = match remote_catalog_entry(source, mold_name, no_cache) {
         Ok(Some((path, hash, files))) => (path, hash, files),
         Ok(None) => {
