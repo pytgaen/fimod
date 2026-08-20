@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader, BufWriter, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 use serde_json::Value;
 
 pub use crate::engine::PipelineMetadata;
@@ -15,6 +16,9 @@ use crate::format::{CsvOptions, DataFormat};
 use crate::mold::{MoldSource, MoldStep, StepOrigin};
 use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
+
+const MAX_DYNAMIC_PIPELINE_STEPS: usize = 1_024;
+static STREAM_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A single pipeline step reference — either a mold path/name or an inline expression.
 #[derive(Debug, Clone)]
@@ -164,6 +168,8 @@ pub fn execute_chain(
     let mut steps: Vec<MoldStep> = steps.to_vec();
     let mut data = initial_data;
     let mut last_exit = None;
+    let chain_started_at = ctx.policy.max_duration.map(|_| Instant::now());
+    let mut injected_steps = 0usize;
     // Pending mutations keyed by absolute step index → {field → value}.
     let mut mutations: HashMap<usize, HashMap<String, Value>> = HashMap::new();
 
@@ -243,8 +249,9 @@ pub fn execute_chain(
             format_override_init: step_output_format_mutation.clone(),
             step_args: step_runtime_args,
         };
-        let exec = engine::execute_mold(&step_script, data, &opts)
-            .with_context(|| format!("in {}", steps[i].error_context(i, steps.len())))?;
+        let exec =
+            engine::execute_mold_with_chain_start(&step_script, data, &opts, chain_started_at)
+                .with_context(|| format!("in {}", steps[i].error_context(i, steps.len())))?;
 
         // Accumulate pending mutations from this execution.
         for m in exec.pending_mutations {
@@ -266,6 +273,15 @@ pub fn execute_chain(
         }
 
         // Inject new steps requested by this mold.
+        injected_steps = injected_steps
+            .checked_add(exec.pending_steps.len())
+            .filter(|count| *count <= MAX_DYNAMIC_PIPELINE_STEPS)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "in {}: dynamic pipeline step limit exceeded (maximum {MAX_DYNAMIC_PIPELINE_STEPS} injected steps per chain)",
+                    steps[i].error_context(i, steps.len())
+                )
+            })?;
         let mut insert_at = i + 1;
         for ps in exec.pending_steps {
             let new_step = resolve_pending(ps.spec, i)
@@ -490,11 +506,10 @@ fn run_pipeline_core(
             // If --input-format http, build the HTTP dict directly and skip normal parsing
             if parsed_input_fmt == Some(DataFormat::Http) {
                 // Detect binary content: no known text format and not a text/ type
-                let is_binary = ct_fmt.is_none()
-                    && resp
-                        .content_type
-                        .as_deref()
-                        .is_some_and(|ct| !ct.starts_with("text/"));
+                let is_binary = resp
+                    .content_type
+                    .as_deref()
+                    .is_some_and(http::is_binary_content_type);
 
                 http_raw_bytes = Some(resp.body_bytes.clone());
 
@@ -735,11 +750,10 @@ fn read_input_to_value(opts: &IdentityRunOptions<'_>) -> Result<(DataFormat, Val
                 .and_then(http::content_type_to_format);
 
             if parsed_input_fmt == Some(DataFormat::Http) {
-                let is_binary = ct_fmt.is_none()
-                    && resp
-                        .content_type
-                        .as_deref()
-                        .is_some_and(|ct| !ct.starts_with("text/"));
+                let is_binary = resp
+                    .content_type
+                    .as_deref()
+                    .is_some_and(http::is_binary_content_type);
 
                 let mut headers_map = serde_json::Map::new();
                 for (k, v) in &resp.headers {
@@ -861,13 +875,7 @@ fn resolve_identity_formats(opts: &IdentityRunOptions<'_>) -> Result<(DataFormat
 fn stream_identity_json_array_input_format(
     opts: &IdentityRunOptions<'_>,
 ) -> Result<Option<(DataFormat, DataFormat)>> {
-    if opts.check
-        || opts.debug
-        || opts.slurp
-        || opts.no_input
-        || opts.input_path.is_some_and(http::is_url)
-        || matches!((opts.input_path, opts.output_path), (Some(input), Some(output)) if paths_refer_to_same_file(input, output))
-    {
+    if identity_streaming_is_disabled(opts) {
         return Ok(None);
     }
 
@@ -878,6 +886,41 @@ fn stream_identity_json_array_input_format(
         Ok(Some((in_fmt, out_fmt)))
     } else {
         Ok(None)
+    }
+}
+
+fn stream_identity_ndjson_output_format(
+    opts: &IdentityRunOptions<'_>,
+) -> Result<Option<DataFormat>> {
+    if identity_streaming_is_disabled(opts) {
+        return Ok(None);
+    }
+
+    let (in_fmt, out_fmt) = resolve_identity_formats(opts)?;
+    if in_fmt == DataFormat::Ndjson && matches!(out_fmt, DataFormat::Json | DataFormat::JsonCompact)
+    {
+        Ok(Some(out_fmt))
+    } else {
+        Ok(None)
+    }
+}
+
+fn identity_streaming_is_disabled(opts: &IdentityRunOptions<'_>) -> bool {
+    opts.check
+        || opts.debug
+        || opts.slurp
+        || opts.no_input
+        || opts.input_path.is_some_and(http::is_url)
+        || opts
+            .output_path
+            .is_some_and(output_requires_buffered_identity)
+        || matches!((opts.input_path, opts.output_path), (Some(input), Some(output)) if paths_refer_to_same_file(input, output))
+}
+
+fn output_requires_buffered_identity(path: &str) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata.file_type().is_symlink() || cfg!(windows),
+        Err(error) => error.kind() != io::ErrorKind::NotFound,
     }
 }
 
@@ -919,16 +962,11 @@ fn write_json_array_reader_as_format<R: Read>(
     csv_opts: &CsvOptions,
 ) -> Result<()> {
     match output_path {
-        Some(path) => {
-            let file = fs::File::create(path)
-                .with_context(|| format!("Failed to write output file: {path}"))?;
-            let writer = BufWriter::new(file);
-            match out_fmt {
-                DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
-                DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
-                _ => unreachable!("guard restricts streamable JSON array output formats"),
-            }
-        }
+        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+            DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
+            DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
+            _ => unreachable!("guard restricts streamable JSON array output formats"),
+        }),
         None => {
             let stdout = io::stdout();
             let writer = BufWriter::new(stdout.lock());
@@ -939,6 +977,109 @@ fn write_json_array_reader_as_format<R: Read>(
             }
         }
     }
+}
+
+fn write_ndjson_reader_as_json<R: BufRead>(
+    reader: R,
+    output_path: Option<&str>,
+    out_fmt: DataFormat,
+) -> Result<()> {
+    match output_path {
+        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+            DataFormat::Json => format::stream_ndjson_to_json(reader, writer),
+            DataFormat::JsonCompact => format::stream_ndjson_to_json_compact(reader, writer),
+            _ => unreachable!("guard restricts streaming NDJSON output formats"),
+        }),
+        None => {
+            let stdout = io::stdout();
+            let writer = BufWriter::new(stdout.lock());
+            match out_fmt {
+                DataFormat::Json => format::stream_ndjson_to_json(reader, writer),
+                DataFormat::JsonCompact => format::stream_ndjson_to_json_compact(reader, writer),
+                _ => unreachable!("guard restricts streaming NDJSON output formats"),
+            }
+        }
+    }
+}
+
+fn write_stream_output_file(
+    output_path: &str,
+    write: impl FnOnce(BufWriter<fs::File>) -> Result<()>,
+) -> Result<()> {
+    let output = Path::new(output_path);
+    let existing_permissions = match fs::metadata(output) {
+        Ok(metadata) => Some(metadata.permissions()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Failed to inspect output file: {}", output.display()));
+        }
+    };
+    let temporary = stream_output_temp_path(output);
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .with_context(|| format!("Failed to create temporary output: {}", temporary.display()))?;
+
+    if let Err(error) = write(BufWriter::new(file)) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+
+    if let Some(permissions) = existing_permissions {
+        if let Err(error) = fs::set_permissions(&temporary, permissions) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed to preserve output permissions: {}",
+                    output.display()
+                )
+            });
+        }
+    }
+
+    install_stream_output(&temporary, output)
+}
+
+fn stream_output_temp_path(output: &Path) -> PathBuf {
+    let file_name = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("output");
+    let counter = STREAM_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    output.with_file_name(format!(
+        ".{file_name}.fimod-stream-{}-{counter}.tmp",
+        std::process::id()
+    ))
+}
+
+fn install_stream_output(temporary: &Path, output: &Path) -> Result<()> {
+    if let Err(rename_error) = fs::rename(temporary, output) {
+        let _ = fs::remove_file(temporary);
+        return Err(rename_error)
+            .with_context(|| format!("Failed to install output file: {}", output.display()));
+    }
+    Ok(())
+}
+
+fn try_stream_identity_ndjson(opts: &IdentityRunOptions<'_>) -> Result<bool> {
+    let Some(out_fmt) = stream_identity_ndjson_output_format(opts)? else {
+        return Ok(false);
+    };
+
+    match opts.input_path {
+        Some(path) => {
+            let file = fs::File::open(path)
+                .with_context(|| format!("Failed to read input file: {path}"))?;
+            write_ndjson_reader_as_json(BufReader::new(file), opts.output_path, out_fmt)?;
+        }
+        None => {
+            let stdin = io::stdin();
+            write_ndjson_reader_as_json(BufReader::new(stdin.lock()), opts.output_path, out_fmt)?;
+        }
+    }
+    Ok(true)
 }
 
 fn try_stream_identity_json_array(opts: &IdentityRunOptions<'_>) -> Result<bool> {
@@ -991,7 +1132,7 @@ fn try_stream_identity_json_array(opts: &IdentityRunOptions<'_>) -> Result<bool>
 /// conversion and Monty execution for pure format conversions.
 pub fn process_identity_input(opts: IdentityRunOptions<'_>) -> Result<CliResult> {
     let total_start = Instant::now();
-    if try_stream_identity_json_array(&opts)? {
+    if try_stream_identity_ndjson(&opts)? || try_stream_identity_json_array(&opts)? {
         debug_phase(opts.debug, "total", total_start);
         return Ok(CliResult::Done);
     }
@@ -1533,6 +1674,9 @@ impl Default for PipelineConfig {
 /// if let PipelineOutput::Value(v) = result.output { println!("{v}"); }
 /// ```
 pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result<PipelineResult> {
+    if config.steps.is_empty() {
+        bail!("pipeline requires at least one mold or expression step");
+    }
     let scripts = build_scripts(&config.steps, config.no_cache)?;
     let env_value = build_env(&config.env_patterns);
 
@@ -1568,4 +1712,21 @@ pub fn run_pipeline(input_path: Option<&str>, config: &PipelineConfig) -> Result
         &exec_ctx,
         false,
     )
+}
+
+#[cfg(test)]
+mod public_api_tests {
+    use super::*;
+
+    #[test]
+    fn run_pipeline_rejects_empty_steps() {
+        let err = match run_pipeline(None, &PipelineConfig::default()) {
+            Ok(_) => panic!("empty pipeline unexpectedly succeeded"),
+            Err(err) => err,
+        };
+        assert_eq!(
+            err.to_string(),
+            "pipeline requires at least one mold or expression step"
+        );
+    }
 }

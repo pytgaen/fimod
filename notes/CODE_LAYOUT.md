@@ -12,7 +12,7 @@ Where every file lives and what it owns. Companion to `ARCHITECTURE.md` (how the
 fimod/
 ├── Cargo.toml            crate manifest + features (watch, http)
 ├── Cargo.lock            checked in (binary crate)
-├── build.rs              extracts Monty git tag → MONTY_VERSION env at build time
+├── build.rs              extracts Monty crate version → MONTY_VERSION env at build time
 ├── rust-toolchain.toml   pinned toolchain
 ├── mise.toml             local tool versions (cargo-nextest, cargo-deny, etc.)
 ├── Taskfile.yml          high-level commands (task lint / test / build:release / outdated …)
@@ -58,7 +58,10 @@ Other dot-dirs (`.cache/`, `.config/`, `.memsearch/`, `.rtk/`, `.skylos/`, `.ruf
 
 ## `src/` — the crate
 
-`src/lib.rs` declares every public module so the crate exposes a stable library API alongside the `fimod` binary. `src/main.rs` is the binary entry point and consumes the library through `use fimod::…`.
+`src/lib.rs` declares the modules exposed alongside the `fimod` binary. This
+Rust API remains experimental before 1.0 and may change between minor releases.
+`src/main.rs` is the binary entry point and consumes the library through
+`use fimod::…`.
 
 ### Top-level files
 
@@ -103,7 +106,7 @@ src/
 ├── regex.rs           re_search, re_match, re_findall, re_sub, re_sub_fancy, re_split
 ├── dotpath.rs         dp_get, dp_set, dp_has, dp_delete, dp_pluck (jq-lite path access)
 ├── iter_helpers.rs    it_group_by, it_count_by, it_sort_by, it_unique_by, it_take, …
-├── hash.rs            hs_md5, hs_sha256, hs_sha512, hs_blake3
+├── hash.rs            hs_md5, hs_sha1, hs_sha256
 ├── gatekeeper.rs      gk_fail, gk_assert (mold-level invariants → non-zero exit)
 ├── msg.rs             msg_info, msg_warn, msg_error — structured stderr logging
 ├── template.rs        tpl_render_str (minijinja, sandboxed)
@@ -136,12 +139,12 @@ src/cmd/
 
 ### `src/registry/` — registry submodules
 
-Was previously a 2180-line `src/registry.rs`. Split into 4 submodules + a thin `mod.rs` that re-exports the public API so external callers (`use fimod::registry::resolve`) stay unchanged.
+Was previously a 2180-line `src/registry.rs`. Split into 4 submodules + a thin `mod.rs` that re-exports the current Rust API. This API is experimental before 1.0 and may change between minor releases.
 
 ```
 src/registry/
 ├── mod.rs        pub mod {catalog, config, molds, resolve}
-│                 + pub use re-exports for the stable public surface
+│                 + pub use re-exports for the experimental pre-1.0 Rust API
 ├── config.rs     Source, SourceType, SourcesConfig — `sources.toml` CRUD.
 │                 add / remove / list / show / set_priority / confirm.
 ├── resolve.rs    `@name` and `@source/name` resolution.
@@ -234,6 +237,7 @@ Read these before any decision on architecture, tooling, or release flow.
 ```
 notes/
 ├── VISION.md                  long-term direction, what we refuse to build
+├── ROADMAP.md                 canonical version themes and decision criteria
 ├── ARCHITECTURE.md            module map, layer responsibilities, end-to-end flow
 ├── DESIGN_NOTES.md            concrete design decisions + tooling conventions
 ├── CODE_LAYOUT.md             this file — where every file lives

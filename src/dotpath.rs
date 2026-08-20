@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 use serde_json::Value;
 
 use crate::convert::{json_into_monty, monty_to_json};

@@ -22,6 +22,288 @@ fn test_ndjson_input_to_json() {
 }
 
 #[test]
+fn test_ndjson_identity_streams_file_to_pretty_json() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(
+        &dir,
+        "data.ndjson",
+        "{\"name\":\"Alice\"}\n\n{\"id\":18446744073709551615}\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "--output-format", "json"])
+        .assert()
+        .success()
+        .stdout(
+            "[\n  {\n    \"name\": \"Alice\"\n  },\n  {\n    \"id\": 18446744073709551615\n  }\n]\n",
+        );
+}
+
+#[test]
+fn test_ndjson_identity_streams_stdin_to_compact_json() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "ndjson",
+            "--output-format",
+            "json-compact",
+            "-e",
+            "data",
+        ])
+        .write_stdin("{\"a\":1}\n  \n{\"b\":2}\n")
+        .assert()
+        .success()
+        .stdout("[{\"a\":1},{\"b\":2}]\n");
+}
+
+#[test]
+fn test_ndjson_identity_stream_reports_invalid_line() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "ndjson",
+            "--output-format",
+            "json-compact",
+            "-e",
+            "data",
+        ])
+        .write_stdin("{\"a\":1}\nnot-json\n")
+        .assert()
+        .failure()
+        .stdout(predicate::str::starts_with("[{\"a\":1}"))
+        .stderr(predicate::str::contains(
+            "Failed to parse NDJSON line: not-json",
+        ));
+}
+
+#[test]
+fn test_ndjson_identity_error_preserves_existing_output_file() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.ndjson", "{\"a\":1}\nnot-json\n");
+    let output = dir.child("output.json");
+    output.write_str("keep me").unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "-o"])
+        .arg(output.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Failed to parse NDJSON line: not-json",
+        ));
+
+    output.assert("keep me");
+}
+
+#[test]
+fn test_ndjson_identity_replaces_existing_output_file() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.ndjson", "{\"a\":1}\n{\"b\":2}\n");
+    let output = dir.child("output.json");
+    output.write_str("old output").unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "-o"])
+        .arg(output.path())
+        .assert()
+        .success();
+
+    output.assert("[\n  {\n    \"a\": 1\n  },\n  {\n    \"b\": 2\n  }\n]\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ndjson_identity_preserves_existing_output_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.ndjson", "{\"a\":1}\n");
+    let output = dir.child("output.json");
+    output.write_str("private").unwrap();
+    std::fs::set_permissions(output.path(), std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "-o"])
+        .arg(output.path())
+        .assert()
+        .success();
+
+    let mode = std::fs::metadata(output.path())
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ndjson_identity_follows_output_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.ndjson", "{\"a\":1}\n");
+    let target = dir.child("target.json");
+    let output = dir.child("output.json");
+    target.write_str("old output").unwrap();
+    symlink(target.path(), output.path()).unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i", &input, "-e", "data", "-o"])
+        .arg(output.path())
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(output.path())
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    target.assert("[\n  {\n    \"a\": 1\n  }\n]\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ndjson_identity_hard_link_output_does_not_destroy_input() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = dir.child("input.ndjson");
+    let output = dir.child("output.json");
+    let original = "{\"a\":1}\n{\"b\":2}\n";
+    input.write_str(original).unwrap();
+    std::fs::hard_link(input.path(), output.path()).unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-i"])
+        .arg(input.path())
+        .args(["-e", "data", "--output-format", "json-compact", "-o"])
+        .arg(output.path())
+        .assert()
+        .success();
+
+    input.assert(original);
+    output.assert("[{\"a\":1},{\"b\":2}]\n");
+}
+
+#[test]
+fn test_ndjson_identity_debug_uses_buffered_path() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "ndjson",
+            "--output-format",
+            "json-compact",
+            "--debug",
+            "-e",
+            "data",
+        ])
+        .write_stdin("{\"a\":1}\n{\"b\":2}\n")
+        .assert()
+        .success()
+        .stdout("[{\"a\":1},{\"b\":2}]\n")
+        .stderr(predicate::str::contains("[debug] input data:"));
+}
+
+#[test]
+fn test_ndjson_identity_check_does_not_stream_output() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "--input-format",
+            "ndjson",
+            "--output-format",
+            "json-compact",
+            "--check",
+            "-e",
+            "data",
+        ])
+        .write_stdin("{\"a\":1}\n{\"b\":2}\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn test_ndjson_identity_in_place_does_not_truncate_input() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.ndjson", "{\"a\":1}\n{\"b\":2}\n");
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args([
+            "-i",
+            &input,
+            "--output-format",
+            "json",
+            "--in-place",
+            "-e",
+            "data",
+        ])
+        .assert()
+        .success();
+
+    dir.child("data.ndjson")
+        .assert("[\n  {\n    \"a\": 1\n  },\n  {\n    \"b\": 2\n  }\n]\n");
+}
+
+#[test]
+fn test_ndjson_identity_stream_matches_buffered_identity_matrix() {
+    let cases = [
+        ("json", "{\"a\":1}\n\n{\"b\":2}\n"),
+        (
+            "json-compact",
+            "null\ntrue\n18446744073709551615\n1234567890123456789012345678901234567890\n\"text\"\n",
+        ),
+        ("json-compact", "\n  \n"),
+    ];
+
+    for (output_format, input) in cases {
+        let native = assert_cmd::cargo_bin_cmd!("fimod")
+            .arg("shape")
+            .args([
+                "--input-format",
+                "ndjson",
+                "--output-format",
+                output_format,
+                "-e",
+                "data",
+            ])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let buffered = assert_cmd::cargo_bin_cmd!("fimod")
+            .arg("shape")
+            .args([
+                "--input-format",
+                "ndjson",
+                "--output-format",
+                output_format,
+                "-e",
+                "data",
+                "--debug",
+            ])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+
+        assert_eq!(native, buffered, "parity failed for {output_format}");
+    }
+}
+
+#[test]
 fn test_ndjson_output() {
     let dir = assert_fs::TempDir::new().unwrap();
     let input = setup_input(&dir, "data.json", r#"[{"name": "Alice"}, {"name": "Bob"}]"#);

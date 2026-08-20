@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use monty::{DictPairs, MontyObject};
+use monty_types::{DictPairs, MontyObject};
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["env_subst"];

@@ -1,5 +1,9 @@
 [tools]
-rust = "1.95"
+# CI lints and tests on rust-toolchain.toml's stable channel, so local work has
+# to sit there too: pinning the MSRV here made `task lint` green on trees CI
+# rejected, since newer clippy lints simply do not exist in the older toolchain.
+# The 1.95 floor is guarded by the dedicated MSRV job and `task lint:msrv`.
+rust = "latest"
 zig = "latest"
 upx = "latest"
 uv = "latest"

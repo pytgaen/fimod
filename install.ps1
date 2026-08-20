@@ -79,19 +79,18 @@ if ($Arch -eq "x86_64") {
 
 # -- Resolve version ---------------------------------------------------
 
-$Version = $env:FIMOD_VERSION
 $DownloadTag = $null
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    Write-Host "Fetching latest version..."
+$Version = $env:FIMOD_VERSION
+if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
+    # Binary already installed - skip version resolution and all network access.
+    $Version = "(skip)"
+} elseif ([string]::IsNullOrWhiteSpace($Version)) {
     if ($Source -eq "gitlab") {
-        try {
-            $Version = (Invoke-RestMethod -Uri "$GlPkgBase/latest/VERSION" -UseBasicParsing).Trim()
-            $DownloadTag = $Version
-        } catch {
-            Write-Error "Error: could not fetch latest version from GitLab"
-            exit 1
-        }
-    } else {
+        [Console]::Error.WriteLine("Error: FIMOD_SOURCE=gitlab requires an explicit FIMOD_VERSION because the mirror may lag behind GitHub")
+        exit 1
+    }
+    Write-Host "Fetching latest version..."
+    if ($Source -ne "gitlab") {
         # Try 1: GitHub's stable-release redirect (works for non-pre-releases)
         try {
             $Version = (Invoke-RestMethod -Uri "$BaseUrl/latest/download/VERSION" -UseBasicParsing).Trim()
@@ -167,7 +166,13 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
     try {
         Write-Host "Downloading $Url..."
         $TmpZip = Join-Path $TmpDir $Asset
-        Invoke-WebRequest -Uri $Url -OutFile $TmpZip -UseBasicParsing
+        try {
+            Invoke-WebRequest -Uri $Url -OutFile $TmpZip -UseBasicParsing
+        } catch {
+            [Console]::Error.WriteLine("Error: download failed - check that version $Version exists")
+            [Console]::Error.WriteLine("Available releases: $BaseUrl")
+            exit 1
+        }
 
         # -- SHA256 verification --
         $SumsFile = "fimod-$Version-sha256sums.txt"
@@ -180,21 +185,42 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
         $TmpSums = Join-Path $TmpDir $SumsFile
         try {
             Invoke-WebRequest -Uri $SumsUrl -OutFile $TmpSums -UseBasicParsing
-            $AssetName = [System.IO.Path]::GetFileName($Asset)
-            $Expected = (Get-Content $TmpSums | Where-Object { $_ -match $AssetName }) -replace '\s+.*$',''
-            if ($Expected) {
-                $Actual = (Get-FileHash -Path $TmpZip -Algorithm SHA256).Hash.ToLower()
-                if ($Actual -ne $Expected) {
-                    Write-Error "SHA256 mismatch!`n  expected: $Expected`n  got:      $Actual"
-                    exit 1
-                }
-                Write-Host "SHA256 verified"
-            } else {
-                Write-Host "Warning: asset not found in checksums file, skipping verification" -ForegroundColor Yellow
-            }
         } catch {
-            Write-Host "Warning: could not download checksums file, skipping verification" -ForegroundColor Yellow
+            [Console]::Error.WriteLine("Error: could not download required checksums file: $SumsUrl")
+            exit 1
         }
+
+        $AssetName = [System.IO.Path]::GetFileName($Asset)
+        $ChecksumEntries = @(
+            Get-Content $TmpSums | ForEach-Object {
+                $Parts = $_.Trim() -split '\s+', 2
+                if ($Parts.Count -eq 2) {
+                    $EntryName = $Parts[1].TrimStart([char]'*')
+                    if ($EntryName -ceq $AssetName) {
+                        $Parts[0]
+                    }
+                }
+            }
+        )
+        if ($ChecksumEntries.Count -ne 1) {
+            [Console]::Error.WriteLine("Error: asset $AssetName not found exactly once in checksums file")
+            exit 1
+        }
+
+        $Expected = ([string]$ChecksumEntries[0]).ToLowerInvariant()
+        if ($Expected -notmatch '^[0-9a-f]{64}$') {
+            [Console]::Error.WriteLine("Error: invalid SHA256 checksum for $AssetName")
+            exit 1
+        }
+
+        $Actual = (Get-FileHash -Path $TmpZip -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($Actual -ne $Expected) {
+            [Console]::Error.WriteLine("SHA256 mismatch!")
+            [Console]::Error.WriteLine("  expected: $Expected")
+            [Console]::Error.WriteLine("  got:      $Actual")
+            exit 1
+        }
+        Write-Host "SHA256 verified"
 
         # Use Expand-Archive for zip
         Expand-Archive -Path $TmpZip -DestinationPath $TmpDir -Force
@@ -217,9 +243,6 @@ if ($env:FIMOD_SKIP_DOWNLOAD -eq "1") {
         }
 
         Move-Item -Path $ExtractedBin -Destination $TargetBin -Force
-    } catch {
-        Write-Error "Error: download failed - check that version $Version exists`nAvailable releases: $BaseUrl"
-        exit 1
     } finally {
         Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }

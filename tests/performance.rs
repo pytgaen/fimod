@@ -142,6 +142,21 @@ fn large_json_array(rows: usize) -> String {
     out
 }
 
+fn large_ndjson(rows: usize) -> String {
+    let mut out = String::with_capacity(rows * 80);
+    for i in 0..rows {
+        writeln!(
+            out,
+            r#"{{"id":{i},"name":"user-{i:05}","active":{},"score":{},"team":"team-{}"}}"#,
+            i % 2 == 0,
+            i % 1_000,
+            i % 16
+        )
+        .unwrap();
+    }
+    out
+}
+
 fn large_yaml_array(rows: usize) -> String {
     let mut out = String::with_capacity(rows * 70);
     for i in 0..rows {
@@ -237,6 +252,91 @@ fn cli_json_filter_compares_with_jq() {
         fimod_elapsed,
         "jq",
         jq_elapsed,
+    );
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_identity_json_to_ndjson_under_budget() {
+    let rows = 20_000;
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.json");
+    fs::write(&input, large_json_array(rows)).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    let args = os_args(&[
+        OsStr::new("shape"),
+        OsStr::new("-i"),
+        input.as_os_str(),
+        OsStr::new("-e"),
+        OsStr::new("data"),
+        OsStr::new("--output-format"),
+        OsStr::new("ndjson"),
+    ]);
+
+    let (elapsed, output) = median_command_elapsed(&fimod, &args);
+    let output = String::from_utf8(output).unwrap();
+    assert_eq!(output.lines().count(), rows);
+    assert_under_budget(
+        "CLI identity JSON to NDJSON over 20,000 records",
+        elapsed,
+        perf_budget(250, 2_500),
+    );
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_identity_json_to_csv_under_budget() {
+    let rows = 20_000;
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.json");
+    fs::write(&input, large_json_array(rows)).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    let args = os_args(&[
+        OsStr::new("shape"),
+        OsStr::new("-i"),
+        input.as_os_str(),
+        OsStr::new("-e"),
+        OsStr::new("data"),
+        OsStr::new("--output-format"),
+        OsStr::new("csv"),
+    ]);
+
+    let (elapsed, output) = median_command_elapsed(&fimod, &args);
+    let output = String::from_utf8(output).unwrap();
+    assert_eq!(output.lines().count(), rows + 1);
+    assert!(output.starts_with("id,name,active,score,team\n"));
+    assert_under_budget(
+        "CLI identity JSON to CSV over 20,000 records",
+        elapsed,
+        perf_budget(300, 3_000),
+    );
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_identity_ndjson_to_json_under_budget() {
+    let rows = 20_000;
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.ndjson");
+    fs::write(&input, large_ndjson(rows)).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    let args = os_args(&[
+        OsStr::new("shape"),
+        OsStr::new("-i"),
+        input.as_os_str(),
+        OsStr::new("-e"),
+        OsStr::new("data"),
+        OsStr::new("--output-format"),
+        OsStr::new("json-compact"),
+    ]);
+
+    let (elapsed, output) = median_command_elapsed(&fimod, &args);
+    let value: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(value.as_array().map(Vec::len), Some(rows));
+    assert_under_budget(
+        "CLI identity NDJSON to compact JSON over 20,000 records",
+        elapsed,
+        perf_budget(250, 2_500),
     );
 }
 

@@ -306,6 +306,45 @@ def transform(data, args, env, headers, **_):
         .stderr(predicate::str::contains("max_duration"));
 }
 
+/// Gradual accumulation exits 137 when it crosses `max_memory`.
+///
+/// The interesting shape is a mold that grows its footprint one small
+/// allocation at a time, not one that asks for a huge block up front: since
+/// Monty 0.0.20 the up-front case is caught by the interpreter's own
+/// large-result estimate, while gradual growth is only visible through the
+/// allocator counters `src/mem_limit.rs` feeds. Without that allocator this
+/// test still compiles, still runs, and reaches gigabytes under a 50MB cap.
+#[test]
+fn test_sandbox_max_memory_stops_gradual_accumulation() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let home = assert_fs::TempDir::new().unwrap();
+    let sandbox = setup_sandbox_file(
+        &dir,
+        "[sandbox]\nmax_duration = \"unlimited\"\nmax_memory = \"50MB\"\n",
+    );
+    let mold = setup_mold(
+        &dir,
+        "grow.py",
+        r#"
+def transform(data, args, env, headers, **_):
+    acc = []
+    for i in range(3_000_000):
+        acc.append({"i": i, "s": "x" * 40})
+    return len(acc)
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .arg("shape")
+        .args(["-m", &mold, "--no-input", "--sandbox-file", &sandbox])
+        .env("HOME", home.path())
+        .env_remove("FIMOD_SANDBOX_FILE")
+        .assert()
+        .code(137)
+        .stderr(predicate::str::contains("sandbox exploded"))
+        .stderr(predicate::str::contains("max_memory"));
+}
+
 /// `--sandbox-file=""` forces zero authorization even when canonical file is permissive.
 #[test]
 fn test_sandbox_empty_flag_forces_zero_auth() {

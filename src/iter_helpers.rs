@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use indexmap::IndexMap;
 #[cfg(test)]
-use monty::DictPairs;
-use monty::MontyObject;
+use monty_types::DictPairs;
+use monty_types::MontyObject;
 use serde_json::Value;
 
 use crate::convert::{json_into_monty, monty_to_json};

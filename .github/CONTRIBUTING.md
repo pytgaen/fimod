@@ -47,6 +47,12 @@ push / pull_request
 ├── test          (matrix: ubuntu-latest, macos-14)
 │   └── cargo test --all-features
 │
+├── installer-posix (matrix: ubuntu-latest, macos-14)
+│   └── fail-closed checksum fixtures
+│
+├── windows-smoke (windows-latest)
+│   └── PowerShell installer + real binary transformation
+│
 ├── msrv          (ubuntu-latest)
 │   └── cargo check with Rust 1.95  ← minimum supported version
 │
@@ -55,7 +61,7 @@ push / pull_request
     └── cargo deny    (licences + advisories + git sources)
 ```
 
-**Caching:** `Swatinem/rust-cache@v2` is active on every job — the first run
+**Caching:** `Swatinem/rust-cache@v2` is active on the Rust jobs — the first run
 compiles everything; subsequent runs on the same branch reuse the cache and
 typically complete in under a minute.
 

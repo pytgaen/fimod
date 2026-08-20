@@ -252,7 +252,7 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>) -> Result<()> {
     cfg.sources.insert(name.to_string(), source);
 
     save_config(&cfg)?;
-    println!("Added registry '{}' → {}", name, &location_display);
+    println!("Added registry '{name}' → {location_display}");
     Ok(())
 }
 

@@ -152,6 +152,13 @@ The cost of a dynamic mold is readability: someone reading the chain has to open
 
 ## Limitations
 
+### Bounded dynamic growth
+
+A chain may inject at most 1,024 steps in total. This global limit covers both
+`pipeline.insert_next()` and `pipeline.append()` and stops recursive molds from
+growing the pipeline forever. All static and injected steps share the same
+invocation-wide `max_duration` budget.
+
 ### Snapshot semantics
 
 `pipeline.length()`, `pipeline.step(j)`, and the list of remaining steps are **computed once per step**, at the start of `transform()`. A step injected by step *i* via `insert_next` or `append` is **only visible from step *i+1* onwards**. You cannot read or mutate a step you have just appended in the same `transform()` call.

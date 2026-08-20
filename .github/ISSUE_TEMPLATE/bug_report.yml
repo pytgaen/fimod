@@ -24,7 +24,7 @@ body:
         - Linux (x86_64)
         - Linux (aarch64)
         - macOS (Apple Silicon)
-        - macOS (Intel)
+        - macOS (Intel — source build only)
         - Windows
         - Other
     validations:

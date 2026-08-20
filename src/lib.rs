@@ -9,6 +9,7 @@ pub mod gatekeeper;
 pub mod hash;
 pub mod http;
 pub mod iter_helpers;
+pub(crate) mod lru_cache;
 pub mod mold;
 pub(crate) mod monty_args;
 pub mod msg;
@@ -21,5 +22,5 @@ pub mod serde_compat;
 pub mod template;
 pub mod test_runner;
 
-/// Monty engine version — extracted from the `tag` in Cargo.toml by build.rs.
+/// Monty engine version — extracted from Cargo.toml by build.rs.
 pub const MONTY_VERSION: &str = env!("MONTY_VERSION");

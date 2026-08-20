@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 use std::fmt;
-use std::io::{Cursor, Read, Write};
+use std::io::{BufRead, Cursor, Read, Write};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use monty::{DictPairs, MontyObject};
+use monty_types::{DictPairs, MontyObject};
 use serde::de::{DeserializeSeed, SeqAccess, Visitor};
+use serde::ser::SerializeSeq;
+use serde::Serializer as _;
+use serde_json::ser::{CompactFormatter, Formatter, PrettyFormatter};
 use serde_json::Value;
 
 use crate::serde_compat::NativeNumbers;
@@ -265,6 +268,63 @@ where
         .end()
         .context("Failed to parse trailing data after JSON array")?;
     writer.flush().context("Failed to flush NDJSON output")?;
+    Ok(())
+}
+
+/// Stream NDJSON values as a pretty-printed top-level JSON array.
+///
+/// Empty lines are ignored and each non-empty line is dropped after it has
+/// been serialized, bounding memory use to the largest input line.
+pub fn stream_ndjson_to_json<R, W>(reader: R, writer: W) -> Result<()>
+where
+    R: BufRead,
+    W: Write,
+{
+    stream_ndjson_to_json_with_formatter(reader, writer, PrettyFormatter::new())
+}
+
+/// Stream NDJSON values as a compact top-level JSON array.
+pub fn stream_ndjson_to_json_compact<R, W>(reader: R, writer: W) -> Result<()>
+where
+    R: BufRead,
+    W: Write,
+{
+    stream_ndjson_to_json_with_formatter(reader, writer, CompactFormatter)
+}
+
+fn stream_ndjson_to_json_with_formatter<R, W, F>(reader: R, writer: W, formatter: F) -> Result<()>
+where
+    R: BufRead,
+    W: Write,
+    F: Formatter,
+{
+    let mut serializer = serde_json::Serializer::with_formatter(writer, formatter);
+    let mut sequence = serializer
+        .serialize_seq(None)
+        .context("Failed to start JSON output")?;
+
+    for line in reader.lines() {
+        let line = line.context("Failed to read NDJSON input")?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = serde_json::from_str(&line).with_context(|| {
+            format!(
+                "Failed to parse NDJSON line: {}",
+                line.chars().take(50).collect::<String>()
+            )
+        })?;
+        sequence
+            .serialize_element(&value)
+            .context("Failed to serialize NDJSON value as JSON")?;
+    }
+
+    sequence.end().context("Failed to finish JSON output")?;
+    let mut writer = serializer.into_inner();
+    writer
+        .write_all(b"\n")
+        .context("Failed to finish JSON output")?;
+    writer.flush().context("Failed to flush JSON output")?;
     Ok(())
 }
 
@@ -1191,6 +1251,49 @@ mod tests {
         assert_eq!(
             String::from_utf8(output).unwrap(),
             "{\"name\":\"Alice\"}\n{\"name\":\"Bob\"}\n"
+        );
+    }
+
+    #[test]
+    fn test_stream_ndjson_to_pretty_json_skips_empty_lines_and_preserves_u64() {
+        let input = Cursor::new(b"{\"name\":\"Alice\"}\n\n  \n{\"id\":18446744073709551615}\n");
+        let mut output = Vec::new();
+
+        stream_ndjson_to_json(input, &mut output).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "[\n  {\n    \"name\": \"Alice\"\n  },\n  {\n    \"id\": 18446744073709551615\n  }\n]\n"
+        );
+    }
+
+    #[test]
+    fn test_stream_ndjson_to_compact_json() {
+        let input = Cursor::new(b"{\"a\":1}\n{\"b\":2}\n");
+        let mut output = Vec::new();
+
+        stream_ndjson_to_json_compact(input, &mut output).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "[{\"a\":1},{\"b\":2}]\n"
+        );
+    }
+
+    #[test]
+    fn test_stream_ndjson_to_json_reports_the_invalid_line() {
+        let input = Cursor::new(b"{\"a\":1}\nnot-json\n");
+        let mut output = Vec::new();
+
+        let err = stream_ndjson_to_json_compact(input, &mut output).unwrap_err();
+
+        assert!(
+            format!("{err:#}").contains("Failed to parse NDJSON line: not-json"),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            !output.is_empty(),
+            "streaming output must begin before a later line fails"
         );
     }
 

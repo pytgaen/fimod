@@ -86,16 +86,12 @@ if [ "${FIMOD_SKIP_DOWNLOAD:-}" = "1" ]; then
 elif [ -n "${FIMOD_VERSION:-}" ]; then
   VERSION="$FIMOD_VERSION"
   DOWNLOAD_TAG="$VERSION"
+elif [ "$SOURCE" = "gitlab" ]; then
+  echo "Error: FIMOD_SOURCE=gitlab requires an explicit FIMOD_VERSION because the mirror may lag behind GitHub" >&2
+  exit 1
 else
   echo "Fetching latest version..."
   case "$SOURCE" in
-    gitlab)
-      VERSION=$(curl -fsSL "${GL_PKG_BASE}/latest/VERSION") || {
-        echo "Error: could not fetch latest version from GitLab" >&2
-        exit 1
-      }
-      DOWNLOAD_TAG="$VERSION"
-      ;;
     *)
       # Primary: GitHub's stable-release redirect
       # Try 1: GitHub's stable-release redirect (works for non-pre-releases)
@@ -206,23 +202,54 @@ else
     *)      SUMS_URL="${BASE_URL}/download/${DOWNLOAD_TAG}/${SUMS_FILE}" ;;
   esac
 
-  if curl -fsSL -o "${TMPDIR}/${SUMS_FILE}" "$SUMS_URL" 2>/dev/null; then
-    EXPECTED=$(grep "$(basename "${ASSET}")" "${TMPDIR}/${SUMS_FILE}" | awk '{print $1}')
-    if [ -n "$EXPECTED" ]; then
-      ACTUAL=$(sha256sum "${TMPDIR}/${ASSET}" | awk '{print $1}')
-      if [ "$ACTUAL" != "$EXPECTED" ]; then
-        echo "Error: SHA256 mismatch!" >&2
-        echo "  expected: ${EXPECTED}" >&2
-        echo "  got:      ${ACTUAL}" >&2
-        exit 1
-      fi
-      echo "SHA256 verified ✓"
-    else
-      echo "Warning: asset not found in checksums file, skipping verification" >&2
-    fi
-  else
-    echo "Warning: could not download checksums file, skipping verification" >&2
+  curl -fsSL -o "${TMPDIR}/${SUMS_FILE}" "$SUMS_URL" 2>/dev/null || {
+    echo "Error: could not download required checksums file: ${SUMS_URL}" >&2
+    exit 1
+  }
+
+  if ! EXPECTED=$(awk -v asset="$ASSET" '
+    {
+      name = $2
+      sub(/^\*/, "", name)
+      if (name == asset) {
+        print $1
+        matches++
+      }
+    }
+    END { if (matches != 1) exit 1 }
+  ' "${TMPDIR}/${SUMS_FILE}"); then
+    echo "Error: asset ${ASSET} not found exactly once in checksums file" >&2
+    exit 1
   fi
+
+  case "$EXPECTED" in
+    ""|*[!0-9A-Fa-f]*)
+      echo "Error: invalid SHA256 checksum for ${ASSET}" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${#EXPECTED}" -ne 64 ]; then
+    echo "Error: invalid SHA256 checksum for ${ASSET}" >&2
+    exit 1
+  fi
+  EXPECTED=$(printf '%s' "$EXPECTED" | tr '[:upper:]' '[:lower:]')
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "${TMPDIR}/${ASSET}" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL=$(shasum -a 256 "${TMPDIR}/${ASSET}" | awk '{print $1}')
+  else
+    echo "Error: SHA256 verification requires sha256sum or shasum" >&2
+    exit 1
+  fi
+
+  if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "Error: SHA256 mismatch!" >&2
+    echo "  expected: ${EXPECTED}" >&2
+    echo "  got:      ${ACTUAL}" >&2
+    exit 1
+  fi
+  echo "SHA256 verified ✓"
 
   case "$EXT" in
     tar.gz)

@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use digest::Digest;
-use monty::MontyObject;
+use monty_types::MontyObject;
 
 use crate::monty_args::expect_string;
 

@@ -36,10 +36,20 @@ tasks:
     cmds:
       - cargo test --test cli
 
+  test:installers:
+    desc: Test POSIX installer checksum enforcement without network access
+    cmds:
+      - sh tests/installers.sh
+
   test:performance:
     desc: Run opt-in performance smoke tests in release mode
     cmds:
       - mise exec -- cargo test --release --test performance -- --ignored --nocapture
+
+  test:performance:fast:
+    desc: Run opt-in performance smoke tests with the speed-optimized release-fast profile
+    cmds:
+      - mise exec -- cargo test --profile release-fast --features fast --test performance -- --ignored --nocapture
 
   test:ci:
     desc: Run tests with JUnit XML report (requires cargo-nextest)
@@ -60,10 +70,16 @@ tasks:
       - cargo clippy --all-targets -- -D warnings
       - mise exec -- cargo-deny check
 
-  outdated:
-    desc: Check root dependencies are up-to-date (cargo-outdated via mise; fails if any are stale)
+  lint:msrv:
+    desc: Check the crate still builds on the declared MSRV (mirrors the CI msrv job)
     cmds:
-      - mise exec -- cargo outdated --root-deps-only --exit-code 1
+      - cargo +1.95 check --all-features
+
+  outdated:
+    desc: Check root dependencies are up-to-date (except documented compatibility pins)
+    cmds:
+      # get-size2 is pinned to 0.10.1 for Ruff compatibility; see Cargo.toml.
+      - mise exec -- cargo outdated --root-deps-only --ignore get-size2 --exit-code 1
 
   install:nextest:
     desc: Install cargo-nextest

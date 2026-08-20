@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
-use monty::{
-    DictPairs, ExcType, ExtFunctionResult, LimitedTracker, MontyDate, MontyDateTime,
-    MontyException, MontyObject, MontyRun, NameLookupResult, OsFunctionCall, PrintWriter,
-    PrintWriterCallback, ResourceLimits, RunProgress,
+use monty::{MontyRun, RunProgress};
+use monty_types::{
+    CompileOptions, DictPairs, ExcType, ExtFunctionResult, MontyDate, MontyDateTime,
+    MontyException, MontyObject, NameLookupResult, OsFunctionCall, PrintWriter,
+    PrintWriterCallback, ResourceLimits, ResourceTracker,
 };
 use serde_json::{Number, Value};
 
@@ -155,6 +157,7 @@ struct MoldContext<'a> {
     format_override: Arc<Mutex<Option<String>>>,
     output_file: Arc<Mutex<Option<String>>>,
     policy: &'a SandboxPolicy,
+    chain_started_at: Option<Instant>,
     pending_steps: Arc<Mutex<Vec<PendingStep>>>,
     pending_mutations: Arc<Mutex<Vec<PendingMutation>>>,
     current_step_idx: usize,
@@ -812,6 +815,16 @@ fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyOb
 /// Takes `data` as an owned `MontyObject` to avoid the json_to_monty conversion
 /// when the caller has already built a MontyObject directly (e.g. csv_to_monty path).
 pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> MoldResult {
+    execute_mold_with_chain_start(script, data, opts, None)
+}
+
+/// Execute one mold while charging its runtime to a chain-wide duration budget.
+pub(crate) fn execute_mold_with_chain_start(
+    script: &str,
+    data: MontyObject,
+    opts: &MoldOptions<'_>,
+    chain_started_at: Option<Instant>,
+) -> MoldResult {
     let merged_args = build_args_value(opts)?;
     let args_dict = json_to_monty(&merged_args);
 
@@ -846,8 +859,13 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         eprintln!("---");
     }
 
-    let runner = MontyRun::new(full_script, "mold.py", input_names)
-        .context("Failed to compile mold script")?;
+    let runner = MontyRun::new(
+        full_script,
+        "mold.py",
+        input_names,
+        CompileOptions::default(),
+    )
+    .context("Failed to compile mold script")?;
 
     let ctx = MoldContext {
         debug: opts.debug,
@@ -857,6 +875,7 @@ pub fn execute_mold(script: &str, data: MontyObject, opts: &MoldOptions<'_>) -> 
         format_override: Arc::new(Mutex::new(opts.format_override_init.clone())),
         output_file: Arc::new(Mutex::new(opts.output_file_override.clone())),
         policy: opts.policy,
+        chain_started_at,
         pending_steps: Arc::new(Mutex::new(Vec::new())),
         pending_mutations: Arc::new(Mutex::new(Vec::new())),
         current_step_idx: opts.current_step_idx,
@@ -896,7 +915,19 @@ fn run_loop(
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
     let mut sp = StderrPrint;
-    let tracker = LimitedTracker::new(sandbox_resource_limits(ctx.policy));
+    let mut limits = sandbox_resource_limits(ctx.policy);
+    if let (Some(started_at), Some(max_duration)) = (ctx.chain_started_at, ctx.policy.max_duration)
+    {
+        let elapsed = started_at.elapsed();
+        if elapsed >= max_duration {
+            return Err(limit_exceeded(
+                "max_duration",
+                Some(format_duration(max_duration)),
+            ));
+        }
+        limits = limits.max_duration(max_duration - elapsed);
+    }
+    let tracker = ResourceTracker::new(limits);
     let mut progress = runner
         .start(
             inputs,
@@ -937,25 +968,26 @@ fn run_loop(
                     )
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
-            RunProgress::OsCall(mut call) => {
-                let function_call = call.take_function_call();
-                let function_name = function_call.to_string();
-                let result = dispatch_os_call(function_call, ctx.policy);
-                if ctx.debug {
-                    eprintln!(
-                        "[debug] OsCall {} -> {}",
-                        function_name,
-                        describe_os_result(&result)
-                    );
-                }
+            RunProgress::OsCall(call) => {
                 let mut sp2 = StderrPrint;
                 progress = call
-                    .resume(
-                        result,
+                    .resume_with(
                         if ctx.debug {
                             PrintWriter::Callback(&mut sp2)
                         } else {
                             PrintWriter::Stdout
+                        },
+                        |function_call| {
+                            let function_name = function_call.to_string();
+                            let result = dispatch_os_call(function_call, ctx.policy);
+                            if ctx.debug {
+                                eprintln!(
+                                    "[debug] OsCall {} -> {}",
+                                    function_name,
+                                    describe_os_result(&result)
+                                );
+                            }
+                            result.into()
                         },
                     )
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
@@ -999,7 +1031,7 @@ fn run_loop(
 
 /// Build `ResourceLimits` from a `SandboxPolicy`.
 pub fn sandbox_resource_limits(policy: &SandboxPolicy) -> ResourceLimits {
-    let mut limits = ResourceLimits::new();
+    let mut limits = ResourceLimits::default();
     if let Some(d) = policy.max_duration {
         limits = limits.max_duration(d);
     }
@@ -1063,7 +1095,6 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
         | OsFunctionCall::Unlink(_)
         | OsFunctionCall::Rmdir(_)
         | OsFunctionCall::Rename(_) => OsCallOutcome::Value(MontyObject::None),
-        OsFunctionCall::Used => unreachable!("OsFunctionCall::Used dispatched by fimod"),
     }
 }
 
@@ -1106,11 +1137,11 @@ enum OsCallOutcome {
     Error(MontyException),
 }
 
-impl From<OsCallOutcome> for monty::ExtFunctionResult {
+impl From<OsCallOutcome> for ExtFunctionResult {
     fn from(outcome: OsCallOutcome) -> Self {
         match outcome {
-            OsCallOutcome::Value(v) => monty::ExtFunctionResult::Return(v),
-            OsCallOutcome::Error(e) => monty::ExtFunctionResult::Error(e),
+            OsCallOutcome::Value(v) => ExtFunctionResult::Return(v),
+            OsCallOutcome::Error(e) => ExtFunctionResult::Error(e),
         }
     }
 }
@@ -1137,9 +1168,7 @@ fn lookup_env(key: &str, default: MontyObject, policy: &SandboxPolicy) -> MontyO
 }
 
 fn empty_environ() -> MontyObject {
-    MontyObject::Dict(monty::DictPairs::from(
-        Vec::<(MontyObject, MontyObject)>::new(),
-    ))
+    MontyObject::Dict(DictPairs::from(Vec::<(MontyObject, MontyObject)>::new()))
 }
 
 /// Upgrades resource-limit exceptions (`TimeoutError`, `MemoryError`) into `SandboxLimitExceeded`

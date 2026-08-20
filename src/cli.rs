@@ -78,7 +78,7 @@ pub struct ShapeArgs {
     #[arg(long, short = 'w')]
     pub watch: bool,
 
-    /// Use the filename from the input URL as the output filename (like curl -O)
+    /// Use the input URL filename (like curl -O); raw batches derive each path/URL basename
     #[arg(short = 'O', long = "url-filename", conflicts_with_all = ["output", "in_place"])]
     pub url_filename: bool,
 

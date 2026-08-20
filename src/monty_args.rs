@@ -2,7 +2,7 @@
 //! passed to external Python functions.
 
 use anyhow::{bail, Result};
-use monty::MontyObject;
+use monty_types::MontyObject;
 
 /// Extract a `&str` from a `MontyObject::String`, with a label for the error
 /// message. Used by external functions (`re_*`, `hs_*`, `gk_*`, …) to validate

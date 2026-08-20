@@ -101,7 +101,7 @@ fimod uses [Monty](https://github.com/pydantic/monty), a **Rust implementation o
 !!! warning "Monty is early-stage"
     Monty is a very young project. Its API and feature set may change significantly between releases. fimod pins a specific Monty commit, but upgrading may require adapting mold scripts if Monty's behaviour changes.
 
-The Rust-powered helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`) are injected into every mold. Notably, regex built-ins use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax (Rust/PCRE2 flavour) — **not** Python's `re` module. See [Built-ins Reference](../reference/built-ins.md) for details.
+The Rust-powered helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`) are injected into every mold. Notably, regex built-ins use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax, based on Rust's `regex` crate and Oniguruma — **not** Python's `re` module. See [Built-ins Reference](../reference/built-ins.md) for details.
 
 === "✅ Supported"
 

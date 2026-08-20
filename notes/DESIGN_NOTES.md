@@ -25,8 +25,11 @@ The single source of truth is `run_pipeline_core()` in `pipeline.rs`. `process_s
 Exception: the exact single-step identity expression `-e 'data'` is a native
 format-conversion path. It keeps the explicit identity syntax, but runs
 **Read → Parse → Serialize → Write** in Rust without converting to
-`MontyObject` and without starting Monty. Any other expression, mold, or
-multi-step chain uses the normal mold pipeline.
+`MontyObject` and without starting Monty. JSON-array → NDJSON and NDJSON →
+JSON/JSON-compact conversions stream item by item when their input/output paths
+are distinct; JSON-array → CSV uses its existing streaming writer and column
+scan window. Any other expression, mold, or multi-step chain uses the normal
+mold pipeline.
 
 ### Security: parsing in Rust, logic in Python
 
@@ -146,6 +149,13 @@ defaults to input). `--csv-no-input-header`, `--csv-no-output-header`,
 
 `--output-format raw` writes bytes directly (no serialization). With `-O` (`--url-filename`), output filenames are derived from URLs.
 
+### Process-wide in-memory caches
+
+Compiled regexes, inline templates and HTTP clients use fixed-capacity LRU
+caches, including during a single pipeline invocation: 256 regexes, 64
+templates and 16 HTTP clients. Eviction only lowers the hit rate; a missing
+entry is compiled or created again, so results do not depend on cache state.
+
 ### MoldDefaults: metadata from mold scripts
 
 `parse_mold_defaults()` in `mold.rs` extracts `# fimod:` directives from the mold preamble:
@@ -226,9 +236,9 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.18 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.19 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
-- **Monty API pinned to tag**: Monty is a git dependency pinned to `v0.0.18` (tag in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`). The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.19` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.

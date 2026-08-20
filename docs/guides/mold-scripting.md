@@ -468,6 +468,10 @@ pipeline.append(Step.create(
 ))
 ```
 
+One chain may inject at most 1,024 steps in total. The limit applies across all
+`insert_next` and `append` calls and prevents accidental recursive injection.
+Injected steps also share the invocation's `max_duration` budget.
+
 !!! note "Snapshot semantics for `pipeline.length()` and `pipeline.step(i)`"
     Both are computed at the start of each step. A step injected by step `i`
     via `insert_next` / `append` is **only visible from step `i+1` onwards** —
