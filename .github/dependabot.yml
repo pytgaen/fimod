@@ -7,3 +7,13 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+    ignore:
+      # get-size2 is not used by fimod directly: it is declared to pin the
+      # version Ruff resolves to through Monty. Ruff 0.0.3 requires
+      # get-size2 ^0.10.0 with the compact-str feature and stays on
+      # compact_str 0.9, while get-size2 >= 0.10.2 moved to compact_str 0.10.
+      # Both land in the graph and Ruff's derive(GetSize) then fails to
+      # compile, so every bump past 0.10.1 opens a PR that cannot build.
+      # Drop this entry once Ruff moves to compact_str 0.10.
+      - dependency-name: "get-size2"
+        versions: [">=0.10.2"]
