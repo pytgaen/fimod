@@ -30,7 +30,7 @@ required-features = ["fast"]
 
 [dependencies]
 monty = "0.0.21"
-monty-types = "0.0.21"
+monty-types = "0.0.23"
 # Not used by fimod directly: pins the version Ruff resolves to. Ruff 0.0.3
 # (via Monty) is on compact_str 0.9, while get-size2 >= 0.10.2 moved to
 # compact_str 0.10; both end up in the graph and Ruff's `derive(GetSize)` then

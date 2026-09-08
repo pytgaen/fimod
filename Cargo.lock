@@ -835,7 +835,7 @@ dependencies = [
  "mimalloc",
  "minijinja",
  "monty",
- "monty-types",
+ "monty-types 0.0.23",
  "notify",
  "predicates",
  "reqwest",
@@ -1082,9 +1082,9 @@ dependencies = [
 
 [[package]]
 name = "granit-parser"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ccd1be9ebf2bd5520dbfcfb72b70ef492f654061299a097056f3e73410e38ec"
+checksum = "65ec0d45986cd51c847c75c5b69a00852c4fc84d0e5e79f041173f73437d0cdf"
 dependencies = [
  "arraydeque",
  "smallvec",
@@ -1490,9 +1490,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.14.0"
+version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
+checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
@@ -1865,8 +1865,8 @@ dependencies = [
  "jiter",
  "libm",
  "memchr",
- "monty-macros",
- "monty-types",
+ "monty-macros 0.0.21",
+ "monty-types 0.0.21",
  "num-bigint",
  "num-integer",
  "num-traits",
@@ -1898,13 +1898,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "monty-macros"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28e9bdf290033997d894fa5da829e033ecd1d6d9f57c981b631a440a9a3a0d02"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "monty-types"
 version = "0.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b4b3318107fee36c5eee05c52f16f6565a63aa29d04f8608ebc221e3fe5dd8"
 dependencies = [
  "chrono",
- "monty-macros",
+ "monty-macros 0.0.21",
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "strum",
+ "unicode-general-category",
+ "web-time",
+]
+
+[[package]]
+name = "monty-types"
+version = "0.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64c1da1edc680115e1f8cd898a99c01de5b72702e07f1e052858ac4c06e3fda4"
+dependencies = [
+ "chrono",
+ "monty-macros 0.0.23",
  "num-bigint",
  "num-traits",
  "serde",
@@ -2808,9 +2835,9 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1ec1f5cac0eb96063c64b28705255a7ed6e7d77f95c1d25e9f8b8c928006ce1"
+checksum = "3afb591f9cdb6223c88ba39269aff895620c7f0716dc42b705b5733d5c7c0823"
 dependencies = [
  "annotate-snippets",
  "base64",
@@ -3256,9 +3283,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.4+spec-1.1.0"
+version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aace63f4bbcdfc2c965b059de67119c89c4017a70d633be6c104910f67056f5"
+checksum = "12c0ba9680044b4ce98d391a62094047eada0d64860b80166c39f4a6b5640785"
 dependencies = [
  "indexmap",
  "serde_core",
