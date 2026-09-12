@@ -23,23 +23,23 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.56">
+      <meta name="generator" content="zensical-0.0.61">
     
     
       
-        <title>Monty Engine — Capabilities & Security Model - fimod - the data shaper CLI</title>
+        <title>Monty Engine - fimod - the data shaper CLI</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.20815dad.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Monty Engine — Capabilities &amp; Security Model
+              Monty Engine
             
           </span>
         </div>
@@ -1473,7 +1473,7 @@
 
 <h1 id="monty-engine-capabilities-security-model">Monty Engine — Capabilities &amp; Security Model</h1>
 <p>Monty is a Python interpreter written in Rust from scratch by Pydantic. It is <strong>not</strong> CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.</p>
-<p>Fimod uses Monty (v0.0.18) as its execution engine for mold scripts.</p>
+<p>Fimod uses Monty (v0.0.23) as its execution engine for mold scripts.</p>
 <p><strong>Source</strong>: <a href="https://github.com/pydantic/monty">pydantic/monty</a> — <a href="https://pydantic.dev/articles/pydantic-monty">blog post</a></p>
 <h2 id="python-language-support">Python Language Support</h2>
 <h3 id="supported">Supported</h3>
@@ -1490,6 +1490,10 @@
 <td>sync and async, closures, default args, <code>*args</code>/<code>**kwargs</code></td>
 </tr>
 <tr>
+<td><code>str.format</code></td>
+<td>Positional/named fields and format specifications</td>
+</tr>
+<tr>
 <td>f-strings</td>
 <td>Full support: <code>f'{x}'</code>, <code>f'{x:.2f}'</code>, <code>f'{x!r}'</code>, <code>f'{x=}'</code> (debug), nested specs</td>
 </tr>
@@ -1502,8 +1506,12 @@
 <td>Annotations preserved, used for type checking</td>
 </tr>
 <tr>
+<td>Classes and decorators</td>
+<td>Classes with <code>__init__</code> and methods; function decorators</td>
+</tr>
+<tr>
 <td>Dataclasses</td>
-<td>When defined on the host side</td>
+<td>Defined in molds; <code>eq</code> and <code>frozen</code> options supported</td>
 </tr>
 <tr>
 <td>Async/await</td>
@@ -1597,10 +1605,6 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 </thead>
 <tbody>
 <tr>
-<td>Classes</td>
-<td>Coming soon</td>
-</tr>
-<tr>
 <td>Match statements</td>
 <td>Coming soon</td>
 </tr>
@@ -1661,11 +1665,35 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 </tr>
 <tr>
 <td><code>datetime</code></td>
-<td>Supported — <code>date</code>, <code>datetime</code>, <code>timedelta</code>, <code>timezone</code>; arithmetic, <code>.isoformat()</code>, <code>.strftime()</code>, <code>.today()</code>, <code>.now()</code>, <code>.utcnow()</code></td>
+<td>Supported — <code>date</code>, <code>datetime</code>, <code>time</code>, <code>timedelta</code>, <code>timezone</code>; arithmetic, <code>.isoformat()</code>, <code>.strftime()</code>, <code>.today()</code>, <code>.now()</code>, <code>.utcnow()</code></td>
 </tr>
 <tr>
 <td><code>json</code></td>
 <td>Supported — <code>json.dumps()</code>, <code>json.loads()</code>. ~2x faster than CPython for loads, ~1.65x for dumps (v0.0.11 string cache + lookup-table escaping). Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template</td>
+</tr>
+<tr>
+<td><code>collections</code></td>
+<td><code>Counter</code>, <code>defaultdict</code>, <code>deque</code>, <code>namedtuple</code></td>
+</tr>
+<tr>
+<td><code>dataclasses</code></td>
+<td><code>dataclass</code>, <code>is_dataclass</code>; <code>eq</code> and <code>frozen</code> options</td>
+</tr>
+<tr>
+<td><code>functools</code></td>
+<td><code>reduce</code>, <code>partial</code></td>
+</tr>
+<tr>
+<td><code>base64</code>, <code>binascii</code></td>
+<td>Binary/text encodings; decode byte results to strings before returning structured output</td>
+</tr>
+<tr>
+<td><code>itertools</code></td>
+<td>Includes <code>takewhile</code>, <code>dropwhile</code>, <code>filterfalse</code>, <code>starmap</code>, <code>accumulate</code>, <code>batched</code>, <code>zip_longest</code></td>
+</tr>
+<tr>
+<td><code>unicodedata</code></td>
+<td>Unicode character properties and normalization</td>
 </tr>
 <tr>
 <td><code>zip(..., strict=True)</code></td>
@@ -1718,10 +1746,10 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 <h3 id="how-fimod-handles-osfunctioncall">How Fimod Handles OsFunctionCall</h3>
 <p>Fimod implements clock and selected environment access through <code>sandbox.toml</code>, but <strong>does not implement filesystem access</strong> yet:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// engine.rs</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">RunProgress</span><span class="p">::</span><span class="n">OsCall</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">call</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">function_call</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">call</span><span class="p">.</span><span class="n">take_function_call</span><span class="p">();</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dispatch_os_call</span><span class="p">(</span><span class="n">function_call</span><span class="p">,</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">policy</span><span class="p">);</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="n">progress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">call</span><span class="p">.</span><span class="n">resume</span><span class="p">(</span><span class="n">result</span><span class="p">,</span><span class="w"> </span><span class="n">print</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">RunProgress</span><span class="p">::</span><span class="n">OsCall</span><span class="p">(</span><span class="n">call</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="n">progress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">call</span><span class="p">.</span><span class="n">resume_with</span><span class="p">(</span><span class="n">print</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">function_call</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">        </span><span class="n">sandbox_os_call_result</span><span class="p">(</span><span class="n">function_call</span><span class="p">,</span><span class="w"> </span><span class="n">policy</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="p">})</span><span class="o">?</span><span class="p">;</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">}</span>
 </code></pre></div>
 <p><strong>Verified behavior in fimod</strong> (covered by integration tests in <code>tests/cli/sandbox.rs</code>):</p>
@@ -1778,6 +1806,14 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 - <strong>Recursion depth</strong>: Prevent stack overflow
 - <strong>Execution time/steps</strong>: Prevent infinite loops</p>
 <p>Fimod uses <code>ResourceTracker</code> with hard defaults (<code>max_duration = 10m</code>, <code>max_memory = 2GB</code>). These defaults apply even without a <code>sandbox.toml</code>. See the <a href="../../guides/cli-reference/#sandbox-policy">Sandbox</a> section for configuring limits via <code>~/.config/fimod/sandbox.toml</code> or <code>--sandbox-file</code>.</p>
+<p>Fimod also supports <code>max_suspensions</code>, a host-enforced quota disabled by default
+(<code>0</code>). It counts every <code>FunctionCall</code>, <code>OsCall</code>, <code>NameLookup</code>, or <code>ResolveFutures</code>
+suspension before handling it, separately for each mold and each REPL snippet.
+Exactly N suspensions are allowed with a quota of N; completion itself costs none.
+Exceeding it stops the mold with exit 137 and cannot be caught by Python. The REPL
+reports the error and remains usable, with a fresh quota for the next snippet.</p>
+<p><code>datetime.time</code> results serialize as ISO time strings, including microseconds and
+UTC offsets when present, through both fimod serialization paths.</p>
 <p>Since Monty 0.0.20, <code>max_memory</code> is <strong>allocator-backed</strong>: the interpreter reads live-byte counters that only a charging global allocator writes. Fimod installs one in <code>src/mem_limit.rs</code> — mimalloc wrapped to feed those counters — so the limit stays enforced without giving up mimalloc's performance. A mold that exceeds it is stopped at the interpreter's next checkpoint and reported as <code>sandbox exploded: max_memory exceeded</code>.</p>
 <h2 id="performance">Performance</h2>
 <table>
@@ -1839,7 +1875,7 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p>The <code>fimod monty repl</code> command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform. The REPL resolves the same sandbox policy as <code>fimod shape</code>, including <code>--sandbox-file &lt;path&gt;</code> and <code>--sandbox-file=""</code>. Mold-only helper families such as <code>re_*</code> and <code>dp_*</code> are not imported into the REPL.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$ fimod monty repl
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.18 — fimod v0.8.0 (exit or Ctrl+D to quit)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v0.0.23 — fimod v0.10.0 (exit or Ctrl+D to quit)
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>&gt;&gt;&gt; data = {"name": "Alice", "age": 30}
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&gt;&gt;&gt; data["name"].upper()
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>'ALICE'
@@ -1911,10 +1947,14 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e886cdf1.min.js"></script>
+      <script src="../../assets/javascripts/bundle.df5d1f2b.min.js"></script>
       
     
   </body>

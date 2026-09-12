@@ -23,23 +23,23 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.56">
+      <meta name="generator" content="zensical-0.0.61">
     
     
       
-        <title>🖥️ CLI Reference - fimod - the data shaper CLI</title>
+        <title>CLI Reference - fimod - the data shaper CLI</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.20815dad.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              🖥️ CLI Reference
+              CLI Reference
             
           </span>
         </div>
@@ -2449,6 +2449,10 @@ Use <code>FIMOD_VARIANT=fast</code> for a larger, uncompressed binary optimized 
 <td><code>--sandbox-file &lt;PATH&gt;</code></td>
 <td>Sandbox policy file for <code>setup sandbox defaults/show/get/set</code>; omitted means <code>~/.config/fimod/sandbox.toml</code>.</td>
 </tr>
+<tr>
+<td><code>--max-suspensions &lt;COUNT&gt;</code></td>
+<td>For <code>setup sandbox set</code>: host suspension quota per mold / REPL snippet; <code>0</code> disables it.</td>
+</tr>
 </tbody>
 </table>
 <p>Setup prompts can also be answered with environment variables. Granular values win over <code>FIMOD_SETUP_ALL</code>.</p>
@@ -2756,8 +2760,19 @@ For <strong>remote</strong> registries (GitHub, GitLab, HTTP), a <code>catalog.t
 <td><code>max_memory</code></td>
 <td><code>2GB</code></td>
 </tr>
+<tr>
+<td><code>max_suspensions</code></td>
+<td><code>0</code> (disabled)</td>
+</tr>
 </tbody>
 </table>
+<p><code>max_suspensions</code> accepts a non-negative integer. Missing or <code>0</code> disables the quota.
+A positive value limits host boundary crossings (external calls, OS calls, name or
+attribute lookups, future resolution) per mold execution, or per REPL snippet.
+The Nth suspension is allowed; the next is rejected before its host action runs.
+The CLI exits 137 with <code>sandbox exploded: max_suspensions exceeded (N)</code>; Python
+cannot catch this stop. The REPL reports it and accepts another snippet with a
+fresh budget. A multi-mold chain starts a fresh quota for each mold.</p>
 <p><code>max_duration</code> is a budget for the whole mold chain, including steps injected
 at runtime. Each step receives only the time remaining from the original
 invocation budget; starting a new step does not reset the clock.</p>
@@ -2771,14 +2786,18 @@ invocation budget; starting a new step does not reset the clock.</p>
 <a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="n">allow_clock</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">              </span><span class="c1"># allow datetime.now() / date.today()</span>
 <a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">max_duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"10m"</span><span class="w">             </span><span class="c1"># "30s", "10m", "unlimited"</span>
 <a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="n">max_memory</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">"2GB"</span><span class="w">             </span><span class="c1"># "500MB", "2GB", "unlimited"</span>
-<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="n">allow_env</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"LANG"</span><span class="p">,</span><span class="w"> </span><span class="s2">"TZ_*"</span><span class="p">]</span><span class="w">  </span><span class="c1"># glob patterns: "*", "PREFIX_*", "EXACT"</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="n">max_suspensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="w">              </span><span class="c1"># integer; 0 disables the host-call quota</span>
+<a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a><span class="n">allow_env</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"LANG"</span><span class="p">,</span><span class="w"> </span><span class="s2">"TZ_*"</span><span class="p">]</span><span class="w">  </span><span class="c1"># glob patterns: "*", "PREFIX_*", "EXACT"</span>
 </code></pre></div>
 <p>Common setup edits:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--deny-clock
 <a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-duration<span class="w"> </span>30m<span class="w"> </span>--max-memory<span class="w"> </span>4GB
-<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--allow-env<span class="w"> </span>LANG<span class="w"> </span>--allow-env<span class="w"> </span><span class="s1">'TZ_*'</span>
-<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--clear-env
-<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--sandbox-file<span class="w"> </span>./ci-sandbox.toml<span class="w"> </span>--preset<span class="w"> </span>strict<span class="w"> </span>--yes
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-suspensions<span class="w"> </span><span class="m">10000</span>
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>get<span class="w"> </span>max-suspensions
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--max-suspensions<span class="w"> </span><span class="m">0</span><span class="w">  </span><span class="c1"># disable again</span>
+<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--allow-env<span class="w"> </span>LANG<span class="w"> </span>--allow-env<span class="w"> </span><span class="s1">'TZ_*'</span>
+<a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--clear-env
+<a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a>fimod<span class="w"> </span>setup<span class="w"> </span>sandbox<span class="w"> </span>defaults<span class="w"> </span>--sandbox-file<span class="w"> </span>./ci-sandbox.toml<span class="w"> </span>--preset<span class="w"> </span>strict<span class="w"> </span>--yes
 </code></pre></div>
 <p><code>allow_env = []</code> (default) blocks every <code>os.getenv()</code> call. Patterns match the key name exactly, as a prefix (<code>TZ_*</code>), or anything (<code>*</code>).</p>
 <p>Denied calls raise <code>PermissionError</code> inside the mold — catch it if you want a graceful fallback:</p>
@@ -3230,10 +3249,14 @@ invalidate.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e886cdf1.min.js"></script>
+      <script src="../../assets/javascripts/bundle.df5d1f2b.min.js"></script>
       
     
   </body>
