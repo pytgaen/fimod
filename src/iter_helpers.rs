@@ -5,7 +5,95 @@ use monty_types::DictPairs;
 use monty_types::MontyObject;
 use serde_json::Value;
 
-use crate::convert::{json_into_monty, monty_to_json};
+use crate::convert::{is_json_native, json_into_monty, monty_to_json};
+
+/// Retain the helpers' historical JSON normalization for Python-only types,
+/// while keeping ordinary JSON records in their owned Monty representation.
+fn json_compatible_array(data: MontyObject, name: &str) -> Result<Vec<MontyObject>> {
+    let data = if is_json_native(&data) {
+        data
+    } else {
+        json_into_monty(monty_to_json(data)?)
+    };
+    match data {
+        MontyObject::List(items) => Ok(items),
+        _ => bail!("{name}() expects an array"),
+    }
+}
+
+fn field_value<'a>(item: &'a MontyObject, key: &str) -> &'a MontyObject {
+    if let MontyObject::Dict(pairs) = item {
+        for (k, value) in pairs {
+            if matches!(k, MontyObject::String(s) if s == key) {
+                return value;
+            }
+        }
+    }
+    &MontyObject::None
+}
+
+/// Cached ordering projection, preserving Null < Bool < Number < String <
+/// Array < Object and the historical f64 comparison of JSON numbers.
+#[derive(PartialEq)]
+enum OrderingKey {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array,
+    Object,
+}
+
+impl OrderingKey {
+    fn rank(&self) -> u8 {
+        match self {
+            Self::Null => 0,
+            Self::Bool(_) => 1,
+            Self::Number(_) => 2,
+            Self::String(_) => 3,
+            Self::Array => 4,
+            Self::Object => 5,
+        }
+    }
+}
+
+// json_compatible_array rejects NaN/infinities before constructing keys.
+impl Eq for OrderingKey {}
+impl PartialOrd for OrderingKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for OrderingKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.rank()
+            .cmp(&other.rank())
+            .then_with(|| match (self, other) {
+                (Self::Bool(a), Self::Bool(b)) => a.cmp(b),
+                (Self::Number(a), Self::Number(b)) => {
+                    a.partial_cmp(b).expect("finite ordering keys")
+                }
+                (Self::String(a), Self::String(b)) => a.cmp(b),
+                _ => std::cmp::Ordering::Equal,
+            })
+    }
+}
+
+fn ordering_key(item: &MontyObject, key: &str) -> OrderingKey {
+    match field_value(item, key) {
+        MontyObject::None => OrderingKey::Null,
+        MontyObject::Bool(b) => OrderingKey::Bool(*b),
+        MontyObject::Int(n) => OrderingKey::Number(*n as f64),
+        MontyObject::BigInt(n) => {
+            OrderingKey::Number(u64::try_from(n).expect("normalized JSON integer") as f64)
+        }
+        MontyObject::Float(f) => OrderingKey::Number(*f),
+        MontyObject::String(s) => OrderingKey::String(s.clone()),
+        MontyObject::List(_) => OrderingKey::Array,
+        MontyObject::Dict(_) => OrderingKey::Object,
+        _ => unreachable!("ordering keys come from JSON-normalized records"),
+    }
+}
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &[
@@ -160,57 +248,14 @@ fn it_sort_by(args: Vec<MontyObject>) -> Result<MontyObject> {
         Some(other) => bail!("it_sort_by() reverse must be a bool, got {other:?}"),
     };
 
-    let mut arr = match monty_to_json(data_obj)? {
-        Value::Array(arr) => arr,
-        _ => bail!("it_sort_by() expects an array"),
-    };
-
-    arr.sort_by(|a, b| {
-        let va = a.get(&key).unwrap_or(&Value::Null);
-        let vb = b.get(&key).unwrap_or(&Value::Null);
-        let ord = cmp_json_values(va, vb);
-        if reverse {
-            ord.reverse()
-        } else {
-            ord
-        }
-    });
-
-    Ok(json_into_monty(Value::Array(arr)))
-}
-
-/// Compare two JSON values for sorting.
-/// Order: Null < Bool < Number < String < Array < Object
-fn cmp_json_values(a: &Value, b: &Value) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-
-    fn type_rank(v: &Value) -> u8 {
-        match v {
-            Value::Null => 0,
-            Value::Bool(_) => 1,
-            Value::Number(_) => 2,
-            Value::String(_) => 3,
-            Value::Array(_) => 4,
-            Value::Object(_) => 5,
-        }
+    let mut arr = json_compatible_array(data_obj, "it_sort_by")?;
+    // Cache compact keys and permute the existing payload vector in place.
+    if reverse {
+        arr.sort_by_cached_key(|item| std::cmp::Reverse(ordering_key(item, &key)));
+    } else {
+        arr.sort_by_cached_key(|item| ordering_key(item, &key));
     }
-
-    let ra = type_rank(a);
-    let rb = type_rank(b);
-    if ra != rb {
-        return ra.cmp(&rb);
-    }
-
-    match (a, b) {
-        (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
-        (Value::Number(a), Value::Number(b)) => {
-            let fa = a.as_f64().unwrap_or(0.0);
-            let fb = b.as_f64().unwrap_or(0.0);
-            fa.partial_cmp(&fb).unwrap_or(Ordering::Equal)
-        }
-        (Value::String(a), Value::String(b)) => a.cmp(b),
-        _ => Ordering::Equal,
-    }
+    Ok(MontyObject::List(arr))
 }
 
 /// it_unique(array) → deduplicated array (preserves first occurrence)
@@ -284,15 +329,15 @@ fn it_count_by(args: Vec<MontyObject>) -> Result<MontyObject> {
         other => bail!("it_count_by() key must be a string, got {other:?}"),
     };
 
-    let arr = match monty_to_json(data_obj)? {
-        Value::Array(arr) => arr,
-        _ => bail!("it_count_by() expects an array"),
-    };
+    let arr = json_compatible_array(data_obj, "it_count_by")?;
 
     // serde_json::Map preserves insertion order (see `preserve_order` feature).
     let mut counts: serde_json::Map<String, Value> = serde_json::Map::new();
     for item in arr {
-        let group_key = stringify_group_key(&item, &key);
+        let group_key = match field_value(&item, &key) {
+            MontyObject::String(s) => s.clone(),
+            value => monty_to_json(value.clone())?.to_string(),
+        };
         let current = counts.get(&group_key).and_then(Value::as_u64).unwrap_or(0);
         counts.insert(group_key, Value::Number((current + 1).into()));
     }
@@ -325,30 +370,23 @@ fn extremum_by(args: Vec<MontyObject>, name: &str, take_max: bool) -> Result<Mon
         other => bail!("{name}() key must be a string, got {other:?}"),
     };
 
-    let arr = match monty_to_json(data_obj)? {
-        Value::Array(arr) => arr,
-        _ => bail!("{name}() expects an array"),
-    };
-
-    if arr.is_empty() {
-        return Ok(MontyObject::None);
-    }
-
-    // Reverse the comparator for max so we still get the FIRST element on ties
-    // (std min_by returns first on ties; max_by returns last).
-    let best = arr
-        .into_iter()
-        .min_by(|a, b| {
-            let va = a.get(&key).unwrap_or(&Value::Null);
-            let vb = b.get(&key).unwrap_or(&Value::Null);
+    let arr = json_compatible_array(data_obj, name)?;
+    let mut best: Option<(OrderingKey, MontyObject)> = None;
+    for item in arr {
+        let value = ordering_key(&item, &key);
+        let replace = best.as_ref().is_none_or(|(best_key, _)| {
+            let order = value.cmp(best_key);
             if take_max {
-                cmp_json_values(vb, va)
+                order.is_gt()
             } else {
-                cmp_json_values(va, vb)
+                order.is_lt()
             }
-        })
-        .unwrap();
-    Ok(json_into_monty(best))
+        });
+        if replace {
+            best = Some((value, item));
+        }
+    }
+    Ok(best.map_or(MontyObject::None, |(_, item)| item))
 }
 
 #[cfg(test)]
@@ -475,6 +513,126 @@ mod tests {
         assert_eq!(arr[0]["name"], "Bob");
         assert_eq!(arr[1]["name"], "Charlie");
         assert_eq!(arr[2]["name"], "Alice");
+    }
+
+    #[test]
+    fn test_ordering_keeps_mixed_types_missing_fields_and_stable_ties() {
+        let data = serde_json::json!([
+            {"id": 0, "k": {}}, {"id": 1, "k": [2]},
+            {"id": 2, "k": "a"}, {"id": 3, "k": 1.0},
+            {"id": 4, "k": 1}, {"id": 5, "k": true},
+            {"id": 6, "k": false}, {"id": 7}, {"id": 8, "k": null},
+            {"id": 9, "k": [1]}
+        ]);
+        for (reverse, expected) in [
+            (false, vec![7, 8, 6, 5, 3, 4, 2, 1, 9, 0]),
+            (true, vec![0, 1, 9, 2, 3, 4, 5, 6, 7, 8]),
+        ] {
+            let result = dispatch(
+                "it_sort_by",
+                vec![
+                    json_into_monty(data.clone()),
+                    s("k"),
+                    MontyObject::Bool(reverse),
+                ],
+            )
+            .unwrap();
+            let value = monty_to_json(result).unwrap();
+            let ids: Vec<i64> = value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v["id"].as_i64().unwrap())
+                .collect();
+            assert_eq!(ids, expected);
+        }
+        for (name, id) in [("it_min_by", 7), ("it_max_by", 0)] {
+            let result = dispatch(name, vec![json_into_monty(data.clone()), s("k")]).unwrap();
+            assert_eq!(monty_to_json(result).unwrap()["id"], id);
+        }
+    }
+
+    #[test]
+    fn test_ordering_preserves_f64_integer_ties() {
+        for (first, second) in [
+            (9_007_199_254_740_993u64, 9_007_199_254_740_992u64),
+            (u64::MAX, u64::MAX - 1),
+        ] {
+            let data = serde_json::json!([{"id":0,"k":first},{"id":1,"k":second}]);
+            for reverse in [false, true] {
+                let result = dispatch(
+                    "it_sort_by",
+                    vec![
+                        json_into_monty(data.clone()),
+                        s("k"),
+                        MontyObject::Bool(reverse),
+                    ],
+                )
+                .unwrap();
+                assert_eq!(monty_to_json(result).unwrap(), data);
+            }
+            for name in ["it_min_by", "it_max_by"] {
+                let result = dispatch(name, vec![json_into_monty(data.clone()), s("k")]).unwrap();
+                assert_eq!(monty_to_json(result).unwrap()["id"], 0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_native_helpers_preserve_json_normalization() {
+        let row = MontyObject::Dict(DictPairs::from(vec![
+            (MontyObject::Int(1), s("replaced")),
+            (s("1"), s("kept")),
+            (s("k"), MontyObject::Int(1)),
+            (s("payload"), MontyObject::Tuple(vec![MontyObject::Int(7)])),
+            (
+                s("date"),
+                MontyObject::Date(monty_types::MontyDate {
+                    year: 2026,
+                    month: 9,
+                    day: 9,
+                }),
+            ),
+            (
+                s("big"),
+                MontyObject::BigInt("18446744073709551616".parse().unwrap()),
+            ),
+        ]));
+        let expected = json_into_monty(
+            serde_json::json!({"1":"kept","k":1,"payload":[7],"date":"2026-09-09","big":"18446744073709551616"}),
+        );
+        for name in ["it_sort_by", "it_min_by", "it_max_by"] {
+            let result =
+                dispatch(name, vec![MontyObject::Tuple(vec![row.clone()]), s("k")]).unwrap();
+            let expected = if name == "it_sort_by" {
+                MontyObject::List(vec![expected.clone()])
+            } else {
+                expected.clone()
+            };
+            assert_eq!(result, expected, "{name}");
+        }
+        let result = dispatch(
+            "it_count_by",
+            vec![MontyObject::Tuple(vec![row]), s("date")],
+        )
+        .unwrap();
+        assert_eq!(
+            monty_to_json(result).unwrap(),
+            serde_json::json!({"2026-09-09":1})
+        );
+    }
+
+    #[test]
+    fn test_native_helpers_still_reject_invalid_unselected_fields() {
+        for name in ["it_sort_by", "it_count_by", "it_min_by", "it_max_by"] {
+            for invalid in [MontyObject::Float(f64::NAN), MontyObject::Bytes(vec![1])] {
+                let data = MontyObject::List(vec![MontyObject::Dict(DictPairs::from(vec![
+                    (s("k"), MontyObject::Int(1)),
+                    (s("unused"), invalid),
+                ]))]);
+                assert!(dispatch(name, vec![data, s("k")]).is_err(), "{name}");
+            }
+        }
     }
 
     #[test]

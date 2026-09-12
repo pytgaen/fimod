@@ -135,3 +135,29 @@ def transform(data, args, env, headers, **_):
         .stdout(predicate::str::contains("\"original_b\": 1"))
         .stdout(predicate::str::contains("\"modified_b\": 999"));
 }
+
+#[test]
+fn test_dp_edits_leave_original_and_other_snapshots_independent() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(
+        &dir,
+        "data.json",
+        r#"{"items":[{"v":1},{"v":2}],"keep":{"x":3}}"#,
+    );
+    let mold = setup_mold(
+        &dir,
+        "edit.py",
+        r#"
+def transform(data, **_):
+    updated = dp_set(data, "items.-1.v", 99)
+    deleted = dp_delete(data, "items.0")
+    updated["keep"]["x"] = 44
+    deleted["keep"]["x"] = 55
+    return [data, updated, deleted]
+"#,
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-i", &input, "-m", &mold, "--output-format", "json-compact"])
+        .assert().success()
+        .stdout("[{\"items\":[{\"v\":1},{\"v\":2}],\"keep\":{\"x\":3}},{\"items\":[{\"v\":1},{\"v\":99}],\"keep\":{\"x\":44}},{\"items\":[{\"v\":2}],\"keep\":{\"x\":55}}]\n");
+}

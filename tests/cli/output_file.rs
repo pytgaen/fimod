@@ -1,6 +1,87 @@
 use super::helpers::{setup_input, setup_mold};
 use predicates::prelude::*;
 
+#[test]
+fn test_final_ndjson_format_from_cli_extension_or_mold_has_identical_output() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let input = setup_input(&dir, "data.json", r#"[{"b":2,"a":1},{"b":4,"a":3}]"#);
+    for mode in ["explicit", "extension", "format_override", "file_override"] {
+        let target = dir.path().join(format!("{mode}.ndjson"));
+        let unused = dir.path().join(format!("{mode}.yaml"));
+        let script = match mode {
+            "format_override" => "def transform(data, **_):\n    set_output_format('ndjson')\n    return data\n",
+            "file_override" => "def transform(data, args, **_):\n    set_output_file(args['out'])\n    return data\n",
+            _ => "def transform(data, **_):\n    return data\n",
+        };
+        let mold = setup_mold(&dir, &format!("{mode}.py"), script);
+        let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+        cmd.args(["s", "-i", &input, "-m", &mold]);
+        if mode == "file_override" {
+            cmd.arg("-o")
+                .arg(&unused)
+                .arg("--arg")
+                .arg(format!("out={}", target.display()));
+        } else {
+            cmd.arg("-o").arg(&target);
+        }
+        if mode == "explicit" {
+            cmd.args(["--output-format", "ndjson"]);
+        } else if mode == "format_override" {
+            cmd.args(["--output-format", "yaml"]);
+        }
+        cmd.assert().success().stdout("");
+        assert_eq!(
+            std::fs::read_to_string(target).unwrap(),
+            "{\"b\":2,\"a\":1}\n{\"b\":4,\"a\":3}\n",
+            "{mode}"
+        );
+        assert!(!unused.exists());
+    }
+}
+
+#[test]
+fn test_final_output_format_keeps_normalization_and_newlines() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (format, expression, expected) in [
+        ("json-compact", "{'b': 2, 'a': 1}", "{\"b\":2,\"a\":1}\n"),
+        ("ndjson", "[{'a': 1}, {'a': 2}]", "{\"a\":1}\n{\"a\":2}\n"),
+        ("lines", "['hello', 7]", "hello\n7\n"),
+        ("txt", "'hello'", "hello"),
+        ("txt", "date(2026, 9, 9)", "2026-09-09"),
+        ("lines", "(date(2026, 9, 9), 7)", "2026-09-09\n7\n"),
+        ("txt", "18446744073709551616", "18446744073709551616"),
+        (
+            "json-compact",
+            "{1: 'first', '1': 'last'}",
+            "{\"1\":\"last\"}\n",
+        ),
+    ] {
+        let mold = setup_mold(&dir, "format.py", &format!("from datetime import date\ndef transform(data, **_):\n    set_output_format('{format}')\n    return {expression}\n"));
+        for debug in [false, true] {
+            let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+            cmd.args(["s", "--no-input", "-m", &mold]);
+            if debug {
+                cmd.arg("--debug");
+            }
+            cmd.assert().success().stdout(expected);
+        }
+    }
+}
+
+#[test]
+fn test_inferred_output_does_not_hide_nonfinite_float_errors() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("out.ndjson");
+    std::fs::write(&target, "keep me").unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-e", "float('nan')", "-o"])
+        .arg(&target)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Cannot represent float"));
+    assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
+}
+
 // ── set_output_file() basic behaviour ──────────────────────────────────────────
 
 /// set_output_file() writes output to the specified file instead of stdout.

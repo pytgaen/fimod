@@ -1,13 +1,15 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
 use monty::{MontyRun, RunProgress};
 use monty_types::{
-    CompileOptions, DictPairs, ExcType, ExtFunctionResult, MontyDate, MontyDateTime,
-    MontyException, MontyObject, NameLookupResult, OsFunctionCall, PrintWriter,
-    PrintWriterCallback, ResourceLimits, ResourceTracker,
+    CompileOptions, DictPairs, ExcType, ExtFunctionResult, MontyClassInstance, MontyClassType,
+    MontyDate, MontyDateTime, MontyException, MontyObject, MontyUuid, NameLookupResult,
+    OsFunctionCall, PrintWriter, PrintWriterCallback, ResourceLimits, ResourceTracker,
 };
 use serde_json::{Number, Value};
 
@@ -150,6 +152,7 @@ pub struct MoldOptions<'a> {
 
 /// Internal runtime context — extends MoldOptions with mutable shared state.
 struct MoldContext<'a> {
+    objects: HostObjects,
     debug: bool,
     msg_level: u8,
     mold_base_dir: Option<&'a str>,
@@ -163,7 +166,7 @@ struct MoldContext<'a> {
     current_step_idx: usize,
     total_steps: usize,
     remaining_steps: &'a [Value],
-    // Step metadata for building Step Dataclasses.
+    // Step metadata for building Step objects.
     input_path: Option<&'a str>,
     output_path: Option<&'a str>,
     in_place: bool,
@@ -229,6 +232,66 @@ const PIPELINE_TYPE_ID: u64 = 0x6669_6d6f_6450_6970;
 const STEP_CLASS_TYPE_ID: u64 = 0x6669_6d6f_6453_636c; // Step class object (for Step.create)
 const STEP_TYPE_ID: u64 = 0x6669_6d6f_6453_7470; // live Step instance
 const STEP_SPEC_TYPE_ID: u64 = 0x6669_6d6f_6453_7063; // Step spec (from Step.create)
+
+/// Host-owned metadata survives method suspensions without trusting sandbox attrs.
+/// Each mold invocation owns its registry and fresh UUIDs.
+#[derive(Default)]
+struct HostObjects {
+    classes: RefCell<HashMap<u64, MontyClassType>>,
+    instances: RefCell<HashMap<MontyUuid, (u64, MontyObject)>>,
+    steps: RefCell<HashMap<usize, MontyObject>>,
+}
+
+fn new_host_id() -> Result<MontyUuid> {
+    let mut bytes = [0; 16];
+    getrandom::fill(&mut bytes).map_err(|err| anyhow::anyhow!("host object identity: {err}"))?;
+    Ok(MontyUuid::from_random_bytes(bytes))
+}
+
+impl HostObjects {
+    fn build(&self, name: &str, kind: u64, attrs: DictPairs) -> Result<MontyObject> {
+        let mut classes = self.classes.borrow_mut();
+        if let std::collections::hash_map::Entry::Vacant(entry) = classes.entry(kind) {
+            entry.insert(MontyClassType {
+                name: name.into(),
+                id: new_host_id()?,
+                host_defined: true,
+                is_dataclass: false,
+                attrs: DictPairs::default(),
+            });
+        }
+        let object = MontyObject::ClassInstance(Box::new(MontyClassInstance {
+            class_type: classes[&kind].clone(),
+            instance_id: new_host_id()?,
+            attrs,
+        }));
+        if let MontyObject::ClassInstance(instance) = &object {
+            self.instances
+                .borrow_mut()
+                .insert(instance.instance_id, (kind, object.clone()));
+        }
+        Ok(object)
+    }
+
+    fn receiver(&self, id: MontyUuid) -> Result<MontyObject> {
+        self.instances
+            .borrow()
+            .get(&id)
+            .map(|(_, object)| object.clone())
+            .ok_or_else(|| anyhow::anyhow!("Unknown host object: {id}"))
+    }
+
+    fn kind(&self, object: &MontyObject) -> Option<u64> {
+        if let MontyObject::ClassInstance(instance) = object {
+            self.instances
+                .borrow()
+                .get(&instance.instance_id)
+                .map(|(kind, _)| *kind)
+        } else {
+            None
+        }
+    }
+}
 
 fn str_opt_to_monty(s: Option<&str>) -> MontyObject {
     match s {
@@ -424,34 +487,38 @@ fn unquote_arg_default(raw: &str) -> String {
     out
 }
 
-/// Build a Step Dataclass with no readable attrs — all reads must go through
+/// Build a Step object with no readable attrs — all reads must go through
 /// `step.get('key')`, all writes through `step.set('key', value)`.
 /// Only `_step_idx` is stored internally to identify which step this is.
-fn build_step_dc(step_idx: usize) -> MontyObject {
+fn build_step_dc(step_idx: usize, ctx: &MoldContext<'_>) -> Result<MontyObject> {
+    if let Some(step) = ctx.objects.steps.borrow().get(&step_idx) {
+        return Ok(step.clone());
+    }
     let attrs: Vec<(MontyObject, MontyObject)> = vec![(
         MontyObject::String("_step_idx".into()),
         MontyObject::Int(step_idx as i64),
     )];
-    MontyObject::Dataclass {
-        name: "Step".to_string(),
-        type_id: STEP_TYPE_ID,
-        field_names: vec![],
-        attrs: DictPairs::from(attrs),
-        frozen: false,
-    }
+    let step = ctx
+        .objects
+        .build("Step", STEP_TYPE_ID, DictPairs::from(attrs))?;
+    ctx.objects
+        .steps
+        .borrow_mut()
+        .insert(step_idx, step.clone());
+    Ok(step)
 }
 
-fn build_current_step_dc(ctx: &MoldContext<'_>) -> MontyObject {
-    build_step_dc(ctx.current_step_idx)
+fn build_current_step_dc(ctx: &MoldContext<'_>) -> Result<MontyObject> {
+    build_step_dc(ctx.current_step_idx, ctx)
 }
 
-fn build_future_step_dc(step_idx: usize) -> MontyObject {
-    build_step_dc(step_idx)
+fn build_future_step_dc(step_idx: usize, ctx: &MoldContext<'_>) -> Result<MontyObject> {
+    build_step_dc(step_idx, ctx)
 }
 
 fn get_dc_attr<'a>(dc: &'a MontyObject, key: &str) -> Option<&'a MontyObject> {
-    if let MontyObject::Dataclass { attrs, .. } = dc {
-        for (k, v) in attrs {
+    if let MontyObject::ClassInstance(instance) = dc {
+        for (k, v) in &instance.attrs {
             if let MontyObject::String(k_str) = k {
                 if k_str == key {
                     return Some(v);
@@ -476,18 +543,15 @@ fn extract_int_arg(arg: &MontyObject, method_name: &str) -> Result<i64> {
     }
 }
 
-/// Dispatch a method call on a Pipeline, Step instance, or Step class Dataclass.
-/// `args[0]` is always `self` (the Dataclass instance).
+/// Dispatch a method call on a Pipeline, Step instance, or Step class object.
+/// `args[0]` is always `self` (the host-owned receiver).
 fn dispatch_method(
     name: &str,
     args: &[MontyObject],
     kwargs: &[(MontyObject, MontyObject)],
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
-    let receiver_type = args.first().and_then(|o| match o {
-        MontyObject::Dataclass { type_id, .. } => Some(*type_id),
-        _ => None,
-    });
+    let receiver_type = args.first().and_then(|o| ctx.objects.kind(o));
 
     if matches!(
         name,
@@ -504,7 +568,7 @@ fn dispatch_method(
     }
 
     match name {
-        "current_step" => Ok(build_current_step_dc(ctx)),
+        "current_step" => build_current_step_dc(ctx),
         "step" => {
             let raw_idx = if args.len() > 1 {
                 extract_int_arg(&args[1], "pipeline.step()")?
@@ -524,7 +588,7 @@ fn dispatch_method(
             }
             let idx = raw_idx as usize;
             if idx == ctx.current_step_idx {
-                return Ok(build_current_step_dc(ctx));
+                return build_current_step_dc(ctx);
             }
             if idx > ctx.current_step_idx {
                 let remaining_idx = idx - ctx.current_step_idx - 1;
@@ -534,14 +598,12 @@ fn dispatch_method(
                         ctx.total_steps
                     );
                 }
-                return Ok(build_future_step_dc(idx));
+                return build_future_step_dc(idx, ctx);
             }
             anyhow::bail!("pipeline.step({idx}): cannot access past steps")
         }
         "length" => Ok(MontyObject::Int(ctx.total_steps as i64)),
-        "create" if matches!(args.first(), Some(MontyObject::Dataclass { type_id, .. }) if *type_id == STEP_CLASS_TYPE_ID) => {
-            dispatch_step_create(kwargs)
-        }
+        "create" if receiver_type == Some(STEP_CLASS_TYPE_ID) => dispatch_step_create(kwargs, ctx),
         "set" if args.len() >= 3 => {
             let step_idx = get_step_idx(&args[0])?;
             let key = crate::monty_args::expect_string_owned(&args[1], "Step.set() key")?;
@@ -555,7 +617,7 @@ fn dispatch_method(
             get_step_field(step_idx, &key, ctx)
         }
         "insert_next" | "append" => {
-            let spec = extract_step_spec(name, args, kwargs)?;
+            let spec = extract_step_spec(name, args, kwargs, ctx)?;
             ctx.pending_steps.lock().unwrap().push(PendingStep {
                 op: if name == "insert_next" {
                     PendingOp::InsertNext
@@ -575,10 +637,16 @@ fn extract_step_spec(
     method_name: &str,
     args: &[MontyObject],
     _kwargs: &[(MontyObject, MontyObject)],
+    ctx: &MoldContext<'_>,
 ) -> Result<Value> {
-    if let Some(MontyObject::Dataclass { type_id, attrs, .. }) = args.get(1) {
-        if *type_id == STEP_SPEC_TYPE_ID {
-            return dataclass_attrs_to_json(attrs);
+    if let Some(object @ MontyObject::ClassInstance(instance)) = args.get(1) {
+        if ctx.objects.kind(object) == Some(STEP_SPEC_TYPE_ID) {
+            let MontyObject::ClassInstance(original) =
+                ctx.objects.receiver(instance.instance_id)?
+            else {
+                unreachable!()
+            };
+            return dataclass_attrs_to_json(&original.attrs);
         }
     }
     anyhow::bail!("pipeline.{method_name}(): argument must be a Step.create(...) spec");
@@ -751,7 +819,10 @@ fn set_step_field(
 }
 
 /// Build a Step spec Dataclass from `Step.create(...)` kwargs.
-fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyObject> {
+fn dispatch_step_create(
+    kwargs: &[(MontyObject, MontyObject)],
+    ctx: &MoldContext<'_>,
+) -> Result<MontyObject> {
     let mut mold: Option<String> = None;
     let mut expr: Option<String> = None;
     let mut spec_attrs: Vec<(MontyObject, MontyObject)> = vec![(
@@ -797,13 +868,8 @@ fn dispatch_step_create(kwargs: &[(MontyObject, MontyObject)]) -> Result<MontyOb
         anyhow::bail!("Step.create(): cannot specify both `mold=` and `expr=`");
     }
 
-    Ok(MontyObject::Dataclass {
-        name: "Step".to_string(),
-        type_id: STEP_SPEC_TYPE_ID,
-        field_names: vec![],
-        attrs: DictPairs::from(spec_attrs),
-        frozen: true,
-    })
+    ctx.objects
+        .build("Step", STEP_SPEC_TYPE_ID, DictPairs::from(spec_attrs))
 }
 
 /// Execute a mold Python script against input data using Monty.
@@ -831,13 +897,8 @@ pub(crate) fn execute_mold_with_chain_start(
     let env_obj = json_to_monty(opts.env_value);
     let headers_obj = json_to_monty(opts.headers_value);
 
-    let pipeline_dc = MontyObject::Dataclass {
-        name: "Pipeline".to_string(),
-        type_id: PIPELINE_TYPE_ID,
-        field_names: vec![],
-        attrs: DictPairs::from(vec![]),
-        frozen: false,
-    };
+    let objects = HostObjects::default();
+    let pipeline_dc = objects.build("Pipeline", PIPELINE_TYPE_ID, DictPairs::default())?;
 
     let input_names = vec![
         "data".to_string(),
@@ -868,6 +929,7 @@ pub(crate) fn execute_mold_with_chain_start(
     .context("Failed to compile mold script")?;
 
     let ctx = MoldContext {
+        objects,
         debug: opts.debug,
         msg_level: opts.msg_level,
         mold_base_dir: opts.mold_base_dir,
@@ -909,6 +971,35 @@ pub(crate) fn execute_mold_with_chain_start(
     })
 }
 
+/// Count host boundary crossings before servicing them. Dropping a suspended
+/// execution on failure cannot be caught by Python code.
+pub struct SuspensionBudget {
+    remaining: Option<usize>,
+    limit: usize,
+}
+
+impl SuspensionBudget {
+    pub fn new(limit: usize) -> Self {
+        Self {
+            remaining: (limit != 0).then_some(limit),
+            limit,
+        }
+    }
+
+    pub fn charge(&mut self) -> Result<()> {
+        if let Some(remaining) = &mut self.remaining {
+            if *remaining == 0 {
+                return Err(limit_exceeded(
+                    "max_suspensions",
+                    Some(self.limit.to_string()),
+                ));
+            }
+            *remaining -= 1;
+        }
+        Ok(())
+    }
+}
+
 fn run_loop(
     runner: MontyRun,
     inputs: Vec<MontyObject>,
@@ -940,14 +1031,21 @@ fn run_loop(
         )
         .map_err(|e| translate_monty_error(e, ctx.policy))?;
 
+    let mut budget = SuspensionBudget::new(ctx.policy.max_suspensions);
     loop {
+        if !matches!(progress, RunProgress::Complete(_)) {
+            budget.charge()?;
+        }
         match progress {
             RunProgress::Complete(result) => return Ok(result),
             RunProgress::FunctionCall(mut call) => {
                 let function_name = call.function_name.clone();
-                let method_call = call.method_call;
-                let result = if method_call {
-                    dispatch_method(&function_name, &call.args, &call.kwargs, ctx)
+                let result = if let Some(id) = call.object_id {
+                    // Keep the internal dispatch convention explicit: receiver first.
+                    let mut args = Vec::with_capacity(call.args.len() + 1);
+                    args.push(ctx.objects.receiver(id)?);
+                    args.append(&mut call.args);
+                    dispatch_method(&function_name, &args, &call.kwargs, ctx)
                         .map_err(|e| anyhow::anyhow!("Method call '{function_name}' failed: {e}"))?
                 } else {
                     let args = std::mem::take(&mut call.args);
@@ -994,14 +1092,14 @@ fn run_loop(
             }
             RunProgress::NameLookup(lookup) => {
                 let name = lookup.name.clone();
-                let result = if name == "Step" {
-                    NameLookupResult::Value(MontyObject::Dataclass {
-                        name: "Step".to_string(),
-                        type_id: STEP_CLASS_TYPE_ID,
-                        field_names: vec![],
-                        attrs: DictPairs::from(vec![]),
-                        frozen: true,
-                    })
+                let result = if lookup.object_id().is_some() {
+                    NameLookupResult::Undefined
+                } else if name == "Step" {
+                    NameLookupResult::Value(ctx.objects.build(
+                        "Step",
+                        STEP_CLASS_TYPE_ID,
+                        DictPairs::default(),
+                    )?)
                 } else if is_external_function(&name) {
                     NameLookupResult::Value(MontyObject::Function {
                         name,
@@ -1031,7 +1129,7 @@ fn run_loop(
 
 /// Build `ResourceLimits` from a `SandboxPolicy`.
 pub fn sandbox_resource_limits(policy: &SandboxPolicy) -> ResourceLimits {
-    let mut limits = ResourceLimits::default();
+    let mut limits = ResourceLimits::default().max_suspensions(policy.max_suspensions);
     if let Some(d) = policy.max_duration {
         limits = limits.max_duration(d);
     }

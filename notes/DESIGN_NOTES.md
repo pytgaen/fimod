@@ -54,6 +54,26 @@ The `-e 'data'` identity optimization only applies when it is the whole chain.
 Inside a multi-step chain it remains a normal inline expression so step counts
 and pipeline metadata stay stable.
 
+### Native processing of JSON-compatible results
+
+`dp_set` and `dp_delete` edit the owned host snapshot without cloning each
+ancestor subtree. The original Python object remains independent of both the
+edited path and unchanged branches in the returned snapshot.
+
+`it_sort_by`, `it_count_by`, `it_min_by` and `it_max_by` retain ordinary JSON
+records as `MontyObject` instead of converting every field through `Value`.
+Ordering keys are extracted once per record; arrays and objects retain their
+historical type-only ordering. Python-specific values, key collisions and
+unsupported values still follow the existing JSON normalization/error path.
+
+For single-input and batch CLI execution, the output serializer is chosen
+after the mold's final format and destination overrides. Compact JSON, NDJSON,
+Lines and TXT can use direct serialization even when the format comes from an
+extension, input fallback or `set_output_format()`. Newly eligible paths retain
+`Value` normalization for non-native JSON values. The library, `--check` and
+`--debug` retain their materialized `Value` behavior. Output remains buffered;
+this is separate from the exact-identity streaming conversions above.
+
 ### Batch mode (multiple inputs)
 
 Multiple `-i` inputs are processed sequentially, each running the full pipeline. Batch mode requires either `-o <directory>` or `--in-place`. Per-file aliases are supported with `path:alias` syntax.
@@ -240,5 +260,22 @@ All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pin
 
 ## Watchpoints
 
-- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.19` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.23` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.
+
+### Monty 0.0.23 host objects and suspension quota
+
+Pipeline/Step use `MontyObject::ClassInstance` with random UUIDs and a registry
+owned by each mold execution. `getrandom` supplies entropy (already a transitive
+dependency). Method suspensions carry a receiver UUID; fimod reconstructs its
+internal receiver-first dispatch arguments from host-owned metadata. Sandbox-side
+attribute changes do not change that metadata or a Step.create spec. Attribute
+lookups never fall through to the global built-in resolver.
+
+`sandbox.max_suspensions` is an integer, disabled when absent or zero. Fimod counts
+all host suspensions before servicing them; the quota is per mold / REPL snippet.
+On overflow fimod drops the suspended execution, so Python cannot catch the stop;
+the REPL retains its session. This is independent of Monty's default stored quota
+of 1000, which the interpreter does not enforce. Setup get/set/show preserve the
+configured value. Ruff 0.0.9 uses compact_str 0.10, so the old get-size2 0.10.1 pin
+and associated Dependabot/outdated exclusions are removed.

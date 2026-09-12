@@ -116,7 +116,20 @@ fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) 
         Err(err) => return Err(Box::new((err.repl, format_repl_error(err.error, policy)))),
     };
 
+    let mut budget = fimod::engine::SuspensionBudget::new(policy.max_suspensions);
     loop {
+        if !matches!(progress, ReplProgress::Complete { .. }) {
+            if let Err(err) = budget.charge() {
+                let repl = match progress {
+                    ReplProgress::FunctionCall(call) => call.into_repl(),
+                    ReplProgress::OsCall(call) => call.into_repl(),
+                    ReplProgress::NameLookup(lookup) => lookup.into_repl(),
+                    ReplProgress::ResolveFutures(state) => state.into_repl(),
+                    ReplProgress::Complete { .. } => unreachable!(),
+                };
+                return Err(Box::new((repl, err.to_string())));
+            }
+        }
         match progress {
             ReplProgress::Complete { repl, value } => return Ok((repl, value)),
             ReplProgress::OsCall(call) => {

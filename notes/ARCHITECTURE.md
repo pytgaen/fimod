@@ -156,6 +156,7 @@ sequenceDiagram
 - **External functions are dispatched, not imported.** The mold writes `dp_get(data, "a.b.c")` without any `import`. Monty yields `NameLookup` → engine replies with `Function` → subsequent call yields `FunctionCall` → engine dispatches to `dotpath::dispatch`.
 - **Mold chain re-parses on `set_input_format`.** Between chained steps, if a mold called `set_input_format("yaml")`, the current result is re-serialized and re-parsed through the new format (`pipeline.rs:execute_chain`). `"raw"` is only legal as a final-step override.
 - **`execute_mold` returns `MoldExecResult`.** The result value stays as `MontyObject` for chain performance, alongside optional exit code, output-format override, output-file override, and pending dynamic pipeline changes.
+- **CLI serialization follows the final format and destination.** For ordinary JSON-compatible results, compact JSON/NDJSON/Lines/TXT output can serialize `MontyObject` directly after mold overrides and extension inference. Values requiring normalization, other formats, the library API, `--check` and `--debug` retain the `Value` path; see `DESIGN_NOTES.md`.
 
 ## Extension points
 

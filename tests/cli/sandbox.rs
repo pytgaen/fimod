@@ -437,3 +437,81 @@ def transform(data, args, env, headers, **_):
         .success()
         .stdout(predicate::str::contains(r#""year":"#));
 }
+
+#[test]
+fn test_sandbox_suspensions_exact_boundary_and_uncatchable_limit() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    // Two methods on the supplied pipeline: exactly two host suspensions.
+    let mold = setup_mold(
+        &dir,
+        "suspensions.py",
+        r#"
+def transform(data, pipeline, **_):
+    try:
+        pipeline.length()
+        pipeline.length()
+    except BaseException:
+        return "caught"
+    return "ok"
+"#,
+    );
+    for limit in [1, 2] {
+        let policy = setup_sandbox_file(&dir, &format!("[sandbox]\nmax_suspensions = {limit}\n"));
+        let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+        cmd.args(["s", "--no-input", "-m", &mold, "--sandbox-file", &policy]);
+        if limit == 2 {
+            cmd.assert().success().stdout("\"ok\"\n");
+        } else {
+            cmd.assert()
+                .code(137)
+                .stdout("")
+                .stderr(predicate::str::contains("max_suspensions exceeded (1)"));
+        }
+    }
+}
+
+#[test]
+fn test_sandbox_suspensions_disabled_by_default_and_zero() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "many_calls.py",
+        r#"
+def transform(data, **_):
+    for i in range(1100):
+        re_search("x", "x")
+    return "ok"
+"#,
+    );
+    for config in ["[sandbox]\n", "[sandbox]\nmax_suspensions = 0\n"] {
+        let policy = setup_sandbox_file(&dir, config);
+        assert_cmd::cargo_bin_cmd!("fimod")
+            .args(["s", "--no-input", "-m", &mold, "--sandbox-file", &policy])
+            .assert()
+            .success()
+            .stdout("\"ok\"\n");
+    }
+}
+
+#[test]
+fn test_sandbox_repl_suspension_budget_resets_after_failure() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let policy = setup_sandbox_file(&dir, "[sandbox]\nmax_suspensions = 1\n");
+    assert_cmd::cargo_bin_cmd!("fimod").args(["monty", "repl", "--sandbox-file", &policy])
+        .write_stdin("from pathlib import Path\n[Path('/ignored').exists() for i in range(2)]\nPath('/ignored').exists()\n42\n")
+        .assert().success().stdout(predicate::str::contains("42"))
+        .stderr(predicate::str::contains("max_suspensions exceeded (1)").count(1));
+}
+
+#[test]
+fn test_sandbox_suspensions_reject_invalid_config() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for value in ["-1", "1.5", "\"unlimited\""] {
+        let policy = setup_sandbox_file(&dir, &format!("[sandbox]\nmax_suspensions = {value}\n"));
+        assert_cmd::cargo_bin_cmd!("fimod")
+            .args(["s", "--no-input", "-e", "1", "--sandbox-file", &policy])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("max_suspensions"));
+    }
+}

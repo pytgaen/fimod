@@ -322,6 +322,9 @@ pub enum SetupSandboxAction {
         /// Memory limit (for example: 500MB, 2GB, unlimited)
         #[arg(long, value_name = "VALUE")]
         max_memory: Option<String>,
+        /// Maximum host suspensions per mold or REPL snippet (0 disables the quota)
+        #[arg(long, value_name = "COUNT")]
+        max_suspensions: Option<usize>,
         /// Allowed environment key/glob. Repeat or comma-separate.
         #[arg(long = "allow-env", value_name = "PATTERN", action = clap::ArgAction::Append, value_delimiter = ',')]
         allow_env: Vec<String>,
@@ -343,6 +346,7 @@ pub enum SetupSandboxKey {
     AllowClock,
     MaxDuration,
     MaxMemory,
+    MaxSuspensions,
     AllowEnv,
 }
 
