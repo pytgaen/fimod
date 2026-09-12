@@ -19,6 +19,12 @@ Newline-Delimited JSON — one JSON value per line. Ideal for streaming data, lo
 - **Input**: each non-empty line is parsed as a JSON value; result is an **array** of those values.
 - **Output**: each array element is serialized as compact JSON on its own line (trailing newline). A non-array result is a single line.
 
+For ordinary JSON-compatible mold results, direct NDJSON serialization also
+applies when the output format is inferred from `.ndjson` / `.jsonl` or chosen
+by `set_output_format("ndjson")`. An extra `--output-format ndjson` is not
+required to enable it. This optimization does not make arbitrary molds stream
+their input: the mold still receives the complete input data.
+
 ```bash
 # 🔍 Filter an NDJSON log
 fimod s -i events.ndjson -e '[e for e in data if e["level"] == "error"]'

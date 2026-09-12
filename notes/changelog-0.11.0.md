@@ -18,4 +18,4 @@
 ### Housekeeping
 
 - **deps:** remove the obsolete get-size2 compatibility pin and its Dependabot/outdated exclusions now that the upgraded Ruff uses compact_str 0.10.
-- **deps:** refresh fancy-regex to 0.19.1, indexmap to 2.14.2, reqwest to 0.13.5, serde-saphyr to 1.2.0, and toml to 1.1.5 in the lockfile.
+- **deps:** refresh fancy-regex to 0.19.1, indexmap to 2.14.2, reqwest to 0.13.5, serde-saphyr to 1.2.0, and toml to 1.1.6 in the lockfile.

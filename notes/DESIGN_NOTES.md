@@ -54,6 +54,26 @@ The `-e 'data'` identity optimization only applies when it is the whole chain.
 Inside a multi-step chain it remains a normal inline expression so step counts
 and pipeline metadata stay stable.
 
+### Native processing of JSON-compatible results
+
+`dp_set` and `dp_delete` edit the owned host snapshot without cloning each
+ancestor subtree. The original Python object remains independent of both the
+edited path and unchanged branches in the returned snapshot.
+
+`it_sort_by`, `it_count_by`, `it_min_by` and `it_max_by` retain ordinary JSON
+records as `MontyObject` instead of converting every field through `Value`.
+Ordering keys are extracted once per record; arrays and objects retain their
+historical type-only ordering. Python-specific values, key collisions and
+unsupported values still follow the existing JSON normalization/error path.
+
+For single-input and batch CLI execution, the output serializer is chosen
+after the mold's final format and destination overrides. Compact JSON, NDJSON,
+Lines and TXT can use direct serialization even when the format comes from an
+extension, input fallback or `set_output_format()`. Newly eligible paths retain
+`Value` normalization for non-native JSON values. The library, `--check` and
+`--debug` retain their materialized `Value` behavior. Output remains buffered;
+this is separate from the exact-identity streaming conversions above.
+
 ### Batch mode (multiple inputs)
 
 Multiple `-i` inputs are processed sequentially, each running the full pipeline. Batch mode requires either `-o <directory>` or `--in-place`. Per-file aliases are supported with `path:alias` syntax.

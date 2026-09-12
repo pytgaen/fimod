@@ -484,3 +484,126 @@ fn chained_molds_keep_large_payload_under_budget() {
         perf_budget(250, 12_000),
     );
 }
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_native_iter_helpers_over_large_records_under_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.json");
+    fs::write(&input, large_json_array(20_000)).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    for (expr, expected_len) in [
+        ("it_sort_by(data, 'score')", Some(20_000)),
+        ("it_count_by(data, 'team')", Some(16)),
+        ("it_min_by(data, 'score')", None),
+        ("it_max_by(data, 'score')", None),
+    ] {
+        let args = os_args(&[
+            OsStr::new("s"),
+            OsStr::new("-i"),
+            input.as_os_str(),
+            OsStr::new("-e"),
+            OsStr::new(expr),
+            OsStr::new("--output-format"),
+            OsStr::new("json-compact"),
+        ]);
+        let (elapsed, output) = median_command_elapsed(&fimod, &args);
+        let value: Value = serde_json::from_slice(&output).unwrap();
+        match expected_len {
+            Some(n) => assert_eq!(
+                value
+                    .as_array()
+                    .map(Vec::len)
+                    .or_else(|| value.as_object().map(serde_json::Map::len)),
+                Some(n)
+            ),
+            None => assert_eq!(value["id"], if expr.contains("min") { 0 } else { 999 }),
+        }
+        assert_under_budget(expr, elapsed, perf_budget(500, 5_000));
+    }
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_nested_dotpath_edits_under_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("nested.json");
+    let mut value = format!("{{\"rows\":{},\"flag\":false}}", large_json_array(20_000));
+    for _ in 0..8 {
+        value = format!("{{\"node\":{value}}}");
+    }
+    fs::write(&input, value).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    let path = "node.node.node.node.node.node.node.node.flag";
+    for (expr, flag) in [
+        (format!("dp_set(data, '{path}', True)"), Some(true)),
+        (format!("dp_delete(data, '{path}')"), None),
+    ] {
+        let args = os_args(&[
+            OsStr::new("s"),
+            OsStr::new("-i"),
+            input.as_os_str(),
+            OsStr::new("-e"),
+            OsStr::new(&expr),
+            OsStr::new("--output-format"),
+            OsStr::new("json-compact"),
+        ]);
+        let (elapsed, output) = median_command_elapsed(&fimod, &args);
+        let value: Value = serde_json::from_slice(&output).unwrap();
+        let mut leaf = &value;
+        for _ in 0..8 {
+            leaf = &leaf["node"];
+        }
+        assert_eq!(leaf["rows"].as_array().unwrap().len(), 20_000);
+        assert_eq!(leaf.get("flag").and_then(Value::as_bool), flag);
+        assert_under_budget(&expr, elapsed, perf_budget(500, 5_000));
+    }
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_final_ndjson_output_under_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.json");
+    let output = dir.path().join("out.ndjson");
+    let mold = dir.path().join("identity.py");
+    fs::write(&input, large_json_array(20_000)).unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    for mode in ["explicit", "inferred", "override"] {
+        fs::write(
+            &mold,
+            if mode == "override" {
+                "def transform(data, **_):\n    set_output_format('ndjson')\n    return data\n"
+            } else {
+                "def transform(data, **_):\n    return data\n"
+            },
+        )
+        .unwrap();
+        let mut args = os_args(&[
+            OsStr::new("s"),
+            OsStr::new("-i"),
+            input.as_os_str(),
+            OsStr::new("-m"),
+            mold.as_os_str(),
+            OsStr::new("-o"),
+            output.as_os_str(),
+        ]);
+        if mode == "explicit" {
+            args.extend(os_args(&[
+                OsStr::new("--output-format"),
+                OsStr::new("ndjson"),
+            ]));
+        }
+        let (elapsed, stdout) = median_command_elapsed(&fimod, &args);
+        assert!(stdout.is_empty());
+        let content = fs::read_to_string(&output).unwrap();
+        assert_eq!(content.lines().count(), 20_000);
+        let last: Value = serde_json::from_str(content.lines().last().unwrap()).unwrap();
+        assert_eq!(last["id"], 19_999);
+        assert_under_budget(
+            &format!("CLI NDJSON output ({mode})"),
+            elapsed,
+            perf_budget(300, 3_000),
+        );
+    }
+}

@@ -213,12 +213,12 @@ The main candidate is an explicit record-processing mode:
 
 Mechanical optimizations remain measurement-driven:
 
-1. Operate directly on `MontyObject` in selected `it_*` helpers, starting with
-   a profiled helper and preserving the current ordering and missing-value
-   semantics.
-2. Resolve the final format earlier and write supported outputs through
-   buffered writers, without weakening atomic file replacement or output
-   parity.
+1. Profile the remaining grouping and deduplication helpers before extending
+   native `MontyObject` processing. The implemented sort/count/min/max paths
+   and their normalization rules are documented in `DESIGN_NOTES.md`.
+2. Write supported outputs through buffered writers without weakening atomic
+   file replacement or output parity. Selection of direct serializers after
+   final format/destination resolution is documented in `DESIGN_NOTES.md`.
 3. Stream exact-identity CSV conversions after CSV header handling has been
    consolidated; arbitrary molds retain the existing one-shot data contract.
 4. Measure `MontyRun` compilation against cloning before deciding whether a

@@ -160,6 +160,28 @@ pub fn monty_to_json(obj: MontyObject) -> Result<Value> {
     }
 }
 
+/// Whether a JSON round-trip leaves this object's types and contents unchanged.
+/// Keep the existing conversion for tuples, dates, non-string/colliding keys,
+/// oversized integers and unsupported values; in particular, do not hide errors
+/// in fields that an aggregation does not otherwise inspect.
+pub(crate) fn is_json_native(obj: &MontyObject) -> bool {
+    match obj {
+        MontyObject::None | MontyObject::Bool(_) | MontyObject::Int(_) | MontyObject::String(_) => {
+            true
+        }
+        MontyObject::Float(f) => f.is_finite(),
+        MontyObject::BigInt(n) => i64::try_from(n).is_err() && u64::try_from(n).is_ok(),
+        MontyObject::List(items) => items.iter().all(is_json_native),
+        MontyObject::Dict(pairs) => {
+            let mut keys = std::collections::HashSet::with_capacity(pairs.len());
+            pairs.into_iter().all(|(key, value)| {
+                matches!(key, MontyObject::String(s) if keys.insert(s)) && is_json_native(value)
+            })
+        }
+        _ => false,
+    }
+}
+
 /// Serde serializer wrapper for `MontyObject` that produces the same JSON as `monty_to_json`.
 ///
 /// Avoids allocating an intermediate `serde_json::Value` when writing directly to a serializer

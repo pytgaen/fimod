@@ -164,3 +164,104 @@ locales, pas une promesse portable.
 ## Optimisations restantes envisagées
 
 1. Matrice 10/100/1 000 MB avec temps, débit et RSS sur plusieurs formats.
+
+---
+
+## Mesure A/B locale — optimisations 1–3, 2026-09-09
+
+Comparaison du binaire de `2ce7ccd` sauvegardé avant modification avec le
+binaire du worktree après optimisation. Même Rust 1.98.1, Monty 0.0.23,
+profil `release` (`opt-level=z`, LTO, mimalloc avec comptage mémoire), sans UPX.
+Machine : AMD Ryzen AI 9 HX 370, Linux WSL2 x86_64.
+
+Les temps couvrent la commande CLI entière, avec caches chauds. Médianes de
+sept passages par binaire, neuf pour dotpath, en alternant l’ordre avant/après.
+Le pic RSS est la médiane de trois exécutions séparées via `/usr/bin/time -f %M`.
+Les sorties avant/après sont identiques octet pour octet. Les autres builds et
+les suites de tests ne tournent pas pendant les mesures.
+
+### Dotpath : même document et même chemin avant/après
+
+20 000 objets, environ 1,56 Mo ; tableau placé sous 1 ou 8 clés `node`.
+La modification porte sur `flag`, à côté du tableau. Sortie JSON compacte
+vers `/dev/null`.
+
+| Opération | Profondeur | Avant | Après | Temps gagné | RSS avant → après |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `dp_set` | 1 | 130.2 ms | 108.5 ms | 16.7 % | 122.8 → 94.4 Mio |
+| `dp_set` | 8 | 230.7 ms | 116.9 ms | 49.3 % | 393.0 → 94.4 Mio |
+| `dp_delete` | 1 | 133.8 ms | 109.7 ms | 18.0 % | 123.0 → 94.5 Mio |
+| `dp_delete` | 8 | 242.8 ms | 114.6 ms | 52.8 % | 393.1 → 94.3 Mio |
+
+### Helpers et sortie : 100 000 objets, 7,87 Mo
+
+Cinq champs par objet : `id`, `name`, `active`, `score`, `team`. Le tri et les
+extrema utilisent `score`, le comptage utilise `team`. Sorties des helpers en
+JSON compact vers `/dev/null`. Les cas NDJSON écrivent tous dans le même fichier
+local ; seul le choix du format change. Le mold retourne `data`, et appelle
+également `set_output_format("ndjson")` dans le cas override.
+
+| Scénario | Avant | Après | Temps gagné | RSS avant → après |
+| --- | ---: | ---: | ---: | ---: |
+| `it_sort_by` | 924.9 ms | 615.9 ms | 33.4 % | 394.8 → 394.3 Mio |
+| `it_count_by` | 353.8 ms | 324.1 ms | 8.4 % | 245.0 → 240.5 Mio |
+| `it_min_by` | 362.7 ms | 318.8 ms | 12.1 % | 240.9 → 238.3 Mio |
+| `it_max_by` | 364.3 ms | 317.8 ms | 12.8 % | 238.9 → 228.3 Mio |
+| NDJSON explicite (témoin) | 356.8 ms | 356.8 ms | stable | 251.0 → 250.4 Mio |
+| NDJSON déduit de `.ndjson` | 393.7 ms | 353.6 ms | 10.2 % | 251.0 → 250.5 Mio |
+| NDJSON choisi par le mold | 398.6 ms | 372.9 ms | 6.4 % | 251.0 → 250.5 Mio |
+
+Le gain mémoire net concerne ici dotpath (environ −76 % à profondeur 8).
+Le pic RSS du tri et de la sérialisation reste pratiquement inchangé.
+Ces mesures locales ne prédisent pas le gain sur tout mold : le passage
+Monty/Rust demeure, et les valeurs demandant une normalisation JSON gardent
+le chemin de compatibilité.
+
+### Reproduire les jeux A/B
+
+Exécuter dans un répertoire de travail temporaire, en conservant les deux
+binaires `fimod-before` et `fimod-after` construits avec le même profil :
+
+```python
+import json
+from pathlib import Path
+
+def row(i, score):
+    return dict(id=i, name=f"user-{i:06}", active=i % 2 == 0,
+                score=score, team=f"team-{i % 16}")
+
+Path("users.json").write_text(json.dumps(
+    [row(i, (i * 7919) % 100000) for i in range(100000)],
+    separators=(",", ":")))
+for depth in (1, 8):
+    data = dict(rows=[row(i, i) for i in range(20000)], flag=False)
+    for _ in range(depth):
+        data = dict(node=data)
+    Path(f"depth-{depth}.json").write_text(json.dumps(data, separators=(",", ":")))
+Path("identity.py").write_text("def transform(data, **_):\n    return data\n")
+Path("override.py").write_text(
+    "def transform(data, **_):\n    set_output_format(\"ndjson\")\n    return data\n")
+```
+
+Commandes par binaire, avec warm-up puis répétitions alternées selon le
+protocole ci-dessus :
+
+```bash
+rtk run /usr/bin/time -f "%e s / %M KiB" ./fimod-before s --sandbox-file= -i users.json -e 'it_sort_by(data, "score")' --output-format json-compact > /dev/null
+rtk run /usr/bin/time -f "%e s / %M KiB" ./fimod-after s --sandbox-file= -i users.json -e 'it_sort_by(data, "score")' --output-format json-compact > /dev/null
+```
+
+Pour dotpath, utiliser `depth-8.json` avec
+`dp_set(data, "node.node.node.node.node.node.node.node.flag", True)` ou
+`dp_delete(data, "node.node.node.node.node.node.node.node.flag")`.
+Pour NDJSON : `-m identity.py -o out.ndjson` avec ou sans
+`--output-format ndjson`, puis `-m override.py -o out.ndjson --output-format ndjson`.
+
+Les scénarios sont aussi couverts à 20 000 objets par les tests opt-in
+`cli_nested_dotpath_edits_under_budget`,
+`cli_native_iter_helpers_over_large_records_under_budget` et
+`cli_final_ndjson_output_under_budget` :
+
+```bash
+rtk run cargo test --release --locked --offline --test performance -- --ignored --nocapture --test-threads=1
+```
