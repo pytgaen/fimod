@@ -1008,3 +1008,81 @@ def transform(data, pipeline, **_):
             "Step.set('args'): value must be a dict",
         ));
 }
+
+#[test]
+fn test_pipeline_host_attributes_do_not_resolve_global_builtins() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "attributes.py",
+        r#"
+def transform(data, pipeline, **_):
+    step = pipeline.current_step()
+    return [hasattr(step, "re_search"), hasattr(pipeline, "Step"), step.get("index")]
+"#,
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "s",
+            "--no-input",
+            "-m",
+            &mold,
+            "--output-format",
+            "json-compact",
+        ])
+        .assert()
+        .success()
+        .stdout("[false,false,0]\n");
+}
+
+#[test]
+fn test_pipeline_host_methods_keep_their_receiver() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "receivers.py",
+        r#"
+def transform(data, pipeline, **_):
+    current = pipeline.current_step()
+    future = pipeline.step(1)
+    return [current.get("index"), future.get("index"), current.get("index")]
+"#,
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "s",
+            "--no-input",
+            "-m",
+            &mold,
+            "-e",
+            "data",
+            "--output-format",
+            "json-compact",
+        ])
+        .assert()
+        .success()
+        .stdout("[0,1,0]\n");
+}
+
+#[test]
+fn test_pipeline_sandbox_attributes_cannot_change_host_metadata() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "metadata.py",
+        r#"
+def transform(data, pipeline, **_):
+    step = pipeline.current_step()
+    step._step_idx = 99
+    spec = Step.create(expr="data + 1")
+    spec.expr = "data + 100"
+    pipeline.append(spec)
+    return step.get("index")
+"#,
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-m", &mold])
+        .assert()
+        .success()
+        .stdout("1\n");
+}

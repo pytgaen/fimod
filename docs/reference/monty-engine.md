@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.18) as its execution engine for mold scripts.
+Fimod uses Monty (v0.0.23) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -13,10 +13,12 @@ Fimod uses Monty (v0.0.18) as its execution engine for mold scripts.
 | Feature | Notes |
 |---------|-------|
 | Functions | sync and async, closures, default args, `*args`/`**kwargs` |
+| `str.format` | Positional/named fields and format specifications |
 | f-strings | Full support: `f'{x}'`, `f'{x:.2f}'`, `f'{x!r}'`, `f'{x=}'` (debug), nested specs |
 | Comprehensions | list, dict, set, generator expressions |
 | Type hints | Annotations preserved, used for type checking |
-| Dataclasses | When defined on the host side |
+| Classes and decorators | Classes with `__init__` and methods; function decorators |
+| Dataclasses | Defined in molds; `eq` and `frozen` options supported |
 | Async/await | `async def`, `await`, `asyncio.gather` |
 | Exceptions | `try`/`except`/`finally`/`raise`, tracebacks |
 | Walrus operator | `:=` assignment expressions |
@@ -46,7 +48,6 @@ as decimal strings instead of being rounded through `f64`.
 
 | Feature | Status |
 |---------|--------|
-| Classes | Coming soon |
 | Match statements | Coming soon |
 | Dict merge operator | `a | b` not supported — use `{**a, **b}` or `a.update(b)` |
 | Third-party packages | Will probably never be supported |
@@ -71,8 +72,14 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `os` | Partial (getenv only — see Security section) |
 | `re` | Supported — compile, search, match, fullmatch, findall, sub, split, finditer, escape; flags: IGNORECASE, MULTILINE, DOTALL, ASCII |
 | `math` | Supported — ~50 functions (floor, ceil, sqrt, log, sin, cos, factorial, gcd, lcm, comb…) + constants (pi, e, tau, inf, nan) |
-| `datetime` | Supported — `date`, `datetime`, `timedelta`, `timezone`; arithmetic, `.isoformat()`, `.strftime()`, `.today()`, `.now()`, `.utcnow()` |
+| `datetime` | Supported — `date`, `datetime`, `time`, `timedelta`, `timezone`; arithmetic, `.isoformat()`, `.strftime()`, `.today()`, `.now()`, `.utcnow()` |
 | `json` | Supported — `json.dumps()`, `json.loads()`. ~2x faster than CPython for loads, ~1.65x for dumps (v0.0.11 string cache + lookup-table escaping). Rarely needed: fimod handles JSON parsing/serialization in Rust. Useful only for edge cases like building a JSON string inside a text template |
+| `collections` | `Counter`, `defaultdict`, `deque`, `namedtuple` |
+| `dataclasses` | `dataclass`, `is_dataclass`; `eq` and `frozen` options |
+| `functools` | `reduce`, `partial` |
+| `base64`, `binascii` | Binary/text encodings; decode byte results to strings before returning structured output |
+| `itertools` | Includes `takewhile`, `dropwhile`, `filterfalse`, `starmap`, `accumulate`, `batched`, `zip_longest` |
+| `unicodedata` | Unicode character properties and normalization |
 | `zip(..., strict=True)` | Supported since v0.0.12 — raises `ValueError` on length mismatch |
 
 ## External Function Mechanism
@@ -134,10 +141,10 @@ Fimod implements clock and selected environment access through `sandbox.toml`, b
 
 ```rust
 // engine.rs
-RunProgress::OsCall(mut call) => {
-    let function_call = call.take_function_call();
-    let result = dispatch_os_call(function_call, ctx.policy);
-    progress = call.resume(result, print)?;
+RunProgress::OsCall(call) => {
+    progress = call.resume_with(print, |function_call| {
+        sandbox_os_call_result(function_call, policy)
+    })?;
 }
 ```
 
@@ -163,6 +170,16 @@ Monty supports configurable limits through its `ResourceTracker`:
 - **Execution time/steps**: Prevent infinite loops
 
 Fimod uses `ResourceTracker` with hard defaults (`max_duration = 10m`, `max_memory = 2GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
+
+Fimod also supports `max_suspensions`, a host-enforced quota disabled by default
+(`0`). It counts every `FunctionCall`, `OsCall`, `NameLookup`, or `ResolveFutures`
+suspension before handling it, separately for each mold and each REPL snippet.
+Exactly N suspensions are allowed with a quota of N; completion itself costs none.
+Exceeding it stops the mold with exit 137 and cannot be caught by Python. The REPL
+reports the error and remains usable, with a fresh quota for the next snippet.
+
+`datetime.time` results serialize as ISO time strings, including microseconds and
+UTC offsets when present, through both fimod serialization paths.
 
 Since Monty 0.0.20, `max_memory` is **allocator-backed**: the interpreter reads live-byte counters that only a charging global allocator writes. Fimod installs one in `src/mem_limit.rs` — mimalloc wrapped to feed those counters — so the limit stays enforced without giving up mimalloc's performance. A mold that exceeds it is stopped at the interpreter's next checkpoint and reported as `sandbox exploded: max_memory exceeded`.
 
@@ -206,7 +223,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.18 — fimod v0.8.0 (exit or Ctrl+D to quit)
+Monty REPL v0.0.23 — fimod v0.10.0 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

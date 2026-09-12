@@ -501,3 +501,70 @@ fn test_setup_all_defaults_fails_at_first_error() {
     let content = std::fs::read_to_string(home.path().join(".config/fimod/sandbox.toml")).unwrap();
     assert!(content.contains("pre-existing"));
 }
+
+#[test]
+fn test_setup_suspensions_roundtrip_preserved_and_disabled() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let policy = dir.child("sandbox.toml");
+    let path = policy.path().to_str().unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "setup",
+            "sandbox",
+            "set",
+            "--sandbox-file",
+            path,
+            "--max-suspensions",
+            "7",
+        ])
+        .assert()
+        .success();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "setup",
+            "sandbox",
+            "set",
+            "--sandbox-file",
+            path,
+            "--max-memory",
+            "3GB",
+        ])
+        .assert()
+        .success();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "setup",
+            "sandbox",
+            "get",
+            "max-suspensions",
+            "--sandbox-file",
+            path,
+        ])
+        .assert()
+        .success()
+        .stdout("7\n");
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "setup",
+            "sandbox",
+            "set",
+            "--sandbox-file",
+            path,
+            "--max-suspensions",
+            "0",
+        ])
+        .assert()
+        .success();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "setup",
+            "sandbox",
+            "get",
+            "max-suspensions",
+            "--sandbox-file",
+            path,
+        ])
+        .assert()
+        .success()
+        .stdout("0\n");
+}

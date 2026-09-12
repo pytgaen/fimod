@@ -240,5 +240,22 @@ All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pin
 
 ## Watchpoints
 
-- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.19` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.23` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.
+
+### Monty 0.0.23 host objects and suspension quota
+
+Pipeline/Step use `MontyObject::ClassInstance` with random UUIDs and a registry
+owned by each mold execution. `getrandom` supplies entropy (already a transitive
+dependency). Method suspensions carry a receiver UUID; fimod reconstructs its
+internal receiver-first dispatch arguments from host-owned metadata. Sandbox-side
+attribute changes do not change that metadata or a Step.create spec. Attribute
+lookups never fall through to the global built-in resolver.
+
+`sandbox.max_suspensions` is an integer, disabled when absent or zero. Fimod counts
+all host suspensions before servicing them; the quota is per mold / REPL snippet.
+On overflow fimod drops the suspended execution, so Python cannot catch the stop;
+the REPL retains its session. This is independent of Monty's default stored quota
+of 1000, which the interpreter does not enforce. Setup get/set/show preserve the
+configured value. Ruff 0.0.9 uses compact_str 0.10, so the old get-size2 0.10.1 pin
+and associated Dependabot/outdated exclusions are removed.

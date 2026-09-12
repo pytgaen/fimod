@@ -255,6 +255,7 @@ fimod setup sandbox set --max-duration 20m --max-memory 4GB
 | `--if-needed` | Install missing defaults, skip already-configured blocks, and leave existing files untouched. |
 | `--preset recommended\|strict\|permissive` | Sandbox preset for `setup sandbox defaults` or `setup all defaults`. |
 | `--sandbox-file <PATH>` | Sandbox policy file for `setup sandbox defaults/show/get/set`; omitted means `~/.config/fimod/sandbox.toml`. |
+| `--max-suspensions <COUNT>` | For `setup sandbox set`: host suspension quota per mold / REPL snippet; `0` disables it. |
 
 Setup prompts can also be answered with environment variables. Granular values win over `FIMOD_SETUP_ALL`.
 
@@ -541,6 +542,15 @@ Apply **even with zero authorization**:
 |-------|---------|
 | `max_duration` | `10m` |
 | `max_memory` | `2GB` |
+| `max_suspensions` | `0` (disabled) |
+
+`max_suspensions` accepts a non-negative integer. Missing or `0` disables the quota.
+A positive value limits host boundary crossings (external calls, OS calls, name or
+attribute lookups, future resolution) per mold execution, or per REPL snippet.
+The Nth suspension is allowed; the next is rejected before its host action runs.
+The CLI exits 137 with `sandbox exploded: max_suspensions exceeded (N)`; Python
+cannot catch this stop. The REPL reports it and accepts another snippet with a
+fresh budget. A multi-mold chain starts a fresh quota for each mold.
 
 `max_duration` is a budget for the whole mold chain, including steps injected
 at runtime. Each step receives only the time remaining from the original
@@ -562,6 +572,7 @@ In `fimod monty repl`, the same violation is printed as an error and the REPL se
 allow_clock  = true              # allow datetime.now() / date.today()
 max_duration = "10m"             # "30s", "10m", "unlimited"
 max_memory   = "2GB"             # "500MB", "2GB", "unlimited"
+max_suspensions = 0              # integer; 0 disables the host-call quota
 allow_env    = ["LANG", "TZ_*"]  # glob patterns: "*", "PREFIX_*", "EXACT"
 ```
 
@@ -570,6 +581,9 @@ Common setup edits:
 ```bash
 fimod setup sandbox set --deny-clock
 fimod setup sandbox set --max-duration 30m --max-memory 4GB
+fimod setup sandbox set --max-suspensions 10000
+fimod setup sandbox get max-suspensions
+fimod setup sandbox set --max-suspensions 0  # disable again
 fimod setup sandbox set --allow-env LANG --allow-env 'TZ_*'
 fimod setup sandbox set --clear-env
 fimod setup sandbox defaults --sandbox-file ./ci-sandbox.toml --preset strict --yes

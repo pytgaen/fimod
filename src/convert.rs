@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use monty_types::{
-    DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTimeDelta, MontyTimeZone,
+    DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTime, MontyTimeDelta, MontyTimeZone,
 };
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde_json::{Number, Value};
@@ -28,6 +28,22 @@ fn fmt_datetime(dt: &MontyDateTime) -> String {
         }
         None => with_us,
     }
+}
+
+fn fmt_time(time: &MontyTime) -> String {
+    let mut result = format!("{:02}:{:02}:{:02}", time.hour, time.minute, time.second);
+    if time.microsecond != 0 {
+        result.push_str(&format!(".{:06}", time.microsecond));
+    }
+    if let Some(offset) = time.offset_seconds {
+        let sign = if offset < 0 { '-' } else { '+' };
+        let abs = offset.unsigned_abs();
+        result.push_str(&format!("{sign}{:02}:{:02}", abs / 3600, (abs % 3600) / 60));
+        if abs % 60 != 0 {
+            result.push_str(&format!(":{:02}", abs % 60));
+        }
+    }
+    result
 }
 
 fn fmt_timedelta(td: &MontyTimeDelta) -> String {
@@ -137,6 +153,7 @@ pub fn monty_to_json(obj: MontyObject) -> Result<Value> {
         }
         MontyObject::Date(d) => Ok(Value::String(fmt_date(&d))),
         MontyObject::DateTime(dt) => Ok(Value::String(fmt_datetime(&dt))),
+        MontyObject::Time(t) => Ok(Value::String(fmt_time(&t))),
         MontyObject::TimeDelta(td) => Ok(Value::String(fmt_timedelta(&td))),
         MontyObject::TimeZone(tz) => Ok(Value::String(fmt_timezone(&tz))),
         other => bail!("Cannot convert MontyObject variant to JSON: {other:?}"),
@@ -189,6 +206,7 @@ impl serde::Serialize for MontySerialize<'_> {
             }
             MontyObject::Date(d) => serializer.serialize_str(&fmt_date(d)),
             MontyObject::DateTime(dt) => serializer.serialize_str(&fmt_datetime(dt)),
+            MontyObject::Time(t) => serializer.serialize_str(&fmt_time(t)),
             MontyObject::TimeDelta(td) => serializer.serialize_str(&fmt_timedelta(td)),
             MontyObject::TimeZone(tz) => serializer.serialize_str(&fmt_timezone(tz)),
             other => Err(serde::ser::Error::custom(format!(
@@ -209,6 +227,30 @@ mod tests {
         let via_serialize: Value = serde_json::to_value(MontySerialize(obj)).unwrap();
         let via_convert = monty_to_json(obj.clone()).unwrap();
         assert_eq!(via_serialize, via_convert);
+    }
+
+    #[test]
+    fn time_serialization_preserves_fraction_and_second_offsets() {
+        for (offset, expected) in [
+            (None, "14:30:01.000042"),
+            (Some(0), "14:30:01.000042+00:00"),
+            (Some(-3661), "14:30:01.000042-01:01:01"),
+        ] {
+            let obj = MontyObject::Time(MontyTime {
+                hour: 14,
+                minute: 30,
+                second: 1,
+                microsecond: 42,
+                offset_seconds: offset,
+                timezone_name: None,
+                fold: 1,
+            });
+            assert_eq!(monty_to_json(obj.clone()).unwrap(), json!(expected));
+            assert_eq!(
+                serde_json::to_value(MontySerialize(&obj)).unwrap(),
+                json!(expected)
+            );
+        }
     }
 
     #[test]

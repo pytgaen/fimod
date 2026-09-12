@@ -28,6 +28,8 @@ pub struct SandboxPolicy {
     pub allow_clock: bool,
     pub max_duration: Option<Duration>,
     pub max_memory: Option<usize>,
+    /// Host suspensions per mold / REPL snippet; zero disables the quota.
+    pub max_suspensions: usize,
     pub allow_env: Vec<String>,
     pub source: PolicySource,
 }
@@ -55,6 +57,7 @@ struct SandboxTable {
     allow_clock: Option<bool>,
     max_duration: Option<String>,
     max_memory: Option<String>,
+    max_suspensions: Option<usize>,
     allow_env: Option<Vec<String>>,
 }
 
@@ -65,6 +68,7 @@ impl SandboxPolicy {
             allow_clock: false,
             max_duration: Some(HARDCODED_MAX_DURATION),
             max_memory: Some(HARDCODED_MAX_MEMORY),
+            max_suspensions: 0,
             allow_env: Vec::new(),
             source: PolicySource::ZeroAuth,
         }
@@ -140,6 +144,7 @@ fn load_file(path: &Path, source: PolicySource) -> Result<SandboxPolicy> {
         allow_clock: table.allow_clock.unwrap_or(false),
         max_duration,
         max_memory,
+        max_suspensions: table.max_suspensions.unwrap_or(0),
         allow_env: table.allow_env.unwrap_or_default(),
         source,
     })
@@ -311,6 +316,7 @@ mod tests {
             allow_clock: false,
             max_duration: None,
             max_memory: None,
+            max_suspensions: 0,
             allow_env: vec!["FIMOD_*".into(), "LANG".into()],
             source: PolicySource::ZeroAuth,
         };

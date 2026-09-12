@@ -29,6 +29,7 @@ struct SandboxConfig {
     allow_clock: bool,
     max_duration: String,
     max_memory: String,
+    max_suspensions: usize,
     allow_env: Vec<String>,
 }
 
@@ -42,6 +43,7 @@ struct SandboxTable {
     allow_clock: Option<bool>,
     max_duration: Option<String>,
     max_memory: Option<String>,
+    max_suspensions: Option<usize>,
     allow_env: Option<Vec<String>>,
 }
 
@@ -51,6 +53,7 @@ impl SandboxConfig {
             allow_clock: false,
             max_duration: SANDBOX_DEFAULT_MAX_DURATION.to_string(),
             max_memory: SANDBOX_DEFAULT_MAX_MEMORY.to_string(),
+            max_suspensions: 0,
             allow_env: Vec::new(),
         }
     }
@@ -61,18 +64,21 @@ impl SandboxConfig {
                 allow_clock: true,
                 max_duration: SANDBOX_DEFAULT_MAX_DURATION.to_string(),
                 max_memory: SANDBOX_DEFAULT_MAX_MEMORY.to_string(),
+                max_suspensions: 0,
                 allow_env: Vec::new(),
             },
             SetupSandboxPreset::Strict => Self {
                 allow_clock: false,
                 max_duration: "30s".to_string(),
                 max_memory: "512MB".to_string(),
+                max_suspensions: 0,
                 allow_env: Vec::new(),
             },
             SetupSandboxPreset::Permissive => Self {
                 allow_clock: true,
                 max_duration: "30m".to_string(),
                 max_memory: "4GB".to_string(),
+                max_suspensions: 0,
                 allow_env: vec![
                     "LANG".to_string(),
                     "LC_*".to_string(),
@@ -90,6 +96,7 @@ impl SandboxConfig {
             allow_clock: table.allow_clock.unwrap_or(defaults.allow_clock),
             max_duration: table.max_duration.unwrap_or(defaults.max_duration),
             max_memory: table.max_memory.unwrap_or(defaults.max_memory),
+            max_suspensions: table.max_suspensions.unwrap_or(0),
             allow_env: table.allow_env.unwrap_or(defaults.allow_env),
         }
     }
@@ -110,6 +117,7 @@ pub struct SandboxSetOptions {
     pub deny_clock: bool,
     pub max_duration: Option<String>,
     pub max_memory: Option<String>,
+    pub max_suspensions: Option<usize>,
     pub allow_env: Vec<String>,
     pub clear_env: bool,
 }
@@ -379,6 +387,7 @@ pub fn sandbox_get(key: SetupSandboxKey, sandbox_file: Option<String>) -> Result
         SetupSandboxKey::AllowClock => println!("{}", config.allow_clock),
         SetupSandboxKey::MaxDuration => println!("{}", config.max_duration),
         SetupSandboxKey::MaxMemory => println!("{}", config.max_memory),
+        SetupSandboxKey::MaxSuspensions => println!("{}", config.max_suspensions),
         SetupSandboxKey::AllowEnv => {
             for pattern in config.allow_env {
                 println!("{pattern}");
@@ -400,6 +409,7 @@ pub fn sandbox_set(options: SandboxSetOptions) -> Result<()> {
         && !options.deny_clock
         && options.max_duration.is_none()
         && options.max_memory.is_none()
+        && options.max_suspensions.is_none()
         && options.allow_env.is_empty()
         && !options.clear_env
     {
@@ -424,6 +434,9 @@ pub fn sandbox_set(options: SandboxSetOptions) -> Result<()> {
         fimod::sandbox::parse_size(&max_memory)
             .with_context(|| format!("--max-memory {max_memory:?}"))?;
         config.max_memory = max_memory;
+    }
+    if let Some(limit) = options.max_suspensions {
+        config.max_suspensions = limit;
     }
     if !options.allow_env.is_empty() {
         config.allow_env = normalize_env_patterns(options.allow_env);
@@ -494,10 +507,11 @@ fn write_sandbox_config_with_content(path: &Path, content: &str) -> Result<()> {
 
 fn render_sandbox_config(config: &SandboxConfig) -> String {
     format!(
-        "[sandbox]\nallow_clock  = {}\nmax_duration = \"{}\"\nmax_memory   = \"{}\"\nallow_env    = {}\n",
+        "[sandbox]\nallow_clock  = {}\nmax_duration = \"{}\"\nmax_memory   = \"{}\"\nmax_suspensions = {}\nallow_env    = {}\n",
         config.allow_clock,
         toml_escape(&config.max_duration),
         toml_escape(&config.max_memory),
+        config.max_suspensions,
         render_toml_string_array(&config.allow_env)
     )
 }

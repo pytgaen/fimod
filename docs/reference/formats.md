@@ -33,13 +33,19 @@ fimod s -i events.ndjson -e 'data' --output-format json-compact
 cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 ```
 
-!!! tip "Identity JSON ↔ NDJSON conversions stream natively"
+!!! tip "Identity JSON ↔ NDJSON and JSON → CSV conversions stream natively"
     The exact identity conversion `-e 'data'` streams local/stdin JSON
     top-level arrays directly to NDJSON when the output format resolves to
     `ndjson` or `jsonl`. In the other direction, local/stdin NDJSON streams
     directly to `json` or `json-compact`, ignoring empty lines and preserving
-    exact JSON integers. Both paths bypass Monty and keep memory bounded by the
-    largest item. Non-array JSON roots keep the normal identity conversion path.
+    exact JSON integers. A JSON top-level array also streams directly to `csv`:
+    the header is frozen before the first row, taken from `--csv-header` when
+    given, otherwise from the key union of the first `--csv-scan` elements
+    (default `1`, the keys of the first object); keys first seen after that
+    window are dropped silently, and `--csv-scan 0` unions every row at the cost
+    of the streaming guarantee. These paths bypass Monty and keep memory bounded
+    by the largest item, or by the scan window for CSV. Non-array JSON roots
+    keep the normal identity conversion path.
     Eligible regular-file destinations are written through a temporary sibling
     and replaced only after the complete input succeeds; existing Unix file
     permissions are preserved. Existing symbolic links, and existing files on
