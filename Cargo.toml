@@ -29,8 +29,8 @@ path = "src/main.rs"
 required-features = ["fast"]
 
 [dependencies]
-monty = "0.0.23"
-monty-types = "0.0.23"
+monty = "1.0.0"
+monty-types = "1.0.0"
 getrandom = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
