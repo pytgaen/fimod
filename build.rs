@@ -7,6 +7,7 @@ fn main() {
             .strip_prefix("monty = \"")
             .and_then(|value| value.strip_suffix('"'))
         {
+            let version = version.strip_prefix('=').unwrap_or(version);
             println!("cargo:rustc-env=MONTY_VERSION={version}");
             return;
         }
