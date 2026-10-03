@@ -8,6 +8,9 @@ fimod s -i <INPUT> -e '<EXPRESSION>' [OPTIONS]
 fimod s --no-input -m <MOLD> [OPTIONS]
 ```
 
+`fimod --version` reports the Fimod version, build variant (`standard`, `slim`,
+or `fast`), and embedded Monty version.
+
 !!! note
     Either `-m` or `-e` is required (but not both).
 

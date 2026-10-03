@@ -519,11 +519,22 @@ fn test_debug_does_not_pollute_stdout() {
 
 #[test]
 fn test_version_flag() {
+    let variant = if cfg!(feature = "fast") {
+        "fast"
+    } else if cfg!(feature = "reqwest") {
+        "standard"
+    } else {
+        "slim"
+    };
     assert_cmd::cargo_bin_cmd!("fimod")
         .args(["--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("fimod"));
+        .stdout(format!(
+            "fimod {} {variant} (Monty 1.0.0)\n",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .stderr("");
 }
 
 #[test]
