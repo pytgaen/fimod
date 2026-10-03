@@ -371,7 +371,7 @@ pub fn execute_chain(
         i += 1;
     }
     Ok(MoldExecResult {
-        value: MontyObject::None,
+        value: MontyObject::none(),
         exit_code: last_exit,
         format_override: None,
         output_file: None,
@@ -483,7 +483,7 @@ fn run_pipeline_core(
         if debug {
             eprintln!("[debug] no-input mode: data = None");
         }
-        (DataFormat::Json, MontyObject::None)
+        (DataFormat::Json, MontyObject::none())
     } else {
         let is_http = input_path.is_some_and(http::is_url);
 
@@ -1227,58 +1227,33 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
             DataFormat::JsonCompact | DataFormat::Ndjson | DataFormat::Lines | DataFormat::Txt
         ) && (previously_direct || convert::is_json_native(monty))
         {
+            let value = monty.as_ref();
             let bytes = match out_fmt {
-                DataFormat::Ndjson => {
+                DataFormat::Ndjson | DataFormat::Lines => {
                     let mut out = Vec::new();
-                    match monty {
-                        MontyObject::List(items) | MontyObject::Tuple(items) => {
-                            for item in items {
-                                serde_json::to_writer(&mut out, &convert::MontySerialize(item))
-                                    .context("Failed to serialize NDJSON line")?;
-                                out.push(b'\n');
-                            }
+                    let items = if matches!(
+                        monty_types::unstable::node(value),
+                        monty_types::unstable::MontyNode::List(_)
+                            | monty_types::unstable::MontyNode::Tuple(_)
+                    ) {
+                        value.items().unwrap()
+                    } else {
+                        vec![value]
+                    };
+                    for item in items {
+                        if out_fmt == DataFormat::Lines && item.as_str().is_some() {
+                            out.extend_from_slice(item.as_str().unwrap().as_bytes());
+                        } else {
+                            serde_json::to_writer(&mut out, &convert::ObjectSerialize(item))
+                                .context("Failed to serialize output item")?;
                         }
-                        other => {
-                            serde_json::to_writer(&mut out, &convert::MontySerialize(other))
-                                .context("Failed to serialize NDJSON")?;
-                            out.push(b'\n');
-                        }
+                        out.push(b'\n');
                     }
                     out
                 }
-                DataFormat::Lines => {
-                    let mut out = Vec::new();
-                    match monty {
-                        MontyObject::List(items) | MontyObject::Tuple(items) => {
-                            for item in items {
-                                match item {
-                                    MontyObject::String(s) => out.extend_from_slice(s.as_bytes()),
-                                    other => {
-                                        serde_json::to_writer(
-                                            &mut out,
-                                            &convert::MontySerialize(other),
-                                        )
-                                        .context("Failed to serialize lines item")?;
-                                    }
-                                }
-                                out.push(b'\n');
-                            }
-                        }
-                        MontyObject::String(s) => {
-                            out.extend_from_slice(s.as_bytes());
-                            out.push(b'\n');
-                        }
-                        other => {
-                            serde_json::to_writer(&mut out, &convert::MontySerialize(other))
-                                .context("Failed to serialize lines output")?;
-                            out.push(b'\n');
-                        }
-                    }
-                    out
-                }
-                DataFormat::Txt => match monty {
-                    MontyObject::String(s) => s.as_bytes().to_vec(),
-                    other => serde_json::to_vec(&convert::MontySerialize(other))
+                DataFormat::Txt => match value.as_str() {
+                    Some(s) => s.as_bytes().to_vec(),
+                    None => serde_json::to_vec(&convert::MontySerialize(monty))
                         .context("Failed to serialize txt output")?,
                 },
                 _ => {

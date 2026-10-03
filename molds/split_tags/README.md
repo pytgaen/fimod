@@ -29,8 +29,12 @@ fimod s -i articles.json -m @split_tags --arg field=tags
 ### Custom separator
 
 ```bash
-fimod s -i data.json -m @split_tags --arg field=categories --arg sep="|"
+fimod s -i data.json -m @split_tags --arg field=categories --arg 'sep=\|'
 ```
+
+The separator is a regex: escape metacharacters such as `|` to match them
+literally. Captured groups are included in the tags; use non-capturing groups
+`(?:...)` when separators should not become tags.
 
 ## Args
 

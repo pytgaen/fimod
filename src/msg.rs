@@ -41,14 +41,14 @@ fn msg_fn(
     if args.len() != 1 {
         bail!("{}() takes 1 argument (string), got {}", name, args.len());
     }
-    let text = match &args[0] {
-        MontyObject::String(s) => s.as_str(),
+    let text = match args[0].as_ref().as_str() {
+        Some(s) => s,
         _ => bail!("{name}() expects a string argument"),
     };
     if msg_level >= min_level {
         eprintln!("{prefix}{text}");
     }
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 #[cfg(test)]
@@ -56,32 +56,32 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     #[test]
     fn test_dispatch_returns_none() {
         let result = dispatch("msg_print", vec![s("hello")], 1).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
     }
 
     #[test]
     fn test_suppressed_returns_none() {
         // msg_verbose at level 1 → suppressed but still returns None (not an error)
         let result = dispatch("msg_verbose", vec![s("hi")], 1).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
     }
 
     #[test]
     fn test_error_always_visible() {
         // msg_error at level 0 (--quiet) → still runs, returns None
         let result = dispatch("msg_error", vec![s("oh no")], 0).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
     }
 
     #[test]
     fn test_wrong_type() {
-        let result = dispatch("msg_print", vec![MontyObject::Int(42)], 1);
+        let result = dispatch("msg_print", vec![MontyObject::int(42)], 1);
         assert!(result.is_err());
     }
 

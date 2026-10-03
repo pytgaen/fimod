@@ -4,7 +4,7 @@ use std::io::{BufRead, Cursor, Read, Write};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use monty_types::{DictPairs, MontyObject};
+use monty_types::MontyObject;
 use serde::de::{DeserializeSeed, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::Serializer as _;
@@ -750,8 +750,8 @@ enum HeaderMode {
 /// Parse CSV content directly into a MontyObject, bypassing the serde_json::Value intermediate.
 ///
 /// Returns `(MontyObject, Option<Vec<String>>)` with the same semantics as `parse_csv`:
-/// - Named headers → `MontyObject::List` of `MontyObject::Dict` entries, returns `Some(headers)`
-/// - Headerless → `MontyObject::List` of `MontyObject::Tuple` entries, returns `None`
+/// - Named headers → `MontyObject::list` of `MontyObject::dict` entries, returns `Some(headers)`
+/// - Headerless → `MontyObject::list` of `MontyObject::tuple` entries, returns `None`
 ///
 /// This avoids the `parse_csv → json_to_monty` double allocation for the hot CSV→CSV path.
 pub fn csv_to_monty(
@@ -796,14 +796,14 @@ pub fn csv_to_monty(
                             format!("col{i}")
                         };
                         (
-                            MontyObject::String(key),
-                            MontyObject::String(field.to_string()),
+                            MontyObject::string(key),
+                            MontyObject::string(field.to_string()),
                         )
                     })
                     .collect();
-                rows.push(MontyObject::Dict(DictPairs::from(pairs)));
+                rows.push(MontyObject::dict(pairs));
             }
-            Ok((MontyObject::List(rows), Some(headers)))
+            Ok((MontyObject::list(rows), Some(headers)))
         }
         HeaderMode::Headerless => {
             let mut rows: Vec<MontyObject> = Vec::with_capacity(estimated_rows);
@@ -811,11 +811,11 @@ pub fn csv_to_monty(
                 let record = result.context("Failed to read CSV record")?;
                 let fields: Vec<MontyObject> = record
                     .iter()
-                    .map(|f| MontyObject::String(f.to_string()))
+                    .map(|f| MontyObject::string(f.to_string()))
                     .collect();
-                rows.push(MontyObject::Tuple(fields));
+                rows.push(MontyObject::tuple(fields));
             }
-            Ok((MontyObject::List(rows), None))
+            Ok((MontyObject::list(rows), None))
         }
     }
 }

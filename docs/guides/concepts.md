@@ -13,7 +13,7 @@ Every fimod invocation runs through the same pipeline:
 | **📥 Read** | Input from file (`-i`), URL (`-i https://...`), stdin, or multiple files combined with `-s` (multi-file slurp). `--no-input` skips this step (`data = None`). |
 | **🔍 Parse** | Rust parses the input via serde into native types. |
 | **🔁 Convert** | Parsed data becomes a Python-compatible `MontyObject`. |
-| **🐍 Execute** | Monty runs `transform`; `data` is positional and context (`args`, `env`, `headers`, `pipeline`) is passed as keyword arguments. Built-ins (`re_*`, `dp_*`, `it_*`, `hs_*`) are available. |
+| **🐍 Execute** | Monty runs `transform`; `data` is positional and context (`args`, `env`, `headers`, `pipeline`) is passed as keyword arguments. Active helpers (`dp_*`, `it_*`, `hs_*`) are available; new regex molds use `import re`. [Deprecated helpers require legacy activation](../reference/built-ins.md#legacy-built-ins). |
 | **🔁 Convert back** | Return value becomes `serde_json::Value`. |
 | **📤 Serialize** | Rust serializes the result to the output format (see below). |
 | **✍️ Write** | Output goes to file (`-o`), stdout, or input file (`--in-place`). |
@@ -98,10 +98,10 @@ fimod uses [Monty](https://github.com/pydantic/monty), a **Rust implementation o
 !!! info "Python subset, not CPython"
     Molds run on Monty, not CPython. You get Python syntax, common built-ins, and selected standard-library modules, but not PyPI packages or full stdlib parity. Fimod adds Rust-powered helpers for regex, dot paths, iteration, hashing, templating, logging, and validation.
 
-!!! warning "Monty is early-stage"
-    Monty is a very young project. Its API and feature set may change significantly between releases. fimod pins a specific Monty commit, but upgrading may require adapting mold scripts if Monty's behaviour changes.
+!!! info "Pinned Monty runtime"
+    Fimod pins Monty 1.0.0 from crates.io. Its Python subset is not full CPython; upgrading the runtime may require adapting molds when supported behavior changes.
 
-The Rust-powered helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`) are injected into every mold. Notably, regex built-ins use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax, based on Rust's `regex` crate and Oniguruma — **not** Python's `re` module. See [Built-ins Reference](../reference/built-ins.md) for details.
+Fimod exposes Rust-powered helpers for dot paths, iteration, hashing, templating, logging, and validation. Use `import re` for new regex molds. Deprecated `re_*`, `it_unique`, `it_unique_by`, and `it_flatten` require `FIMOD_LEGACY_BUILTINS=1`; activation is silent. See the [migration guide](../reference/built-ins.md#legacy-built-ins).
 
 === "✅ Supported"
 

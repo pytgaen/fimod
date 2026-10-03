@@ -89,57 +89,52 @@ Data arrives as standard Python types:
 
 ## 🧰 Built-in functions
 
-fimod injects a set of helpers into every mold — **no `import` needed**. See [Built-ins Reference](../reference/built-ins.md) for complete signatures.
+Fimod exposes helpers to molds — **no `import` needed** for active helpers.
+Legacy `re_*`, `it_unique`, `it_unique_by`, and `it_flatten` require
+`FIMOD_LEGACY_BUILTINS=1`, with no warning when enabled. See [Built-ins Reference](../reference/built-ins.md) for complete signatures.
 
-### 🔍 Regex (`re_*`)
+### 🔍 Regex (`import re`)
 
-Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — supports lookahead, lookbehind, backreferences, atomic groups. **Not Python's `re` module** — see [Built-ins Reference](../reference/built-ins.md) for the full syntax differences.
+Use Monty's native `re` module. See the [migration guide](../reference/built-ins.md#legacy-built-ins) for legacy helpers and API differences.
 
 ```python
+import re
+
 # 📧 Find all email addresses
 def transform(data, args, env, headers, **_):
-    return re_findall(r"\w+@\w+\.\w+", data["text"])
+    return re.findall(r"\w+@\w+\.\w+", data["text"])
 
 # 🧹 Clean whitespace
 def transform(data, args, env, headers, **_):
-    return {"cleaned": re_sub(r"\s+", " ", data["text"])}
+    return {"cleaned": re.sub(r"\s+", " ", data["text"])}
 
 # ✂️ Split on multiple delimiters
 def transform(data, args, env, headers, **_):
-    return re_split(r"[,;]\s*", data["tags"])
+    return re.split(r"[,;]\s*", data["tags"])
 
 # 👤 Lookahead — extract usernames from emails
 def transform(data, args, env, headers, **_):
-    return re_findall(r"\w+(?=@)", data["text"])
+    return re.findall(r"\w+(?=@)", data["text"])
 
 # 📋 Capture groups — extract structured data
 def transform(data, args, env, headers, **_):
-    m = re_search(r"(?P<user>\w+)@(?P<domain>\w+)", data["email"])
+    m = re.search(r"(?P<user>\w+)@(?P<domain>\w+)", data["email"])
     if m:
-        return {"user": m["groups"][0], "domain": m["named"]["domain"]}
+        return {"user": m.group(1), "domain": m.group("domain")}
     return None
 
 # 🔄 Replacement with group references — Python syntax (\1, \g<name>)
 def transform(data, args, env, headers, **_):
-    return re_sub(r"(\w+)@(\w+)", r"\2/\1", data["text"])
+    return re.sub(r"(\w+)@(\w+)", r"\2/\1", data["text"])
 
 # 🔄 Named group replacement
 def transform(data, args, env, headers, **_):
-    return re_sub(r"(?P<user>\w+)@(?P<domain>\w+)", r"\g<domain>/\g<user>", data["text"])
+    return re.sub(r"(?P<user>\w+)@(?P<domain>\w+)", r"\g<domain>/\g<user>", data["text"])
 
 # 🔢 Replace only first N occurrences (count argument)
 def transform(data, args, env, headers, **_):
-    return re_sub(r"\d+", "X", data["text"], 1)   # replace first match only
+    return re.sub(r"\d+", "X", data["text"], 1)   # replace first match only
 ```
-
-Available: `re_search` · `re_match` · `re_findall` · `re_sub` · `re_split`
-
-And their `_fancy` counterparts: `re_search_fancy` · `re_match_fancy` · `re_findall_fancy` · `re_sub_fancy` · `re_split_fancy`
-
-!!! note "Two syntaxes for replacements"
-    `re_sub` uses **Python `re` syntax**: `\1`, `\2`, `\g<name>`.
-    `re_sub_fancy` uses **fancy-regex syntax**: `$1`, `$2`, `${name}`.
-    For all other functions (`re_search`, `re_match`, `re_findall`, `re_split`), the `_fancy` variants are identical — provided for API consistency in fancy-mode molds.
 
 ### 🗂️ Dotpath (`dp_*`)
 
@@ -172,21 +167,16 @@ def transform(data, args, env, headers, **_):
 def transform(data, args, env, headers, **_):
     return it_sort_by(data, "age")
 
-# 🧹 Deduplicate by field (keeps first occurrence)
+# 🔑 Unique string tags, preserving order
 def transform(data, args, env, headers, **_):
-    return it_unique_by(data, "email")
-
-# 🌀 Recursive flatten: [1, [2, [3, 4]]] → [1, 2, 3, 4]
-def transform(data, args, env, headers, **_):
-    return it_flatten(data["nested_lists"])
-
-# 🔑 Unique primitives
-def transform(data, args, env, headers, **_):
-    return it_unique(data["tags"])
+    return list(dict.fromkeys(data["tags"]))
 ```
 
 !!! warning "Field name, not lambda"
-    `it_group_by`, `it_sort_by`, and `it_unique_by` take a **field name string** — not a lambda function.
+    `it_group_by` and `it_sort_by` take a **field name string** — not a lambda function.
+
+For field deduplication, use `@dedup_by --arg field=email`. For recursive
+flattening and JSON-shaped deduplication, see the [Python recipes](../reference/built-ins.md#migrating-deduplication-and-flattening).
 
 ### #️⃣ Hash functions (`hs_*`)
 
@@ -535,7 +525,7 @@ When no `--arg` is passed, `args` is an empty dict `{}`.
 - [x] Common built-ins such as `range()`, `enumerate()`, `zip()`, `sum()`, `min()`, `max()`, `sorted()`
 - [x] f-strings (`f"Hello {name}"`, `f"{x:.2f}"`, `f"{x!r}"`)
 - [x] Nested functions, multiple return values (tuples)
-- [x] All built-in helpers (`re_*`, `re_*_fancy`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`, `Step.create(...)`)
+- [x] Active built-in helpers (`dp_*`, active `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`, pipeline controls, `Step.create(...)`); deprecated regex/deduplication/flattening helpers require [legacy activation](../reference/built-ins.md#legacy-built-ins)
 
 ## ❌ Monty limitations
 

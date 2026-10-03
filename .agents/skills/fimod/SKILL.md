@@ -121,8 +121,11 @@ fimod s -i app.log --input-format lines \
   -e '[l for l in data if "ERROR" in l]'
 
 # Filter with regex
-fimod s -i access.log --input-format lines \
-  -e '[l for l in data if re_search(r"\s[45]\d{2}\s", l)]'
+fimod s -i access.log --input-format lines -e '
+import re
+def transform(data, **_):
+    return [line for line in data if re.search(r"\s[45]\d{2}\s", line)]
+'
 ```
 
 **19. Nested API response to flat CSV**
@@ -265,29 +268,42 @@ After running `fimod setup registry defaults`, these molds are available with th
 
 ## Built-in Helpers (Available automatically)
 
-You do not need to `import` anything, these functions are globally available:
+Active helpers are globally available without imports. Deprecated `re_*`
+(including `_fancy` aliases), `it_unique`, `it_unique_by`, and `it_flatten`
+require the process setting `FIMOD_LEGACY_BUILTINS=1`. Activation is silent;
+calling one without opt-in fails with migration guidance. No `--env` is needed.
+Use native `import re` and Python collection code for new molds. See the
+[migration guide](../../../docs/reference/built-ins.md#legacy-built-ins).
 
 ### Map / Dict Navigation (`dp_*`)
 - **`dp_get(data, "a.b.c", default=None)`**: Safely get nested values without `KeyError`. Indexes work too: `"users.0.name"`, `"items.-1"`.
 - **`dp_set(data, "a.b.c", value)`**: Return a deep copy of data with the mutated value. Missing intermediate keys are created automatically.
 
 ### Iteration & Collections (`it_*`)
-Note: `it_group_by`, `it_sort_by`, and `it_unique_by` take a **string field name**, not a lambda!
-- **`it_unique(list)`**: Deduplicate a primitive list.
-- **`it_unique_by(list, "email")`**: Deduplicate a list of dicts based on the "email" field.
+Note: `it_group_by` and `it_sort_by` take a **string field name**, not a lambda!
+- **String deduplication**: `list(dict.fromkeys(values))`, preserving order.
+- **Field deduplication**: use `-m @dedup_by --arg field=email` for JSON-shaped records.
 - **`it_sort_by(list, "created_at")`**: Sort a list of dicts (stable sort).
 - **`it_group_by(list, "department")`**: Groups into a dict of lists: `{"engineering": [...], "sales": [...]}`
 - **`it_keys(dict)` / `it_values(dict)`**: Get list of keys/values from dictionary.
-- **`it_flatten(list)`**: Recursively flatten nested arrays `[[1, 2], [3]]` -> `[1, 2, 3]`.
+- **Recursive flattening**: use the Python recipe in the migration guide; `chain.from_iterable` only flattens one level.
 
-### Regex (`re_*`)
-Patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex), whose syntax builds on Rust's `regex` crate and Oniguruma (including lookahead, lookbehind, and atomic groups). Each function has a `_fancy` variant that uses fancy-regex replacement syntax (`$1`/`${name}`) instead of Python syntax (`\1`/`\g<name>`).
-- **`re_search(r"...", text)`**: Returns `{"match": str, "start": int, "end": int, "groups": [...], "named": {...}}` or `None`.
-- **`re_match(r"...", text)`**: Same as `re_search`, anchored to start of text.
-- **`re_findall(r"...", text)`**: No groups -> `[str, ...]`. 1 group -> `[group_val, ...]`. N groups -> `[[g1, g2], ...]`.
-- **`re_sub(r"...", r"\1", text [, count])`**: Python syntax (`\1`, `\g<name>`). Optional `count` (0=all).
-- **`re_split(r"...", text)`**: Captured groups are included in the result (Python behaviour).
-- **`re_*_fancy` variants**: `re_search_fancy`, `re_match_fancy`, `re_findall_fancy`, `re_sub_fancy`, `re_split_fancy` — same signatures but use fancy-regex syntax (`$1`/`${name}` for replacements).
+### Regex (`import re`)
+Use Monty's native `re` module:
+
+```python
+import re
+
+def transform(data, **_):
+    match = re.search(r"(?P<name>\w+)", data["text"])
+    return match.group("name") if match else None
+```
+
+- `re.search` / `re.match` return a Match or None; use `.group()`, `.groups()`, `.groupdict()`, `.start()`, `.end()`.
+- `re.findall` returns tuples for multiple capture groups; absent groups are empty strings.
+- `re.sub` accepts references such as `r"\g<1>"` and `r"\g<name>"`; `$1` is literal. Prefer the explicit form when a suffix follows the reference.
+- `re.split` in Monty 1.0.0 omits captured separators; use the `re.finditer` recipe in the migration guide if they must be retained.
+- `FIMOD_REGEX_BACKTRACK_LIMIT` affects only the opt-in legacy regex helpers.
 
 ### Hashing (`hs_*`)
 - **`hs_sha256(text)` / `hs_md5(text)` / `hs_sha1(text)`**: Returns lowercase hex digest.

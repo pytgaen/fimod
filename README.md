@@ -155,7 +155,7 @@ jq '[.[] | {id, name}] | sort_by(.name) | unique_by(.id)' data.json
 
 # fimod: chain expressions, each feeds the next
 fimod s -i data.json -e '[{"id": u["id"], "name": u["name"]} for u in data]' \
-  -e 'it_unique_by(it_sort_by(data, "name"), "id")'
+  -e 'it_sort_by(data, "name")' -m @dedup_by --arg field=id
 ```
 
 **Python one-liner** - works but painful boilerplate:
@@ -232,7 +232,11 @@ fimod s -i customers.csv -e '[{**r, "email": hs_sha256(r["email"])} for r in dat
 
 ```bash
 # 🕵️ Mask IPs with regex — 192.168.1.42 → 192.168.x.x
-fimod s -i logs.json -e '[{**r, "ip": re_sub(r"\d+\.\d+$", "x.x", r["ip"])} for r in data]'
+fimod s -i logs.json -e '
+import re
+def transform(data, **_):
+    return [{**row, "ip": re.sub(r"\d+\.\d+$", "x.x", row["ip"])} for row in data]
+'
 ```
 
 ```bash
@@ -308,16 +312,14 @@ fimod s -i data.json \
 
 | Family | Functions | Example |
 |--------|-----------|---------|
-| `re_*` | search, match, findall, sub, split | `re_sub(r"(\w+)@(\w+)", r"\2/\1", text)` |
-| `re_*_fancy` | same + fancy-regex `$1`/`${name}` syntax | `re_sub_fancy(r"(\w+)@(\w+)", "$2/$1", text)` |
 | `dp_*` | get, set (nested dotpath) | `dp_set(data, "server.port", 8080)` |
-| `it_*` | sort_by, group_by, unique, flatten, ... | `it_group_by(data, "status")` |
+| `it_*` | keys, values, sort_by, group_by, count_by, min_by, max_by | `it_group_by(data, "status")` |
 | `hs_*` | md5, sha1, sha256 | `hs_sha256(data["email"])` |
 | `msg_*` | print, info, warn, error (to stderr) | `msg_warn("low coverage")` |
 | `gk_*` | fail, assert, warn (validation gates) | `gk_assert(data.get("version"), "missing version")` |
 | `env_subst` | `${VAR}` substitution in templates | `env_subst("Hello ${NAME}", env)` |
 
-> Helpers are implemented in Rust. Regex patterns use [fancy-regex](https://github.com/fancy-regex/fancy-regex), whose syntax builds on Rust's `regex` crate and Oniguruma. `re_sub` accepts Python `\1`/`\g<name>` syntax; `re_sub_fancy` uses `$1`/`${name}`.
+> Helpers are implemented in Rust. Use `import re` for regex. Legacy `re_*`, `it_unique`, `it_unique_by`, and `it_flatten` require `FIMOD_LEGACY_BUILTINS=1`, silently. See the [migration guide](docs/reference/built-ins.md#legacy-built-ins).
 
 ### 📦 Reusable molds & registries
 
@@ -456,27 +458,20 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune it with `fimod
 
 Design decisions, invariants, and architectural boundaries stay explicit — see [`notes/`](notes/) for the vision, architecture map, and design log. The discipline you see in the code (`cargo deny`, `#[must_use]`, layered serde/Monty boundary, conventional commits, ~500 tests + e2e fixtures) is intentional; the speed is the AI.
 
-- **Monty** (the embedded Python runtime) is an early-stage project by Pydantic. It is not CPython, and its API may change between releases.
-- **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
+- **Monty** is Pydantic's embedded Python runtime. Fimod pins Monty 1.0.0; it is a Python subset, not full CPython.
+- **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
 - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
 - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
-- Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax, based on Rust's `regex` crate and Oniguruma, **not** Python's `re` module - see [Built-ins Reference](docs/reference/built-ins.md).
+- Fimod adds Rust helpers for dot paths, iteration, hashing, templating, logging, and validation. Legacy regex and selected iteration helpers require explicit activation; new regex molds use `import re`.
 
 > [!NOTE]
-> **Regex: Fimod built-ins vs Monty's `re` module**
+> **Legacy built-ins**
 >
-> Fimod was originally built on Monty v0.0.6, which had no regex support.
-> We introduced `re_search`, `re_sub`, `re_findall`, etc. as Fimod built-in functions to fill that gap — a good example of the challenges of moving fast alongside a young runtime.
->
-> Since Monty v0.0.8, `import re` works — Monty implements a subset of Python's `re` module.
-> Both approaches now work side by side:
->
-> - **Fimod's `re_*` built-ins** — direct access to [fancy-regex](https://github.com/fancy-regex/fancy-regex), including advanced features like variable-length lookbehind/lookahead
-> - **`import re`** — familiar Python API, but only [partially implemented in Monty](https://github.com/pydantic/monty/pull/157) (also backed by fancy-regex under the hood)
->
-> The `re_*` built-ins are here to stay for the foreseeable future (at least until late 2027). As Monty's `re` module matures, we'll reconsider.
->
-> Since `import re` is already well-known to Python developers, the documentation focuses on the `re_*` built-ins which are specific to Fimod.
+> New molds use Monty's `import re` and Python deduplication/flattening code.
+> Existing molds can keep `re_*`, `it_unique`, `it_unique_by`, and `it_flatten`
+> by setting `FIMOD_LEGACY_BUILTINS=1`. No warning is emitted when enabled.
+> Without activation, calling one raises an error with migration guidance.
+> See the [migration guide](docs/reference/built-ins.md#legacy-built-ins) for API differences.
 
 ## 📄 License
 

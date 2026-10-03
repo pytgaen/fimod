@@ -1,6 +1,10 @@
 use anyhow::{bail, Result};
 use monty_types::{
-    DictPairs, MontyDate, MontyDateTime, MontyObject, MontyTime, MontyTimeDelta, MontyTimeZone,
+    unstable::{self, MontyNode},
+    ObjectRef,
+};
+use monty_types::{
+    MontyDate, MontyDateTime, MontyObject, MontyTime, MontyTimeDelta, MontyTimeZone,
 };
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde_json::{Number, Value};
@@ -69,11 +73,11 @@ fn fmt_timezone(tz: &MontyTimeZone) -> String {
 
 fn json_number_to_monty(number: &Number) -> MontyObject {
     if let Some(i) = number.as_i64() {
-        MontyObject::Int(i)
+        MontyObject::int(i)
     } else if let Some(u) = number.as_u64() {
-        MontyObject::BigInt(u.into())
+        MontyObject::bigint(u.into())
     } else {
-        MontyObject::Float(number.as_f64().unwrap_or(0.0))
+        MontyObject::float(number.as_f64().unwrap_or(0.0))
     }
 }
 
@@ -81,17 +85,17 @@ fn json_number_to_monty(number: &Number) -> MontyObject {
 /// All serde stays in Rust — Monty only sees Python dicts/lists/primitives.
 pub fn json_to_monty(value: &Value) -> MontyObject {
     match value {
-        Value::Null => MontyObject::None,
-        Value::Bool(b) => MontyObject::Bool(*b),
+        Value::Null => MontyObject::none(),
+        Value::Bool(b) => MontyObject::bool(*b),
         Value::Number(n) => json_number_to_monty(n),
-        Value::String(s) => MontyObject::String(s.clone()),
-        Value::Array(arr) => MontyObject::List(arr.iter().map(json_to_monty).collect()),
+        Value::String(s) => MontyObject::string(s.clone()),
+        Value::Array(arr) => MontyObject::list(arr.iter().map(json_to_monty)),
         Value::Object(map) => {
             let pairs: Vec<(MontyObject, MontyObject)> = map
                 .iter()
-                .map(|(k, v)| (MontyObject::String(k.clone()), json_to_monty(v)))
+                .map(|(k, v)| (MontyObject::string(k.clone()), json_to_monty(v)))
                 .collect();
-            MontyObject::Dict(DictPairs::from(pairs))
+            MontyObject::dict(pairs)
         }
     }
 }
@@ -100,92 +104,95 @@ pub fn json_to_monty(value: &Value) -> MontyObject {
 /// Use this on the hot path when the Value will not be needed after conversion.
 pub fn json_into_monty(value: Value) -> MontyObject {
     match value {
-        Value::Null => MontyObject::None,
-        Value::Bool(b) => MontyObject::Bool(b),
+        Value::Null => MontyObject::none(),
+        Value::Bool(b) => MontyObject::bool(b),
         Value::Number(n) => json_number_to_monty(&n),
-        Value::String(s) => MontyObject::String(s),
-        Value::Array(arr) => MontyObject::List(arr.into_iter().map(json_into_monty).collect()),
+        Value::String(s) => MontyObject::string(s),
+        Value::Array(arr) => MontyObject::list(arr.into_iter().map(json_into_monty)),
         Value::Object(map) => {
             let pairs: Vec<(MontyObject, MontyObject)> = map
                 .into_iter()
-                .map(|(k, v)| (MontyObject::String(k), json_into_monty(v)))
+                .map(|(k, v)| (MontyObject::string(k), json_into_monty(v)))
                 .collect();
-            MontyObject::Dict(DictPairs::from(pairs))
+            MontyObject::dict(pairs)
         }
     }
 }
 
 /// Convert a MontyObject back into a serde_json::Value.
-/// Takes ownership to avoid cloning strings on the return path.
+/// Borrows the graph while materializing the JSON tree; shared values expand as JSON.
 /// This runs in Rust after Monty execution — all serialization stays Rust-side.
 pub fn monty_to_json(obj: MontyObject) -> Result<Value> {
-    match obj {
-        MontyObject::None => Ok(Value::Null),
-        MontyObject::Bool(b) => Ok(Value::Bool(b)),
-        MontyObject::Int(i) => Ok(Value::Number(i.into())),
-        MontyObject::BigInt(bi) => {
-            if let Ok(i) = i64::try_from(&bi) {
+    object_to_json(obj.as_ref())
+}
+
+pub(crate) fn object_to_json(obj: ObjectRef<'_>) -> Result<Value> {
+    match unstable::node(obj) {
+        MontyNode::None => Ok(Value::Null),
+        MontyNode::Bool(b) => Ok(Value::Bool(*b)),
+        MontyNode::Int(i) => Ok(Value::Number((*i).into())),
+        MontyNode::BigInt(bi) => {
+            if let Ok(i) = i64::try_from(bi) {
                 Ok(Value::Number(i.into()))
-            } else if let Ok(u) = u64::try_from(&bi) {
+            } else if let Ok(u) = u64::try_from(bi) {
                 Ok(Value::Number(u.into()))
             } else {
                 Ok(Value::String(bi.to_string()))
             }
         }
-        MontyObject::Float(f) => serde_json::Number::from_f64(f)
+        MontyNode::Float(f) => Number::from_f64(*f)
             .map(Value::Number)
             .ok_or_else(|| anyhow::anyhow!("Cannot represent float {f} as JSON number")),
-        MontyObject::String(s) => Ok(Value::String(s)),
-        MontyObject::List(items) | MontyObject::Tuple(items) => {
-            let arr: Result<Vec<Value>> = items.into_iter().map(monty_to_json).collect();
-            Ok(Value::Array(arr?))
-        }
-        MontyObject::Dict(pairs) => {
+        MontyNode::String(s) => Ok(Value::String(s.clone())),
+        MontyNode::List(items) | MontyNode::Tuple(items) => items
+            .iter()
+            .map(|id| object_to_json(unstable::child(obj, *id)))
+            .collect::<Result<Vec<_>>>()
+            .map(Value::Array),
+        MontyNode::Dict(pairs) => {
             let mut map = serde_json::Map::new();
             for (k, v) in pairs {
-                let key = match k {
-                    MontyObject::String(s) => s,
-                    other => format!("{other}"),
-                };
-                map.insert(key, monty_to_json(v)?);
+                let key = unstable::child(obj, *k).to_string();
+                map.insert(key, object_to_json(unstable::child(obj, *v))?);
             }
             Ok(Value::Object(map))
         }
-        MontyObject::Date(d) => Ok(Value::String(fmt_date(&d))),
-        MontyObject::DateTime(dt) => Ok(Value::String(fmt_datetime(&dt))),
-        MontyObject::Time(t) => Ok(Value::String(fmt_time(&t))),
-        MontyObject::TimeDelta(td) => Ok(Value::String(fmt_timedelta(&td))),
-        MontyObject::TimeZone(tz) => Ok(Value::String(fmt_timezone(&tz))),
+        MontyNode::Date(d) => Ok(Value::String(fmt_date(d))),
+        MontyNode::DateTime(d) => Ok(Value::String(fmt_datetime(d))),
+        MontyNode::Time(d) => Ok(Value::String(fmt_time(d))),
+        MontyNode::TimeDelta(d) => Ok(Value::String(fmt_timedelta(d))),
+        MontyNode::TimeZone(d) => Ok(Value::String(fmt_timezone(d))),
         other => bail!("Cannot convert MontyObject variant to JSON: {other:?}"),
     }
 }
 
-/// Whether a JSON round-trip leaves this object's types and contents unchanged.
-/// Keep the existing conversion for tuples, dates, non-string/colliding keys,
-/// oversized integers and unsupported values; in particular, do not hide errors
-/// in fields that an aggregation does not otherwise inspect.
+/// Whether JSON normalization preserves the value's types and contents.
 pub(crate) fn is_json_native(obj: &MontyObject) -> bool {
-    match obj {
-        MontyObject::None | MontyObject::Bool(_) | MontyObject::Int(_) | MontyObject::String(_) => {
-            true
-        }
-        MontyObject::Float(f) => f.is_finite(),
-        MontyObject::BigInt(n) => i64::try_from(n).is_err() && u64::try_from(n).is_ok(),
-        MontyObject::List(items) => items.iter().all(is_json_native),
-        MontyObject::Dict(pairs) => {
+    is_json_native_ref(obj.as_ref())
+}
+
+fn is_json_native_ref(obj: ObjectRef<'_>) -> bool {
+    match unstable::node(obj) {
+        MontyNode::None | MontyNode::Bool(_) | MontyNode::Int(_) | MontyNode::String(_) => true,
+        MontyNode::Float(f) => f.is_finite(),
+        MontyNode::BigInt(n) => i64::try_from(n).is_err() && u64::try_from(n).is_ok(),
+        MontyNode::List(items) => items
+            .iter()
+            .all(|id| is_json_native_ref(unstable::child(obj, *id))),
+        MontyNode::Dict(pairs) => {
             let mut keys = std::collections::HashSet::with_capacity(pairs.len());
-            pairs.into_iter().all(|(key, value)| {
-                matches!(key, MontyObject::String(s) if keys.insert(s)) && is_json_native(value)
+            pairs.iter().all(|(k, v)| {
+                unstable::child(obj, *k)
+                    .as_str()
+                    .is_some_and(|s| keys.insert(s))
+                    && is_json_native_ref(unstable::child(obj, *v))
             })
         }
         _ => false,
     }
 }
 
-/// Serde serializer wrapper for `MontyObject` that produces the same JSON as `monty_to_json`.
-///
-/// Avoids allocating an intermediate `serde_json::Value` when writing directly to a serializer
-/// (e.g. `serde_json::to_writer`). Semantics are kept in sync with `monty_to_json`.
+/// Direct serialization without materializing a JSON tree.
 pub struct MontySerialize<'a>(pub &'a MontyObject);
 
 impl serde::Serialize for MontySerialize<'_> {
@@ -193,11 +200,22 @@ impl serde::Serialize for MontySerialize<'_> {
         &self,
         serializer: S,
     ) -> std::result::Result<S::Ok, S::Error> {
-        match self.0 {
-            MontyObject::None => serializer.serialize_none(),
-            MontyObject::Bool(b) => serializer.serialize_bool(*b),
-            MontyObject::Int(i) => serializer.serialize_i64(*i),
-            MontyObject::BigInt(bi) => {
+        ObjectSerialize(self.0.as_ref()).serialize(serializer)
+    }
+}
+
+pub(crate) struct ObjectSerialize<'a>(pub ObjectRef<'a>);
+impl serde::Serialize for ObjectSerialize<'_> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        let obj = self.0;
+        match unstable::node(obj) {
+            MontyNode::None => serializer.serialize_none(),
+            MontyNode::Bool(b) => serializer.serialize_bool(*b),
+            MontyNode::Int(i) => serializer.serialize_i64(*i),
+            MontyNode::BigInt(bi) => {
                 if let Ok(i) = i64::try_from(bi) {
                     serializer.serialize_i64(i)
                 } else if let Ok(u) = u64::try_from(bi) {
@@ -206,31 +224,30 @@ impl serde::Serialize for MontySerialize<'_> {
                     serializer.serialize_str(&bi.to_string())
                 }
             }
-            MontyObject::Float(f) => serializer.serialize_f64(*f),
-            MontyObject::String(s) => serializer.serialize_str(s),
-            MontyObject::List(items) | MontyObject::Tuple(items) => {
+            MontyNode::Float(f) => serializer.serialize_f64(*f),
+            MontyNode::String(s) => serializer.serialize_str(s),
+            MontyNode::List(items) | MontyNode::Tuple(items) => {
                 let mut seq = serializer.serialize_seq(Some(items.len()))?;
-                for item in items {
-                    seq.serialize_element(&MontySerialize(item))?;
+                for id in items {
+                    seq.serialize_element(&ObjectSerialize(unstable::child(obj, *id)))?;
                 }
                 seq.end()
             }
-            MontyObject::Dict(pairs) => {
+            MontyNode::Dict(pairs) => {
                 let mut map = serializer.serialize_map(Some(pairs.len()))?;
                 for (k, v) in pairs {
-                    let key = match k {
-                        MontyObject::String(s) => s.clone(),
-                        other => format!("{other}"),
-                    };
-                    map.serialize_entry(&key, &MontySerialize(v))?;
+                    map.serialize_entry(
+                        &unstable::child(obj, *k).to_string(),
+                        &ObjectSerialize(unstable::child(obj, *v)),
+                    )?;
                 }
                 map.end()
             }
-            MontyObject::Date(d) => serializer.serialize_str(&fmt_date(d)),
-            MontyObject::DateTime(dt) => serializer.serialize_str(&fmt_datetime(dt)),
-            MontyObject::Time(t) => serializer.serialize_str(&fmt_time(t)),
-            MontyObject::TimeDelta(td) => serializer.serialize_str(&fmt_timedelta(td)),
-            MontyObject::TimeZone(tz) => serializer.serialize_str(&fmt_timezone(tz)),
+            MontyNode::Date(d) => serializer.serialize_str(&fmt_date(d)),
+            MontyNode::DateTime(d) => serializer.serialize_str(&fmt_datetime(d)),
+            MontyNode::Time(d) => serializer.serialize_str(&fmt_time(d)),
+            MontyNode::TimeDelta(d) => serializer.serialize_str(&fmt_timedelta(d)),
+            MontyNode::TimeZone(d) => serializer.serialize_str(&fmt_timezone(d)),
             other => Err(serde::ser::Error::custom(format!(
                 "Cannot convert MontyObject variant to JSON: {other:?}"
             ))),
@@ -258,7 +275,7 @@ mod tests {
             (Some(0), "14:30:01.000042+00:00"),
             (Some(-3661), "14:30:01.000042-01:01:01"),
         ] {
-            let obj = MontyObject::Time(MontyTime {
+            let obj = MontyObject::time(MontyTime {
                 hour: 14,
                 minute: 30,
                 second: 1,
@@ -307,7 +324,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_date() {
-        roundtrip_eq(&MontyObject::Date(MontyDate {
+        roundtrip_eq(&MontyObject::date(MontyDate {
             year: 2025,
             month: 5,
             day: 15,
@@ -316,7 +333,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_datetime_naive() {
-        roundtrip_eq(&MontyObject::DateTime(MontyDateTime {
+        roundtrip_eq(&MontyObject::datetime(MontyDateTime {
             year: 2025,
             month: 5,
             day: 15,
@@ -331,7 +348,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_datetime_aware_with_microseconds() {
-        roundtrip_eq(&MontyObject::DateTime(MontyDateTime {
+        roundtrip_eq(&MontyObject::datetime(MontyDateTime {
             year: 2025,
             month: 5,
             day: 15,
@@ -346,7 +363,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_timedelta() {
-        roundtrip_eq(&MontyObject::TimeDelta(MontyTimeDelta {
+        roundtrip_eq(&MontyObject::timedelta(MontyTimeDelta {
             days: 1,
             seconds: 3661,
             microseconds: 500_000,
@@ -355,7 +372,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_timezone_named() {
-        roundtrip_eq(&MontyObject::TimeZone(MontyTimeZone {
+        roundtrip_eq(&MontyObject::timezone(MontyTimeZone {
             offset_seconds: 3600,
             name: Some("Europe/Paris".to_string()),
         }));
@@ -363,7 +380,7 @@ mod tests {
 
     #[test]
     fn monty_serialize_timezone_unnamed() {
-        roundtrip_eq(&MontyObject::TimeZone(MontyTimeZone {
+        roundtrip_eq(&MontyObject::timezone(MontyTimeZone {
             offset_seconds: -18000,
             name: None,
         }));
@@ -371,10 +388,10 @@ mod tests {
 
     #[test]
     fn monty_serialize_tuple_is_array() {
-        let obj = MontyObject::Tuple(vec![
-            MontyObject::Int(1),
-            MontyObject::String("two".to_string()),
-            MontyObject::None,
+        let obj = MontyObject::tuple(vec![
+            MontyObject::int(1),
+            MontyObject::string("two".to_string()),
+            MontyObject::none(),
         ]);
         roundtrip_eq(&obj);
     }

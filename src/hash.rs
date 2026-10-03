@@ -26,7 +26,7 @@ fn hash_fn<D: Digest>(args: Vec<MontyObject>, name: &str) -> Result<MontyObject>
     let mut hasher = D::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();
-    Ok(MontyObject::String(hex::encode(result)))
+    Ok(MontyObject::string(hex::encode(result)))
 }
 
 #[cfg(test)]
@@ -34,7 +34,7 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     #[test]
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_wrong_type() {
-        let result = dispatch("hs_md5", vec![MontyObject::Int(42)]);
+        let result = dispatch("hs_md5", vec![MontyObject::int(42)]);
         assert!(result.is_err());
     }
 

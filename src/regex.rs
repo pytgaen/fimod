@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use fancy_regex::RegexBuilder;
-use monty_types::{DictPairs, MontyObject};
+use monty_types::MontyObject;
 
 use crate::lru_cache::LruCache;
 use crate::monty_args::expect_string;
@@ -156,8 +156,8 @@ fn extract_groups(
     let num_groups = capture_group_count(re);
     let groups: Vec<MontyObject> = (1..=num_groups)
         .map(|i| match caps.get(i) {
-            Some(m) => MontyObject::String(m.as_str().to_string()),
-            None => MontyObject::None,
+            Some(m) => MontyObject::string(m.as_str().to_string()),
+            None => MontyObject::none(),
         })
         .collect();
 
@@ -167,21 +167,21 @@ fn extract_groups(
         .filter_map(|opt_name| {
             opt_name.map(|name| {
                 let val = match caps.name(name) {
-                    Some(m) => MontyObject::String(m.as_str().to_string()),
-                    None => MontyObject::None,
+                    Some(m) => MontyObject::string(m.as_str().to_string()),
+                    None => MontyObject::none(),
                 };
-                (MontyObject::String(name.to_string()), val)
+                (MontyObject::string(name.to_string()), val)
             })
         })
         .collect();
 
     let named = if named_pairs.is_empty() {
-        MontyObject::None
+        MontyObject::none()
     } else {
-        MontyObject::Dict(DictPairs::from(named_pairs))
+        MontyObject::dict(named_pairs)
     };
 
-    (MontyObject::List(groups), named)
+    (MontyObject::list(groups), named)
 }
 
 /// Build a match result dict with capture groups:
@@ -190,22 +190,22 @@ fn captures_to_dict(re: &fancy_regex::Regex, caps: &fancy_regex::Captures<'_, st
     let full = caps.get(0).expect("group 0 always exists");
     let (groups, named) = extract_groups(re, caps);
 
-    MontyObject::Dict(DictPairs::from(vec![
+    MontyObject::dict(vec![
         (
-            MontyObject::String("match".to_string()),
-            MontyObject::String(full.as_str().to_string()),
+            MontyObject::string("match".to_string()),
+            MontyObject::string(full.as_str().to_string()),
         ),
         (
-            MontyObject::String("start".to_string()),
-            MontyObject::Int(full.start() as i64),
+            MontyObject::string("start".to_string()),
+            MontyObject::int(full.start() as i64),
         ),
         (
-            MontyObject::String("end".to_string()),
-            MontyObject::Int(full.end() as i64),
+            MontyObject::string("end".to_string()),
+            MontyObject::int(full.end() as i64),
         ),
-        (MontyObject::String("groups".to_string()), groups),
-        (MontyObject::String("named".to_string()), named),
-    ]))
+        (MontyObject::string("groups".to_string()), groups),
+        (MontyObject::string("named".to_string()), named),
+    ])
 }
 
 /// re_search(pattern, text) → {"match", "start", "end", "groups", "named"} or None
@@ -223,7 +223,7 @@ fn re_search(args: Vec<MontyObject>) -> Result<MontyObject> {
 
     match re.captures(text) {
         Ok(Some(caps)) => Ok(captures_to_dict(&re, &caps)),
-        Ok(None) => Ok(MontyObject::None),
+        Ok(None) => Ok(MontyObject::none()),
         Err(e) => bail!("Regex execution error: {e}"),
     }
 }
@@ -251,7 +251,7 @@ fn re_match(args: Vec<MontyObject>) -> Result<MontyObject> {
 
     match re.captures(text) {
         Ok(Some(caps)) => Ok(captures_to_dict(&re, &caps)),
-        Ok(None) => Ok(MontyObject::None),
+        Ok(None) => Ok(MontyObject::none()),
         Err(e) => bail!("Regex execution error: {e}"),
     }
 }
@@ -282,14 +282,14 @@ fn re_findall(args: Vec<MontyObject>) -> Result<MontyObject> {
             0 => {
                 // No capture groups → return full match strings
                 if let Some(m) = caps.get(0) {
-                    results.push(MontyObject::String(m.as_str().to_string()));
+                    results.push(MontyObject::string(m.as_str().to_string()));
                 }
             }
             1 => {
                 // Single group → return group value directly
                 let val = match caps.get(1) {
-                    Some(m) => MontyObject::String(m.as_str().to_string()),
-                    None => MontyObject::None,
+                    Some(m) => MontyObject::string(m.as_str().to_string()),
+                    None => MontyObject::none(),
                 };
                 results.push(val);
             }
@@ -297,16 +297,16 @@ fn re_findall(args: Vec<MontyObject>) -> Result<MontyObject> {
                 // Multiple groups → return list of group values
                 let group_vals: Vec<MontyObject> = (1..=n)
                     .map(|i| match caps.get(i) {
-                        Some(m) => MontyObject::String(m.as_str().to_string()),
-                        None => MontyObject::None,
+                        Some(m) => MontyObject::string(m.as_str().to_string()),
+                        None => MontyObject::none(),
                     })
                     .collect();
-                results.push(MontyObject::List(group_vals));
+                results.push(MontyObject::list(group_vals));
             }
         }
     }
 
-    Ok(MontyObject::List(results))
+    Ok(MontyObject::list(results))
 }
 
 /// re_sub(pattern, replacement, text [, count]) → str
@@ -328,8 +328,8 @@ fn re_sub(args: Vec<MontyObject>, fancy: bool) -> Result<MontyObject> {
     let text = expect_string(&args[2], "text")?;
 
     let count: usize = if args.len() == 4 {
-        match &args[3] {
-            MontyObject::Int(n) => *n as usize,
+        match args[3].as_ref().as_int() {
+            Some(n) => n as usize,
             _ => bail!("re_sub() 4th argument must be count (int)"),
         }
     } else {
@@ -344,7 +344,7 @@ fn re_sub(args: Vec<MontyObject>, fancy: bool) -> Result<MontyObject> {
 
     let re = compile_regex(pattern)?;
     let result = re.replacen(text, count, effective_replacement.as_str());
-    Ok(MontyObject::String(result.into_owned()))
+    Ok(MontyObject::string(result.into_owned()))
 }
 
 /// re_split(pattern, text) → [str, ...]
@@ -370,15 +370,15 @@ fn re_split(args: Vec<MontyObject>) -> Result<MontyObject> {
         let full = caps.get(0).expect("group 0 always exists");
 
         // Text before the match
-        parts.push(MontyObject::String(
+        parts.push(MontyObject::string(
             text[last_end..full.start()].to_string(),
         ));
 
         // Include captured groups in output (Python re.split behavior)
         for i in 1..=num_groups {
             let val = match caps.get(i) {
-                Some(m) => MontyObject::String(m.as_str().to_string()),
-                None => MontyObject::None,
+                Some(m) => MontyObject::string(m.as_str().to_string()),
+                None => MontyObject::none(),
             };
             parts.push(val);
         }
@@ -387,9 +387,9 @@ fn re_split(args: Vec<MontyObject>) -> Result<MontyObject> {
     }
 
     // Text after the last match
-    parts.push(MontyObject::String(text[last_end..].to_string()));
+    parts.push(MontyObject::string(text[last_end..].to_string()));
 
-    Ok(MontyObject::List(parts))
+    Ok(MontyObject::list(parts))
 }
 
 #[cfg(test)]
@@ -397,24 +397,13 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     fn get_dict_field(dict: &MontyObject, key: &str) -> MontyObject {
-        match dict {
-            MontyObject::Dict(pairs) => {
-                let pairs_vec: Vec<_> = pairs.clone().into_iter().collect();
-                for (k, v) in &pairs_vec {
-                    if let MontyObject::String(k_str) = k {
-                        if k_str == key {
-                            return v.clone();
-                        }
-                    }
-                }
-                panic!("Key '{key}' not found in dict");
-            }
-            _ => panic!("Expected dict, got {dict:?}"),
-        }
+        crate::monty_args::field(dict.as_ref(), key)
+            .expect("dict field")
+            .to_owned()
     }
 
     #[test]
@@ -430,17 +419,17 @@ mod tests {
     fn test_re_search_found() {
         let result = dispatch("re_search", vec![s(r"\d+"), s("abc123def")]).unwrap();
         assert_eq!(get_dict_field(&result, "match"), s("123"));
-        assert_eq!(get_dict_field(&result, "start"), MontyObject::Int(3));
-        assert_eq!(get_dict_field(&result, "end"), MontyObject::Int(6));
+        assert_eq!(get_dict_field(&result, "start"), MontyObject::int(3));
+        assert_eq!(get_dict_field(&result, "end"), MontyObject::int(6));
         // No capture groups → empty groups list
-        assert_eq!(get_dict_field(&result, "groups"), MontyObject::List(vec![]));
-        assert_eq!(get_dict_field(&result, "named"), MontyObject::None);
+        assert_eq!(get_dict_field(&result, "groups"), MontyObject::list(vec![]));
+        assert_eq!(get_dict_field(&result, "named"), MontyObject::none());
     }
 
     #[test]
     fn test_re_search_not_found() {
         let result = dispatch("re_search", vec![s(r"\d+"), s("abcdef")]).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
     }
 
     #[test]
@@ -449,7 +438,7 @@ mod tests {
         assert_eq!(get_dict_field(&result, "match"), s("user@host"));
         assert_eq!(
             get_dict_field(&result, "groups"),
-            MontyObject::List(vec![s("user"), s("host")])
+            MontyObject::list(vec![s("user"), s("host")])
         );
     }
 
@@ -463,7 +452,7 @@ mod tests {
         assert_eq!(get_dict_field(&result, "match"), s("admin@server"));
         assert_eq!(
             get_dict_field(&result, "groups"),
-            MontyObject::List(vec![s("admin"), s("server")])
+            MontyObject::list(vec![s("admin"), s("server")])
         );
         let named = get_dict_field(&result, "named");
         assert_eq!(get_dict_field(&named, "user"), s("admin"));
@@ -475,11 +464,11 @@ mod tests {
     #[test]
     fn test_re_match_anchored() {
         let result = dispatch("re_match", vec![s(r"\d+"), s("123abc")]).unwrap();
-        assert!(matches!(result, MontyObject::Dict(_)));
+        assert_eq!(result.type_name(), "dict");
         assert_eq!(get_dict_field(&result, "match"), s("123"));
 
         let result = dispatch("re_match", vec![s(r"\d+"), s("abc123")]).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
     }
 
     #[test]
@@ -488,7 +477,7 @@ mod tests {
         assert_eq!(get_dict_field(&result, "match"), s("## Hello World"));
         assert_eq!(
             get_dict_field(&result, "groups"),
-            MontyObject::List(vec![s("##"), s("Hello World")])
+            MontyObject::list(vec![s("##"), s("Hello World")])
         );
     }
 
@@ -497,8 +486,9 @@ mod tests {
     #[test]
     fn test_re_findall_no_groups() {
         let result = dispatch("re_findall", vec![s(r"\d+"), s("a1b22c333")]).unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items, vec![s("1"), s("22"), s("333")]);
             }
             _ => panic!("Expected list"),
@@ -509,8 +499,9 @@ mod tests {
     fn test_re_findall_single_group() {
         // Python behavior: with 1 group, returns the group content, not the full match
         let result = dispatch("re_findall", vec![s(r"(\d+)@"), s("1@hello 22@world")]).unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items, vec![s("1"), s("22")]);
             }
             _ => panic!("Expected list"),
@@ -521,11 +512,12 @@ mod tests {
     fn test_re_findall_multiple_groups() {
         // Python behavior: with N groups, returns list of lists
         let result = dispatch("re_findall", vec![s(r"(\w+)=(\d+)"), s("a=1 b=2")]).unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items.len(), 2);
-                assert_eq!(items[0], MontyObject::List(vec![s("a"), s("1")]));
-                assert_eq!(items[1], MontyObject::List(vec![s("b"), s("2")]));
+                assert_eq!(items[0], MontyObject::list(vec![s("a"), s("1")]));
+                assert_eq!(items[1], MontyObject::list(vec![s("b"), s("2")]));
             }
             _ => panic!("Expected list"),
         }
@@ -539,8 +531,9 @@ mod tests {
             vec![s(r"\w+(?=@)"), s("user@host admin@server")],
         )
         .unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items, vec![s("user"), s("admin")]);
             }
             _ => panic!("Expected list"),
@@ -560,7 +553,7 @@ mod tests {
         // count=1: replace only the first match
         let result = dispatch(
             "re_sub",
-            vec![s(r"\d+"), s("X"), s("a1b2c3"), MontyObject::Int(1)],
+            vec![s(r"\d+"), s("X"), s("a1b2c3"), MontyObject::int(1)],
         )
         .unwrap();
         assert_eq!(result, s("aXb2c3"));
@@ -623,7 +616,7 @@ mod tests {
         // count argument works with re_sub_fancy too
         let result = dispatch(
             "re_sub_fancy",
-            vec![s(r"\d+"), s("X"), s("a1b2c3"), MontyObject::Int(1)],
+            vec![s(r"\d+"), s("X"), s("a1b2c3"), MontyObject::int(1)],
         )
         .unwrap();
         assert_eq!(result, s("aXb2c3"));
@@ -633,7 +626,7 @@ mod tests {
     fn test_re_sub_count_zero_means_all() {
         let result = dispatch(
             "re_sub",
-            vec![s(r"\d"), s("X"), s("a1b2c3"), MontyObject::Int(0)],
+            vec![s(r"\d"), s("X"), s("a1b2c3"), MontyObject::int(0)],
         )
         .unwrap();
         assert_eq!(result, s("aXbXcX"));
@@ -644,8 +637,9 @@ mod tests {
     #[test]
     fn test_re_split() {
         let result = dispatch("re_split", vec![s(r"[,;]\s*"), s("a, b;c, d")]).unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items, vec![s("a"), s("b"), s("c"), s("d")]);
             }
             _ => panic!("Expected list"),
@@ -656,8 +650,9 @@ mod tests {
     fn test_re_split_with_capture_groups() {
         // Python behavior: captured groups are included in the result
         let result = dispatch("re_split", vec![s(r"([,;])\s*"), s("a, b;c")]).unwrap();
-        match result {
-            MontyObject::List(items) => {
+        match result.as_ref().items() {
+            Some(items) => {
+                let items: Vec<_> = items.into_iter().map(|v| v.to_owned()).collect();
                 assert_eq!(items, vec![s("a"), s(","), s("b"), s(";"), s("c")]);
             }
             _ => panic!("Expected list"),
@@ -692,7 +687,7 @@ mod tests {
         // Too many (5 args — mode string no longer accepted)
         let result = dispatch(
             "re_sub",
-            vec![s("a"), s("b"), s("c"), MontyObject::Int(1), s("extra")],
+            vec![s("a"), s("b"), s("c"), MontyObject::int(1), s("extra")],
         );
         assert!(result.is_err());
     }

@@ -73,7 +73,7 @@ tasks:
   lint:msrv:
     desc: Check the crate still builds on the declared MSRV (mirrors the CI msrv job)
     cmds:
-      - cargo +1.95 check --all-features
+      - cargo +1.96 check --all-features
 
   outdated:
     desc: Check root dependencies are up-to-date

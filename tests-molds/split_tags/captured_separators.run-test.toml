@@ -1,0 +1,3 @@
+[args]
+field = "tags"
+sep = '(,|;)\s*'

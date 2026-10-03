@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v0.0.23) as its execution engine for mold scripts.
+Fimod uses Monty (v1.0.0) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -13,7 +13,9 @@ Fimod uses Monty (v0.0.23) as its execution engine for mold scripts.
 | Feature | Notes |
 |---------|-------|
 | Functions | sync and async, closures, default args, `*args`/`**kwargs` |
-| `str.format` | Positional/named fields and format specifications |
+| String formatting | `str.format`, `format(value, spec)`, and `%` formatting for strings/bytes |
+| Dict merge | `a | b`, `{**a, **b}`, and `a.update(b)` |
+| Dynamic execution | `eval`, `exec`, and `locals`, within Monty’s runtime and sandbox |
 | f-strings | Full support: `f'{x}'`, `f'{x:.2f}'`, `f'{x!r}'`, `f'{x=}'` (debug), nested specs |
 | Comprehensions | list, dict, set, generator expressions |
 | Type hints | Annotations preserved, used for type checking |
@@ -49,7 +51,6 @@ as decimal strings instead of being rounded through `f64`.
 | Feature | Status |
 |---------|--------|
 | Match statements | Coming soon |
-| Dict merge operator | `a | b` not supported — use `{**a, **b}` or `a.update(b)` |
 | Third-party packages | Will probably never be supported |
 | Full standard library | Only selected modules |
 
@@ -59,13 +60,13 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 
 `open()` is syntactically available, but fimod denies it through the sandbox until filesystem mounts exist.
 
-**Not available**: `exec`, `eval`, `compile`, `__import__`, `input`.
+**Not available**: `compile`, `__import__`, `input`.
 
 ### Standard Library Modules
 
 | Module | Status |
 |--------|--------|
-| `sys` | Partial (version info) |
+| `sys` | Version/constants and `print(..., file=sys.stderr)` |
 | `typing` | Supported (TYPE_CHECKING, annotations) |
 | `asyncio` | Supported (gather, run) |
 | `pathlib` | Supported (via `OsFunctionCall` — see Security section) |
@@ -80,6 +81,9 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `base64`, `binascii` | Binary/text encodings; decode byte results to strings before returning structured output |
 | `itertools` | Includes `takewhile`, `dropwhile`, `filterfalse`, `starmap`, `accumulate`, `batched`, `zip_longest` |
 | `unicodedata` | Unicode character properties and normalization |
+| `copy` | `copy`, `deepcopy` |
+| `random` | Explicitly seeded generators; unseeded draws requesting host entropy are denied |
+| `time` | Clock reads require `allow_clock = true`; sleep is denied |
 | `zip(..., strict=True)` | Supported since v0.0.12 — raises `ValueError` on length mismatch |
 
 ## External Function Mechanism
@@ -89,11 +93,11 @@ Monty provides a controlled bridge between sandbox code and host capabilities th
 Since v0.0.8, external functions are resolved **dynamically at runtime** via a `NameLookup` suspension. When the VM first encounters an unknown name, it yields to the host to resolve it. The host returns a `Function` object if the name is a known external function, or `Undefined` to trigger a `NameError`. The resolved value is then cached in the namespace for subsequent calls.
 
 ```
-Sandbox code calls re_sub("a", "b", text)
+With FIMOD_LEGACY_BUILTINS=1, sandbox code calls re_sub("a", "b", text)
     ↓
 Monty yields RunProgress::NameLookup { name: "re_sub" }   ← first access only
     ↓
-Host: name in known list → resume(NameLookupResult::Value(MontyObject::Function))
+Host: name in known list → resume(NameLookupResult::Value(MontyObject::function(name, None)))
     ↓
 Monty yields RunProgress::FunctionCall(FunctionCall { function_name: "re_sub", args: [...] })
     ↓
@@ -102,9 +106,9 @@ Host (fimod) dispatches to Rust regex implementation
 Host returns result → call.resume(result, print) → Monty resumes
 ```
 
-In fimod, external functions provide: regex (`re_*`), dot-path access (`dp_*`), iterators (`it_*`), hashing (`hs_*`), exit control (`set_exit`), and format control (`set_format`, `set_output_file`).
+In fimod, external functions provide dot-path access (`dp_*`), iteration (`it_*`), hashing (`hs_*`), exit control (`set_exit`), format control (`set_input_format`, `set_output_format`, `set_output_file`), and opt-in legacy regex (`re_*`).
 
-**Note on `re_*` vs `import re`**: since v0.0.8, both are available. `re_*` returns a plain dict `{"match", "start", "end", "groups", "named"}` — convenient for data transformation — and has configurable ReDoS protection (`FIMOD_REGEX_BACKTRACK_LIMIT`). `import re` supports flags (`re.IGNORECASE`, etc.), `fullmatch`, `compile`, `finditer`, `escape`, `maxsplit`, and catchable `re.error` exceptions. Both use the same fancy-regex engine.
+**Legacy built-ins**: `re_*` (including `_fancy`), `it_unique`, `it_unique_by`, and `it_flatten` are blocked at host dispatch unless the process has `FIMOD_LEGACY_BUILTINS=1`. Activation emits no warning. New regex molds use `import re`; legacy regex retains its dict results, replacement syntax, and `FIMOD_REGEX_BACKTRACK_LIMIT`. See the [migration guide](built-ins.md#legacy-built-ins).
 
 ## Security Model — Inverted Sandbox
 
@@ -120,7 +124,7 @@ By default, Monty code has:
 - No environment variable access
 - No process spawning
 - No direct filesystem access. `open()` and `Path.*` route through the host and are denied by fimod unless explicitly implemented.
-- No `exec()`, `eval()`
+- `eval()` and `exec()` stay inside Monty; they do not invoke system Python
 - Strict resource limits (memory, recursion, execution time)
 
 ### The OsFunctionCall Mechanism
@@ -162,12 +166,28 @@ RunProgress::OsCall(call) => {
 
 These tests serve as a **regression guard**: if Monty's behavior changes or fimod's OsCall handling is modified, these tests will catch it.
 
+### Clock, entropy and sleep policy
+
+Fimod explicitly configures Monty's `OsPolicy` to send clock, initial random
+entropy and sleep requests to the host. Monty's system defaults therefore do
+not bypass fimod's sandbox policy, in either molds or the REPL.
+
+- `allow_clock = true` permits `datetime` clock calls and `time.time()` / related
+  clock reads. Explicit fixed-offset timezones passed to `datetime.now(tz)` are
+  respected.
+- `os.urandom()` and unseeded random draws are denied. Use `random.seed(42)` or
+  `random.Random(42)` for reproducible transforms.
+- `time.sleep()` and `asyncio.sleep()` are denied, including zero-duration sleeps.
+  Clock permission does not grant sleep or entropy access.
+- `print(..., file=sys.stderr)` writes to stderr. In debug mode, both Python
+  print streams go to stderr.
+
 ### Resource Limits
 
 Monty supports configurable limits through its `ResourceTracker`:
 - **Memory**: Cap total allocation
 - **Recursion depth**: Prevent stack overflow
-- **Execution time/steps**: Prevent infinite loops
+- **Execution time**: A per-feed budget bounds a mold or REPL snippet across resumptions; host suspension time is excluded by Monty. Fimod also retains its chain deadline accounting.
 
 Fimod uses `ResourceTracker` with hard defaults (`max_duration = 10m`, `max_memory = 2GB`). These defaults apply even without a `sandbox.toml`. See the [Sandbox](../guides/cli-reference.md#sandbox-policy) section for configuring limits via `~/.config/fimod/sandbox.toml` or `--sandbox-file`.
 
@@ -208,14 +228,14 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 8. **You can use `import itertools`** (Monty 0.0.20+) — `count`, `repeat`, `pairwise`, `compress`, `islice`, `chain`, `cycle`
 9. **You can use `import dataclasses`** (Monty 0.0.20+) — `@dataclass` and `is_dataclass` work on classes defined in the mold itself; `__post_init__` is not supported and is rejected rather than silently skipped
 10. **You can define classes and use decorators** — plain `class` with `__init__` and methods works, and so do function decorators
-11. **You can merge dicts with `{**a, **b}`** — PEP 448 unpacking is supported; `a | b` is not
+11. **You can merge dicts with `a | b` or `{**a, **b}`**
 12. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
 13. **You cannot read files** — `Path(...)` calls return `None` in fimod
 14. **You cannot access env vars via os unless sandbox policy allows them** — denied `os.getenv(...)` calls return `None`; the `env` parameter with `--env PATTERN` is still the portable fimod-native path
 15. **You cannot import pip packages** — no `requests`, `pandas`, etc.
 16. **Use `import x`, not `__import__("x")`** — fimod resolves external functions by name and rejects `__import__`
 17. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
-18. **`re_*` vs `import re`** — use `re_*` when you want a structured dict result or ReDoS protection; use `import re` when you need flags, `fullmatch`, `compile`, `finditer`, `escape`, or catchable `re.error`
+18. **Use `import re` for new molds** — `re_*` is deprecated and requires `FIMOD_LEGACY_BUILTINS=1`. Legacy compatibility retains dict results and the configurable `FIMOD_REGEX_BACKTRACK_LIMIT`; native regex has its own backtracking limit. See the [migration guide](built-ins.md#legacy-built-ins).
 
 ## Interactive REPL
 
@@ -223,7 +243,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v0.0.23 — fimod v0.10.0 (exit or Ctrl+D to quit)
+Monty REPL v1.0.0 — fimod v0.11.0 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

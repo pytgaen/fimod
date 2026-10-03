@@ -1,109 +1,93 @@
 @AGENTS.base.md
 
-# AGENTS.md
+# Fimod agent instructions
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Read [AGENTS.base.md](AGENTS.base.md) once if it has not already been loaded.
+It defines shared execution and Git rules; this file adds Fimod-specific rules.
 
-## Project
+Fimod is a Rust CLI that transforms structured data with Python mold scripts
+executed by [Monty](https://github.com/pydantic/monty). It ships as a standalone
+binary and requires no system Python installation.
 
-Fimod is a Rust CLI that transforms structured data files by executing Python "mold" scripts via [Monty](https://github.com/pydantic/monty) (Pydantic's embedded Python engine). No system Python installation required.
+## Read the relevant source of truth
 
-## Project notes
+Use these references when the task touches their subject; do not load the whole
+set for every edit. Repository evidence takes precedence over recalled behavior.
 
-Before any decision on tooling, build, architecture, release flow, or any
-cross-cutting concern, consult these files in `notes/`:
+| Task or decision | Reference |
+| --- | --- |
+| Product scope, non-goals, major design tradeoffs | `notes/VISION.md` |
+| Pipeline, module responsibilities, sandbox boundaries | `notes/ARCHITECTURE.md` |
+| File placement, test and documentation locations | `notes/CODE_LAYOUT.md` |
+| Tooling, implementation conventions, Monty watchpoints | `notes/DESIGN_NOTES.md` |
+| Roadmap scope or migration of completed items | `notes/ROADMAP.md` |
+| Commits, PRs, prereleases, releases | `notes/release-workflow.md` and the relevant workflow skill |
 
-- `notes/VISION.md` — long-term direction and product constraints
-- `notes/ARCHITECTURE.md` — module map, pipeline structure, boundaries
-- `notes/CODE_LAYOUT.md` — where every file lives (src/, tests/, docs/, …) + "where do I put this change?" decisional
-- `notes/DESIGN_NOTES.md` — concrete design decisions, tooling conventions
-  (e.g. "Local tooling (mise.toml)" — all build tools managed via mise),
-  watchpoints, and known invariants
-- `notes/release-workflow.md` — release process specifics
-- `notes/changelog-X.Y.Z.md` — drafted during a release cycle (transient)
+Build tooling is managed through `mise.toml`; use `Taskfile.yml` for maintained
+commands. Check `Cargo.toml` and the implementation for current dependency APIs
+and versions instead of keeping version-specific instructions here.
 
-These are the project's source of truth, not optional reading.
+## Boundaries to preserve
 
-## CLI usage — always prefix verbose commands with `rtk`
+- Rust owns format parsing/serialization and all host capabilities. Monty handles
+  structured values; filesystem, environment, clock, and other host access remain
+  gated by Rust's sandbox policy. Do not bypass it to fill Python-runtime gaps.
+- `serde_json::Value` is the I/O representation; mold chains carry `MontyObject`
+  between steps. Preserve native identity conversion and direct serialization
+  paths where applicable; consult the architecture before changing conversions.
+- Molds define `transform(data, **_)`, declaring only the keyword parameters they
+  use (`args`, `env`, `headers`, `pipeline`). Environment exposure is explicit via
+  `--env`; preserve that contract.
+- Keep stdout for data. Diagnostics and debug output, including mold prints in
+  debug mode, belong on stderr.
+- Prefer dedicated function variants when behaviors diverge substantially
+  (existing example: `re_sub` / `re_sub_fancy`).
 
-This project follows the `rtk-cli-optimizer` skill convention. All verbose CLI
-calls (`cargo`, `git`, `gh`, `grep`, `find`, `ls`, `tree`, `diff`, etc.) MUST be
-prefixed with `rtk` to compress output before it reaches the model context
-(60-90% token savings). Reference: `~/.Codex/skills/rtk-cli-optimizer/SKILL.md`.
+## Tools and verification
 
-- Chains (`&& / || / ;`): prefix **each** command (`rtk cargo build && rtk cargo test`).
-- Pipes (`|`): prefix only the **left side** (`rtk git log | head -20`).
-- Never prefix: editors (`vim`, `less`, REPL), or commands where exact output is
-  required for diagnosis. If `rtk` filtered output is too condensed, read the tee
-  file printed on failure (`~/.local/share/rtk/tee/`) before falling back to
-  `rtk run <cmd>` (raw passthrough).
+Use `rtk` for verbose CLI commands (`cargo`, `git`, `gh`, searches, builds, tests).
+Prefix each verbose command in a chain and the producer in a pipe. Exact-output
+reads and interactive tools may run directly. If filtering hides a failure, read
+RTK's tee file, then use `rtk run <command>` for raw output when needed.
 
-## Build & Test Commands
+Choose validation by the change:
 
-```bash
-rtk cargo build                    # Debug build
-rtk cargo test                     # All tests (unit + integration)
-rtk cargo test --lib               # Unit tests only
-rtk cargo test --test cli          # Integration tests only
-rtk cargo test <test_name>         # Single test by name
-rtk cargo build --release          # Optimized release binary
-```
+- Rust code, dependencies, or build/CI changes: run focused checks first, then
+  `rtk task lint` (fmt, clippy, cargo-deny) and `rtk task test` before completion.
+- Mold changes: run affected fixtures using the `mold-tests` skill; regenerate
+  `molds/catalog.toml` when a public mold is added or modified.
+- Published documentation: check affected examples and run `rtk task doc:build`
+  when rendering or navigation is affected.
+- Agent instructions or wording-only edits: review the diff, references, and
+  consistency; `rtk git diff --check` is sufficient without rebuilding Rust.
 
-Task runner (`task`) is also available — see `Taskfile.yml` for `task test`, `task build:release`, `task doc:serve`, etc.
-
-## Architecture
-
-All data flows through a single pipeline: **Read → Parse → Convert → Execute mold → Convert back → Serialize → Write**.
-
-The intermediate representation between formats is always `serde_json::Value`. Monty operates on `MontyObject` (Python dicts).
-
-**Key design decisions:**
-- All parsing/serialization stays in Rust (serde). Monty only manipulates Python dicts — this is a security boundary.
-- Mold scripts must define a `transform(data, **_)` function. `args`, `env`, `headers`, and `pipeline` are passed as keyword arguments, so molds only need to declare what they use before `**_` (e.g. `def transform(data, args, **_):`). Inline expressions (`-e`) are auto-wrapped into this form.
-- `--arg name=value` populates the `args` parameter — explicit access via `args["key"]`.
-- `--env PATTERN` populates the `env` parameter with filtered environment variables (glob patterns: `*`, `PREFIX_*`, `EXACT`, comma-separated). Without `--env`, `env` is `{}`.
-- CSV column names are passed as the `headers` parameter (list of strings, or `None` for non-CSV).
-- External functions (regex) use Monty's iterative start()/state.run() loop, not the simple runner.run().
-- `--debug` outputs to stderr with `[debug]` prefix; in debug mode Monty's print() also goes to stderr via custom `StderrPrint` (implements `PrintWriter`).
-- `--in-place` rewrites the input file; output format auto-detection uses the input path.
-- `--csv-output-delimiter` is separate from `--csv-delimiter` via `CsvOptions::effective_output_delimiter()`.
-- Dynamic shell completions use `clap_complete` `CompleteEnv` (activated via `COMPLETE=<shell>` env var). `fimod setup completions --shell <shell>` prints the activation script. Custom completers provide contextual completion for format names, `@mold` references, and registry source names.
-- CLI uses `Option<Commands>` for subcommands: `Some(Shape(..))` = pipeline, `Some(Registry{..})` = registry management (list/add/show/remove/set-priority/build-catalog/cache), `Some(Mold{..})` = mold browsing/testing, `None` prints help and exits 2.
-- Mold description is extracted from the module-level docstring (`"""..."""`) by `parse_mold_defaults()` into `MoldDefaults.docs`, used by `fimod mold list` (local scan) and `catalog.toml` (remote registries). `# fimod: description=` is no longer supported.
-- `--output-format raw` short-circuits the entire transform pipeline (no mold allowed): fetches URL bytes directly or reads a file as binary and writes to `-o`. `set_output_format("raw")` from within a mold triggers the same binary pass-through but requires `--input-format http` to have populated `http_raw_bytes`.
-- `DataFormat::Txt` serializes `Value::String` as a bare string (no JSON quotes); non-strings fall back to compact JSON. Use `--output-format txt` when piping a mold's string output to another command or to `-i`.
-- Monty is consumed from crates.io through the `monty` and `monty-types` crates.
-  Its pre-1.0 API may change between releases.
-
-## Testing
-
-Integration tests: `tests/cli/<module>.rs` files, referenced by `tests/cli.rs`. Unit tests: embedded in `format.rs`. Mold fixture tests: `tests-molds/` (see `mold-tests` skill for fixture format details).
+Useful focused commands:
 
 ```bash
-rtk cargo test --test cli http      # Run CLI tests matching "http"
-rtk cargo test --lib format         # Run unit tests in format.rs matching "format"
-rtk cargo test --test molds_test    # All mold fixture tests
+rtk cargo test --test cli <topic>    # CLI integration tests in tests/cli/
+rtk cargo test --lib <name>          # Unit tests alongside Rust code
+rtk cargo test --test molds_test     # Mold fixtures in tests-molds/
 ```
 
-## Code Style
+Run relevant local checks and fix failures caused by the requested change without
+asking at each iteration. Report unrelated failures and unavailable checks
+explicitly; do not expand the patch to fix unrelated work.
 
-- Prefer dedicated function variants over boolean/mode parameters when behaviors diverge significantly (existing pattern: `re_sub` vs `re_sub_fancy`).
+Update affected user documentation under `docs/guides/`, `docs/reference/`, or
+`README.md` when behavior changes. When a roadmap item ships, move its useful
+content into user docs rather than merely marking it complete in the roadmap.
 
-## Workflow
+## Git and release invariants
 
-After implementing or modifying a feature, always:
-1. Run `rtk task lint` (cargo fmt --check + clippy + cargo deny check) and `rtk task test` before considering the task complete. These are the same checks the CI runs, so a local fail predicts a CI fail.
-2. Check if documentation needs updating (README.md, docs/built-ins.md, docs/cli-reference.md, docs/mold-scripting.md) and propose the changes.
-3. When updating ROADMAP.md, move completed items to the appropriate documentation files (built-ins.md, cli-reference.md, etc.) rather than just marking them as done in the roadmap.
+Use the `release-workflow` skill for Git closeout and releases, and
+`prerelease-workflow` for prerelease validation. These workflows do not grant
+permission to publish.
 
-## Release
-
-Use the `/release-workflow` skill — it orchestrates the full flow step by step and enforces the invariants below.
-
-**Mandatory invariants:**
-
-- Feature/fix work goes through a PR on a dedicated branch. Never commit work directly on `main`.
-- `CHANGELOG.md` is updated ONLY in the `chore(release): X.Y.Z` commit — never in feature/fix commits.
-- The `chore(release): X.Y.Z` commit contains ONLY `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`. It is made directly on `main` (no PR).
-- Release commit subject is EXACTLY `chore(release): X.Y.Z` — never `fix:`, `feat:`, etc.
-- Tag `vX.Y.Z` is created on `main` right after the `chore(release)` commit, then both are pushed.
+- Feature/fix commits belong on dedicated branches and go through a PR; never
+  commit them directly on `main`. Use Conventional Commits and squash merges.
+- Update `CHANGELOG.md` only in a release commit, whose subject is exactly
+  `chore(release): X.Y.Z`, made directly on `main`.
+- That commit contains only `Cargo.toml`, `Cargo.lock`, `CHANGELOG.md`, plus removal
+  of the transient `notes/changelog-X.Y.Z.md` consumed by the release.
+- Create the stable tag `vX.Y.Z` on `main` immediately after the release commit.
+  Follow the separate prerelease workflow for `rc.N` tags.

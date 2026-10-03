@@ -79,7 +79,7 @@ hash = "805514d40ffb439e100c507c38e25df0"
 description = "Deduplicate records by a field (keeps first occurrence)"
 path = "dedup_by/dedup_by.py"
 readme = "dedup_by/README.md"
-hash = "b8688b02f3b820651798efb44b492d41"
+hash = "83458fdbe2f88a763e8c5f6ea7219497"
 
 [molds.dedup_by.args]
 field = "Field name to deduplicate on"
@@ -154,7 +154,7 @@ path = "log_parse/log_parse.py"
 readme = "log_parse/README.md"
 input_format = "lines"
 output_format = "json"
-hash = "4cc934abb1a2f4269b994f0f1a14893d"
+hash = "af2225494547fe0e0d2a938a15939db1"
 
 [molds.markdown_toc]
 description = "Extract the table of contents from a Markdown file"
@@ -162,7 +162,7 @@ path = "markdown_toc/markdown_toc.py"
 readme = "markdown_toc/README.md"
 input_format = "lines"
 output_format = "json"
-hash = "53f4fca3d0fe567661c15dc444f60dd7"
+hash = "66709f367da1dc5efa92b2bff82d66a6"
 
 [molds.pick_fields]
 description = "Keep only specified fields from an object or array of objects"
@@ -202,7 +202,7 @@ hash = "4e7bd3733d20edd0aa672c173de79e6f"
 description = "Split a delimiter-separated tags field into a list and deduplicate"
 path = "split_tags/split_tags.py"
 readme = "split_tags/README.md"
-hash = "b71a8ff831e3c1c024fee8a9478288f9"
+hash = "16359100be32bf36f8e340b40be78b3e"
 
 [molds.split_tags.args]
 field = "Field name containing the tags string"

@@ -36,6 +36,8 @@ mod inline;
 mod iter_helpers;
 #[path = "cli/json.rs"]
 mod json;
+#[path = "cli/legacy_builtins.rs"]
+mod legacy_builtins;
 #[path = "cli/lines.rs"]
 mod lines;
 #[path = "cli/mold_contract.rs"]

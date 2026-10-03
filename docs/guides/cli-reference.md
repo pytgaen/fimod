@@ -627,6 +627,24 @@ When the input CSV has a header row, a `headers` global is automatically availab
 
 ---
 
+## Legacy built-in compatibility
+
+`FIMOD_LEGACY_BUILTINS=1` silently enables deprecated `re_*` helpers
+(including `_fancy` aliases), `it_unique`, `it_unique_by`, and `it_flatten`.
+They are disabled by default; unset, `0`, or any value other than `1` keeps
+them disabled. Calling one then fails with replacement guidance.
+
+```bash
+FIMOD_LEGACY_BUILTINS=1 fimod s -i data.json -m old_mold.py
+```
+
+This variable configures Fimod itself. It does not require `--env` or sandbox
+`allow_env`, and is not automatically passed to the mold's `env` parameter.
+New molds should use `import re` and Python collection code; see the
+[migration guide](../reference/built-ins.md#legacy-built-ins).
+
+---
+
 ## ⚡ Inline expressions vs scripts
 
 === "📝 Inline (`-e`)"
@@ -636,7 +654,11 @@ When the input CSV has a header row, a `headers` global is automatically availab
     ```bash
     fimod s -i users.json -e '[u for u in data if u["active"]]'
     fimod s -i data.json -e '{"name": data["first"].upper()}'
-    fimod s -i data.json -e 're_findall(r"\d+", data["text"])'
+    fimod s -i data.json -e '
+    import re
+    def transform(data, **_):
+        return re.findall(r"\d+", data["text"])
+    '
     ```
 
     Multi-statement? Write `def transform` inside `-e`.

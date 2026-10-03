@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use monty_types::{DictPairs, MontyObject};
+use monty_types::MontyObject;
 
 /// Names of external functions exposed to Python molds.
 pub const EXTERNAL_FUNCTIONS: &[&str] = &["env_subst"];
@@ -21,22 +21,25 @@ fn dispatch_env_subst(args: Vec<MontyObject>) -> Result<MontyObject> {
             args.len()
         );
     }
-    let template = match &args[0] {
-        MontyObject::String(s) => s.as_str(),
+    let template = match args[0].as_ref().as_str() {
+        Some(s) => s,
         _ => bail!("env_subst() expects a string as first argument"),
     };
-    let dict = match &args[1] {
-        MontyObject::Dict(d) => d,
-        _ => bail!("env_subst() expects a dict as second argument"),
-    };
+    if !matches!(
+        monty_types::unstable::root_node(&args[1]),
+        monty_types::unstable::MontyNode::Dict(_)
+    ) {
+        bail!("env_subst() expects a dict as second argument");
+    }
+    let dict = args[1].as_ref();
 
     let result = substitute(template, dict);
-    Ok(MontyObject::String(result))
+    Ok(MontyObject::string(result))
 }
 
 /// Replace `${VAR}` patterns in template using values from dict.
 /// Unmatched variables are left as-is.
-fn substitute(template: &str, dict: &DictPairs) -> String {
+fn substitute(template: &str, dict: monty_types::ObjectRef<'_>) -> String {
     let mut result = String::with_capacity(template.len());
     let mut chars = template.chars().peekable();
 
@@ -74,23 +77,14 @@ fn substitute(template: &str, dict: &DictPairs) -> String {
     result
 }
 
-/// Look up a key in DictPairs, return the string value if found.
-fn lookup(dict: &DictPairs, key: &str) -> Option<String> {
-    for (k, v) in dict {
-        if let MontyObject::String(k_str) = k {
-            if k_str == key {
-                return match v {
-                    MontyObject::String(s) => Some(s.clone()),
-                    MontyObject::Int(i) => Some(i.to_string()),
-                    MontyObject::Float(f) => Some(f.to_string()),
-                    MontyObject::Bool(b) => Some(b.to_string()),
-                    MontyObject::None => Some(String::new()),
-                    _ => Some(format!("{v:?}")),
-                };
-            }
-        }
-    }
-    None
+/// Look up a key and return its text representation if found.
+fn lookup(dict: monty_types::ObjectRef<'_>, key: &str) -> Option<String> {
+    let v = crate::monty_args::field(dict, key)?;
+    Some(match monty_types::unstable::node(v) {
+        monty_types::unstable::MontyNode::None => String::new(),
+        monty_types::unstable::MontyNode::Bool(b) => b.to_string(),
+        _ => v.to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -98,16 +92,16 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     fn make_dict(pairs: Vec<(&str, &str)>) -> MontyObject {
-        MontyObject::Dict(DictPairs::from(
+        MontyObject::dict(
             pairs
                 .into_iter()
                 .map(|(k, v)| (s(k), s(v)))
                 .collect::<Vec<_>>(),
-        ))
+        )
     }
 
     #[test]
@@ -165,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_wrong_first_arg_type() {
-        let args = vec![MontyObject::Int(1), make_dict(vec![])];
+        let args = vec![MontyObject::int(1), make_dict(vec![])];
         assert!(dispatch("env_subst", args).is_err());
     }
 

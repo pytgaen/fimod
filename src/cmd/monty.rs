@@ -26,11 +26,14 @@ pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
     }
 
     let mut rl = DefaultEditor::new()?;
-    let mut repl = Some(MontyRepl::new(
-        "repl.py",
-        ResourceTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
-        CompileOptions::default(),
-    ));
+    let mut repl = Some(
+        MontyRepl::new(
+            "repl.py",
+            ResourceTracker::new(fimod::engine::sandbox_resource_limits(&policy)),
+            CompileOptions::default(),
+        )
+        .with_os_policy(fimod::engine::sandbox_os_policy()),
+    );
     let mut pending_snippet = String::new();
     let mut continuation_mode = ReplContinuationMode::Complete;
 
@@ -91,13 +94,13 @@ pub fn run_monty_repl(sandbox_file: Option<String>) -> Result<()> {
 
 fn repl_feed(repl: &mut Option<FimodRepl>, snippet: &str, policy: &SandboxPolicy) {
     if let (Some(limit), Some(active_repl)) = (policy.max_duration, repl.as_mut()) {
-        active_repl.tracker_mut().set_max_duration(limit);
+        active_repl.tracker_mut().set_max_feed_duration(limit);
     }
 
     let active_repl = repl.take().expect("REPL session must be available");
     match execute_repl_snippet(active_repl, snippet, policy) {
         Ok((returned_repl, output)) => {
-            if output != MontyObject::None {
+            if output != MontyObject::none() {
                 println!("{output}");
             }
             *repl = Some(returned_repl);

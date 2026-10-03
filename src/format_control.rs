@@ -49,7 +49,7 @@ fn dispatch_set_input_format(
 
     let mut lock = format_override.lock().unwrap();
     *lock = Some(name);
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 /// cast_input_format(name, value) — like set_input_format() but returns `value`.
@@ -98,7 +98,7 @@ fn dispatch_set_output_format(
 
     let mut lock = format_override.lock().unwrap();
     *lock = Some(name);
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 /// set_output_file(path) — stores the output file path in the mutex, returns None.
@@ -121,7 +121,7 @@ fn dispatch_set_output_file(
     }
     let mut lock = output_file.lock().unwrap();
     *lock = Some(path);
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 #[cfg(test)]
@@ -140,7 +140,7 @@ mod tests {
         let (fmt, out) = mk();
         dispatch(
             "set_input_format",
-            vec![MontyObject::String("json".to_string())],
+            vec![MontyObject::string("json".to_string())],
             &fmt,
             &out,
         )
@@ -153,7 +153,7 @@ mod tests {
         let (fmt, out) = mk();
         let err = dispatch(
             "set_input_format",
-            vec![MontyObject::String("raw".to_string())],
+            vec![MontyObject::string("raw".to_string())],
             &fmt,
             &out,
         )
@@ -167,7 +167,7 @@ mod tests {
         let (fmt, out) = mk();
         let err = dispatch(
             "set_input_format",
-            vec![MontyObject::String("invalid_format".to_string())],
+            vec![MontyObject::string("invalid_format".to_string())],
             &fmt,
             &out,
         )
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn test_set_input_format_wrong_type() {
         let (fmt, out) = mk();
-        assert!(dispatch("set_input_format", vec![MontyObject::Int(42)], &fmt, &out).is_err());
+        assert!(dispatch("set_input_format", vec![MontyObject::int(42)], &fmt, &out).is_err());
     }
 
     #[test]
@@ -195,15 +195,15 @@ mod tests {
         let result = dispatch(
             "cast_input_format",
             vec![
-                MontyObject::String("json".to_string()),
-                MontyObject::String("the_body".to_string()),
+                MontyObject::string("json".to_string()),
+                MontyObject::string("the_body".to_string()),
             ],
             &fmt,
             &out,
         )
         .unwrap();
         assert_eq!(*fmt.lock().unwrap(), Some("json".to_string()));
-        assert_eq!(result, MontyObject::String("the_body".to_string()));
+        assert_eq!(result, MontyObject::string("the_body".to_string()));
     }
 
     #[test]
@@ -211,7 +211,7 @@ mod tests {
         let (fmt, out) = mk();
         let err = dispatch(
             "cast_input_format",
-            vec![MontyObject::String("raw".to_string()), MontyObject::None],
+            vec![MontyObject::string("raw".to_string()), MontyObject::none()],
             &fmt,
             &out,
         )
@@ -224,7 +224,7 @@ mod tests {
         let (fmt, out) = mk();
         assert!(dispatch(
             "cast_input_format",
-            vec![MontyObject::String("json".to_string())],
+            vec![MontyObject::string("json".to_string())],
             &fmt,
             &out,
         )
@@ -238,7 +238,7 @@ mod tests {
         let (fmt, out) = mk();
         dispatch(
             "set_output_format",
-            vec![MontyObject::String("raw".to_string())],
+            vec![MontyObject::string("raw".to_string())],
             &fmt,
             &out,
         )
@@ -261,7 +261,7 @@ mod tests {
             let (fmt, out) = mk();
             dispatch(
                 "set_output_format",
-                vec![MontyObject::String(name.to_string())],
+                vec![MontyObject::string(name.to_string())],
                 &fmt,
                 &out,
             )
@@ -275,7 +275,7 @@ mod tests {
         let (fmt, out) = mk();
         let err = dispatch(
             "set_output_format",
-            vec![MontyObject::String("xml".to_string())],
+            vec![MontyObject::string("xml".to_string())],
             &fmt,
             &out,
         )
@@ -290,12 +290,12 @@ mod tests {
         let (fmt, out) = mk();
         let result = dispatch(
             "set_output_file",
-            vec![MontyObject::String("output.json".to_string())],
+            vec![MontyObject::string("output.json".to_string())],
             &fmt,
             &out,
         )
         .unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
         assert_eq!(*out.lock().unwrap(), Some("output.json".to_string()));
     }
 
@@ -304,7 +304,7 @@ mod tests {
         let (fmt, out) = mk();
         let err = dispatch(
             "set_output_file",
-            vec![MontyObject::String(String::new())],
+            vec![MontyObject::string(String::new())],
             &fmt,
             &out,
         )
@@ -315,6 +315,6 @@ mod tests {
     #[test]
     fn test_set_output_file_wrong_type() {
         let (fmt, out) = mk();
-        assert!(dispatch("set_output_file", vec![MontyObject::Int(1)], &fmt, &out).is_err());
+        assert!(dispatch("set_output_file", vec![MontyObject::int(1)], &fmt, &out).is_err());
     }
 }

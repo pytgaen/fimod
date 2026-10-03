@@ -18,7 +18,7 @@ jq '[.[] | {id, name}] | sort_by(.name) | unique_by(.id)' data.json
 
 # fimod: chain expressions, each feeds the next
 fimod s -i data.json -e '[{"id": u["id"], "name": u["name"]} for u in data]' \
-  -e 'it_unique_by(it_sort_by(data, "name"), "id")'
+  -e 'it_sort_by(data, "name")' -m @dedup_by --arg field=id
 ```
 
 ```bash
@@ -58,9 +58,9 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **Dependencies** | jq binary | yq binary | Python + pip | 🟢 **single binary** |
 | **Binary size** | ~2 MB | ~10 MB | ~30-100 MB (standalone) | 🟢 **~3.3 MB** standard (UPX-compressed; `slim` is smaller) |
 | **Speed-tuned build** | n/a | n/a | custom packaging | 🟢 `fimod-fast` (~15-25% faster on CPU-heavy smoke tests; larger, uncompressed) |
-| **Regex** | built-in | RE2 | `import re` | 🟢 `re_*` built-in (fancy-regex) |
+| **Regex** | built-in | RE2 | `import re` | 🟢 `import re` (Monty) |
 | **Deep access** | `.a.b.c` | `.a.b.c` | manual | 🟢 `dp_get(data, "a.b.c")` |
-| **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `it_unique_by` |
+| **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `@dedup_by` |
 | **Hashing** | ❌ | ❌ | `import hashlib` | 🟢 `hs_sha256`, `hs_md5`, `hs_sha1` |
 | **In-place edit** | sponge hack | `-i` | manual | 🟢 `--in-place` |
 | **Batch files** | loop | loop | loop | 🟢 `fimod s -i *.json -m t.py -o out/` |

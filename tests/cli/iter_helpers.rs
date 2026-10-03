@@ -35,6 +35,7 @@ fn test_it_flatten() {
     let input = setup_input(&dir, "data.json", r#"[1, [2, [3, 4]], 5]"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args([
             "-i",
@@ -114,6 +115,7 @@ fn test_it_unique() {
     let input = setup_input(&dir, "data.json", r#"[1, 2, 3, 2, 1, 4]"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args([
             "-i",
@@ -138,6 +140,7 @@ fn test_it_unique_by() {
     );
 
     let output = assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"it_unique_by(data, "id")"#])
         .assert()

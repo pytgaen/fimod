@@ -1,0 +1,3 @@
+[args]
+regex = '(a)?(b)'
+fields = "first,second"
