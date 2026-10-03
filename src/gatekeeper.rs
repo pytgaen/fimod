@@ -24,17 +24,7 @@ pub fn dispatch(
 
 /// Python-style truthiness for MontyObject.
 fn is_truthy(obj: &MontyObject) -> bool {
-    match obj {
-        MontyObject::None => false,
-        MontyObject::Bool(b) => *b,
-        MontyObject::Int(i) => *i != 0,
-        MontyObject::Float(f) => *f != 0.0,
-        MontyObject::String(s) => !s.is_empty(),
-        MontyObject::List(l) => !l.is_empty(),
-        // DictPairs doesn't expose len/is_empty — treat dicts as truthy.
-        // In practice, gk_assert receives bools/None from comparisons and .get().
-        _ => true,
-    }
+    obj.is_truthy()
 }
 
 /// gk_fail(msg) — emit [ERROR] msg on stderr, set exit code to 1, return None.
@@ -49,7 +39,7 @@ fn dispatch_fail(
     eprintln!("[ERROR] {msg}");
     let mut lock = exit_code.lock().unwrap();
     *lock = Some(1);
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 /// gk_assert(cond, msg) — if cond is falsy, behave like gk_fail(msg).
@@ -69,7 +59,7 @@ fn dispatch_assert(
         let mut lock = exit_code.lock().unwrap();
         *lock = Some(1);
     }
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 /// gk_warn(cond, msg) — if cond is falsy, emit [WARN] msg on stderr. No exit.
@@ -84,7 +74,7 @@ fn dispatch_warn(args: Vec<MontyObject>) -> Result<MontyObject> {
     if !is_truthy(&args[0]) {
         eprintln!("[WARN] {msg}");
     }
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 #[cfg(test)]
@@ -92,7 +82,7 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     fn exit() -> Arc<Mutex<Option<i32>>> {
@@ -103,28 +93,28 @@ mod tests {
     fn test_fail_sets_exit_code() {
         let ec = exit();
         let result = dispatch("gk_fail", vec![s("boom")], &ec).unwrap();
-        assert_eq!(result, MontyObject::None);
+        assert_eq!(result, MontyObject::none());
         assert_eq!(*ec.lock().unwrap(), Some(1));
     }
 
     #[test]
     fn test_assert_truthy_no_exit() {
         let ec = exit();
-        dispatch("gk_assert", vec![MontyObject::Bool(true), s("msg")], &ec).unwrap();
+        dispatch("gk_assert", vec![MontyObject::bool(true), s("msg")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), None);
     }
 
     #[test]
     fn test_assert_falsy_sets_exit() {
         let ec = exit();
-        dispatch("gk_assert", vec![MontyObject::Bool(false), s("bad")], &ec).unwrap();
+        dispatch("gk_assert", vec![MontyObject::bool(false), s("bad")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), Some(1));
     }
 
     #[test]
     fn test_assert_none_is_falsy() {
         let ec = exit();
-        dispatch("gk_assert", vec![MontyObject::None, s("missing")], &ec).unwrap();
+        dispatch("gk_assert", vec![MontyObject::none(), s("missing")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), Some(1));
     }
 
@@ -145,21 +135,21 @@ mod tests {
     #[test]
     fn test_assert_zero_is_falsy() {
         let ec = exit();
-        dispatch("gk_assert", vec![MontyObject::Int(0), s("zero")], &ec).unwrap();
+        dispatch("gk_assert", vec![MontyObject::int(0), s("zero")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), Some(1));
     }
 
     #[test]
     fn test_warn_falsy_no_exit() {
         let ec = exit();
-        dispatch("gk_warn", vec![MontyObject::Bool(false), s("warn")], &ec).unwrap();
+        dispatch("gk_warn", vec![MontyObject::bool(false), s("warn")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), None);
     }
 
     #[test]
     fn test_warn_truthy_silent() {
         let ec = exit();
-        dispatch("gk_warn", vec![MontyObject::Bool(true), s("warn")], &ec).unwrap();
+        dispatch("gk_warn", vec![MontyObject::bool(true), s("warn")], &ec).unwrap();
         assert_eq!(*ec.lock().unwrap(), None);
     }
 
@@ -178,6 +168,6 @@ mod tests {
     #[test]
     fn test_fail_wrong_type() {
         let ec = exit();
-        assert!(dispatch("gk_fail", vec![MontyObject::Int(1)], &ec).is_err());
+        assert!(dispatch("gk_fail", vec![MontyObject::int(1)], &ec).is_err());
     }
 }

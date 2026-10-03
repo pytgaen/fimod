@@ -116,7 +116,25 @@ Convention: 2-letter prefix to avoid collisions with Python builtins and make th
 
 ### `fancy-regex` rather than Rust `regex`
 
-Fimod's `re_*` built-ins predate Monty's `import re` support and remain useful because they expose structured results, explicit replacement modes, and ReDoS protection via `FIMOD_REGEX_BACKTRACK_LIMIT` (default: 100k). Rust's standard `regex` crate is not PCRE2-compatible (no backreferences, lookahead, lookbehind), so the built-ins use `fancy-regex`. Python replacement syntax (`\1`, `\g<name>`) is auto-converted for `re_sub`; `re_sub_fancy` exposes `$1` / `${name}` directly.
+Fimod's `re_*` built-ins predate Monty's `import re` support and are now available only through legacy opt-in, retaining structured results, explicit replacement modes, and ReDoS protection via `FIMOD_REGEX_BACKTRACK_LIMIT` (default: 100k). Rust's standard `regex` crate is not PCRE2-compatible (no backreferences, lookahead, lookbehind), so the built-ins use `fancy-regex`. Python replacement syntax (`\1`, `\g<name>`) is auto-converted for `re_sub`; `re_sub_fancy` exposes `$1` / `${name}` directly.
+
+### Legacy built-ins after Monty 1.0.0
+
+All `re_*` names (including `_fancy` aliases), `it_unique`, `it_unique_by`,
+and `it_flatten` are deprecated and disabled by default. `engine.rs` reads
+`FIMOD_LEGACY_BUILTINS` into the mold context once per execution; only `1`
+enables their existing dispatch. Calls without opt-in fail with migration
+and activation guidance. Name lookup still resolves these helpers so errors
+occur on invocation, including aliases, rather than on unused references.
+Activation is silent and requires neither `--env` nor sandbox `allow_env`.
+Other helper families and the other `it_*` functions remain active.
+
+Shipped molds use native `re` and Python collection operations. `log_parse`
+uses `finditer` to preserve absent captures as None; `split_tags` uses
+`finditer` to preserve captured separators. `dedup_by` keys JSON-shaped field
+values with `json.dumps` to preserve first occurrences and type distinctions.
+The legacy implementations/dependencies remain during the transition.
+User-facing API differences and recipes live in `docs/reference/built-ins.md`.
 
 ### Message levels
 
@@ -256,16 +274,16 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` pins Rust to `1.95` because Monty v0.0.19 requires that compiler baseline. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` follows the latest stable Rust toolchain; the separate MSRV check uses Rust `1.96`, required by Monty v1.0.0. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
-- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `0.0.23` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
+- **Monty API pinned to crates.io versions**: fimod depends on `monty` and `monty-types` `=1.0.0` in `Cargo.toml`; `MONTY_VERSION` is injected at build time via `env!("MONTY_VERSION")`. The `MontyRun::new` API and error types can change between releases. The `monty-upgrade` skill maps consumed APIs and flags breaking changes for each bump.
 - **`num-bigint`** in `convert.rs`: `i64::try_from(BigInt)` conversion is used for large integers.
 
 ### Monty 0.0.23 host objects and suspension quota
 
-Pipeline/Step use `MontyObject::ClassInstance` with random UUIDs and a registry
+Pipeline/Step use `MontyObject::class_instance` with random UUIDs and a registry
 owned by each mold execution. `getrandom` supplies entropy (already a transitive
 dependency). Method suspensions carry a receiver UUID; fimod reconstructs its
 internal receiver-first dispatch arguments from host-owned metadata. Sandbox-side
@@ -279,3 +297,20 @@ the REPL retains its session. This is independent of Monty's default stored quot
 of 1000, which the interpreter does not enforce. Setup get/set/show preserve the
 configured value. Ruff 0.0.9 uses compact_str 0.10, so the old get-size2 0.10.1 pin
 and associated Dependabot/outdated exclusions are removed.
+
+### Monty 1.0.0 boundary
+
+MontyObject is now an owned graph. Fimod uses its native constructors and
+ObjectRef views; there is no mirrored legacy enum. `convert.rs` inspects
+`unstable::MontyNode` to retain full integer/date fidelity and serialize borrowed
+children without allocating a JSON tree. `engine.rs` uses the same representation
+access for host-instance UUIDs, and ordering helpers for exact scalar categories.
+Both Monty dependencies are pinned exactly because these accessors are explicitly
+outside upstream's API stability guarantee.
+
+All mold and REPL entry points install OsPolicy with CallHost for clocks, sleep
+and initial random entropy. Clock access remains governed by allow_clock; sleep
+and entropy are denied. Explicit random seeds need no host entropy. Duration
+configuration maps to the feed budget, retaining the chain's remaining-time
+calculation and the non-catchable host suspension quota. Rust MSRV is 1.96;
+local tooling remains on stable/latest, with a separate MSRV check.

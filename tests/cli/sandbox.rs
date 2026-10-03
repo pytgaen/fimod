@@ -479,7 +479,7 @@ fn test_sandbox_suspensions_disabled_by_default_and_zero() {
         r#"
 def transform(data, **_):
     for i in range(1100):
-        re_search("x", "x")
+        dp_get({"x": "x"}, "x")
     return "ok"
 "#,
     );
@@ -513,5 +513,112 @@ fn test_sandbox_suspensions_reject_invalid_config() {
             .assert()
             .failure()
             .stderr(predicate::str::contains("max_suspensions"));
+    }
+}
+
+#[test]
+fn test_monty_beta_sensitive_calls_remain_host_controlled() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (index, expression) in [
+        "__import__('time')", // Dynamic imports remain unavailable.
+        "time.time()",
+        "time.time_ns()",
+        "time.sleep(0)",
+        "random.random()",
+        "os.urandom(1)",
+        "asyncio.run(asyncio.sleep(0))",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mold = setup_mold(&dir, &format!("sensitive_{index}.py"), &format!(
+            "import time\nimport random\nimport os\nimport asyncio\ndef transform(data, **_):\n    return {expression}\n"
+        ));
+        assert_cmd::cargo_bin_cmd!("fimod")
+            .args(["s", "--no-input", "-m", &mold, "--sandbox-file="])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(if index == 0 {
+                "__import__"
+            } else {
+                "PermissionError"
+            }));
+    }
+}
+
+#[test]
+fn test_monty_beta_time_clock_policy_and_timezone() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let policy = setup_sandbox_file(&dir, "[sandbox]\nallow_clock = true\n");
+    let mold = setup_mold(
+        &dir,
+        "time_clock.py",
+        r#"
+import time
+from datetime import datetime, timezone, timedelta
+def transform(data, **_):
+    now = datetime.now(timezone(timedelta(hours=2)))
+    assert now.utcoffset() == timedelta(hours=2)
+    assert abs(now.timestamp() - time.time()) < 5
+    return time.time_ns() > 0
+"#,
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-m", &mold, "--sandbox-file", &policy])
+        .assert()
+        .success()
+        .stdout("true\n");
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["monty", "repl", "--sandbox-file="])
+        .write_stdin("import time\ntime.time()\n42\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("allow_clock"))
+        .stdout(predicate::str::contains("42"));
+}
+
+#[test]
+fn test_monty_beta_python_features_and_stderr() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "beta_features.py",
+        r#"
+import copy
+import random
+import sys
+def transform(data, **_):
+    random.seed(42)
+    assert random.random() == 0.6394267984578837
+    result = copy.deepcopy(data)
+    result['items'].append(2)
+    assert data['items'] == [1]
+    exec('answer = 42')
+    assert eval('40 + 2') == 42
+    assert 'result' in locals()
+    assert format(42, '04d') == '0042'
+    assert '%s:%d' % ('answer', 42) == 'answer:42'
+    print('beta-stderr', file=sys.stderr)
+    return result | {'answer': 42}
+"#,
+    );
+    for debug in [false, true] {
+        let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+        cmd.args([
+            "s",
+            "-m",
+            &mold,
+            "--sandbox-file=",
+            "--output-format",
+            "json-compact",
+        ]);
+        if debug {
+            cmd.arg("--debug");
+        }
+        cmd.write_stdin(r#"{"items":[1]}"#)
+            .assert()
+            .success()
+            .stdout("{\"items\":[1,2],\"answer\":42}\n")
+            .stderr(predicate::str::contains("beta-stderr"));
     }
 }

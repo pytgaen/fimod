@@ -100,3 +100,68 @@ fn test_monty_repl_continues_decorators_and_triple_quoted_strings() {
         .assert().success().stderr("")
         .stdout(predicate::str::contains("23")).stdout(predicate::str::contains("11"));
 }
+
+#[test]
+fn test_monty_graph_shared_values_and_cycles_at_json_boundary() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = dir.child("graph.py");
+    mold.write_str(
+        "def transform(data, **_):\n    row = {'n': 18446744073709551615}\n    return [row, row]\n",
+    )
+    .unwrap();
+    for format in ["json", "json-compact"] {
+        let output = assert_cmd::cargo_bin_cmd!("fimod")
+            .args([
+                "s",
+                "--no-input",
+                "-m",
+                mold.path().to_str().unwrap(),
+                "--output-format",
+                format,
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(value, serde_json::json!([{"n": u64::MAX}, {"n": u64::MAX}]));
+    }
+    mold.write_str(
+        "def transform(data, **_):\n    items = []\n    items.append(items)\n    return items\n",
+    )
+    .unwrap();
+    for format in ["json", "json-compact"] {
+        assert_cmd::cargo_bin_cmd!("fimod")
+            .args([
+                "s",
+                "--no-input",
+                "-m",
+                mold.path().to_str().unwrap(),
+                "--output-format",
+                format,
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "Cannot convert MontyObject variant to JSON",
+            ));
+    }
+}
+
+#[test]
+fn test_monty_class_names_do_not_impersonate_native_containers() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (name, helper) in [
+        ("list", "it_sort_by(value, 'x')"),
+        ("dict", "it_keys(value)"),
+    ] {
+        let mold = dir.child("named_class.py");
+        mold.write_str(&format!("class {name}:\n    pass\ndef transform(data, **_):\n    value = {name}()\n    return {helper}\n")).unwrap();
+        assert_cmd::cargo_bin_cmd!("fimod")
+            .args(["s", "--no-input", "-m", mold.path().to_str().unwrap()])
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains("panicked").not());
+    }
+}

@@ -111,32 +111,40 @@ def transform(data, args, env, headers, **_):
 ### 📧 Extract Email Addresses
 
 ```python
+import re
+
 def transform(data, args, env, headers, **_):
-    return {"emails": re_findall(r"\w+@\w+\.\w+", data["text"])}
+    return {"emails": re.findall(r"\w+@\w+\.\w+", data["text"])}
 ```
 
 ### 🧽 Normalize Whitespace
 
 ```python
+import re
+
 def transform(data, args, env, headers, **_):
-    return {"cleaned": re_sub(r"\s+", " ", data["text"].strip())}
+    return {"cleaned": re.sub(r"\s+", " ", data["text"].strip())}
 ```
 
 ### 🔗 Extract URLs
 
 ```python
+import re
+
 def transform(data, args, env, headers, **_):
-    urls = re_findall(r"https?://[^\s]+", data["text"])
+    urls = re.findall(r"https?://[^\s]+", data["text"])
     return {"urls": urls, "count": len(urls)}
 ```
 
 ### 🏷️ Parse Structured Strings
 
 ```python
+import re
+
 # Parse "KEY=VALUE" pairs from config text
 def transform(data, args, env, headers, **_):
-    pairs = re_findall(r"(\w+)=(\S+)", data["text"])
-    # With 2 capture groups, re_findall returns [["key","val"], ...]
+    pairs = re.findall(r"(\w+)=(\S+)", data["text"])
+    # With 2 capture groups, re.findall returns [("key", "val"), ...]
     result = {}
     for pair in pairs:
         result[pair[0]] = pair[1]
@@ -146,23 +154,27 @@ def transform(data, args, env, headers, **_):
 Or with named groups:
 
 ```python
+import re
+
 def transform(data, args, env, headers, **_):
     result = {}
     for line in data["text"].strip().split("\n"):
-        m = re_search(r"^(?P<key>\w+)=(?P<val>.+)$", line)
+        m = re.search(r"^(?P<key>\w+)=(?P<val>.+)$", line)
         if m:
-            result[m["named"]["key"]] = m["named"]["val"]
+            result[m.group("key")] = m.group("val")
     return result
 ```
 
 ### 🔐 Validate Patterns
 
 ```python
+import re
+
 # Check if values match expected patterns
 def transform(data, args, env, headers, **_):
     for row in data:
         phone = row.get("phone", "")
-        row["valid_phone"] = re_match(r"\+?\d{10,15}", phone) is not None
+        row["valid_phone"] = re.match(r"\+?\d{10,15}", phone) is not None
     return data
 ```
 
@@ -191,8 +203,11 @@ def transform(data, args, env, headers, **_):
 
 ```bash
 # Lines with 4xx/5xx status codes
-fimod s -i access.log --input-format lines \
-  -e '[l for l in data if re_search(r"\s[45]\d{2}\s", l)]'
+fimod s -i access.log --input-format lines -e '
+import re
+def transform(data, **_):
+    return [line for line in data if re.search(r"\s[45]\d{2}\s", line)]
+'
 ```
 
 ## 🌐 API & HTTP
@@ -326,9 +341,16 @@ def transform(data, args, env, headers, **_):
 ### 🧹 Deduplicate by Field
 
 ```python
-# Keep first occurrence, discard duplicates by email
+# Keep first occurrence, discard duplicates by string email
 def transform(data, args, env, headers, **_):
-    return it_unique_by(data, "email")
+    seen = set()
+    result = []
+    for row in data:
+        email = row.get("email")
+        if email not in seen:
+            seen.add(email)
+            result.append(row)
+    return result
 ```
 
 ```bash
@@ -338,9 +360,19 @@ fimod s -i contacts.csv -m dedup.py -o contacts_clean.csv --output-format csv
 ### 🌀 Flatten Nested Arrays
 
 ```python
+def flatten(values):
+    result = []
+    for value in values:
+        if isinstance(value, (list, tuple)):
+            result.extend(flatten(value))
+        else:
+            result.append(value)
+    return result
+
+
 def transform(data, args, env, headers, **_):
     # data = [[1, 2], [3, [4, 5]]]  →  [1, 2, 3, 4, 5]
-    return it_flatten(data)
+    return flatten(data)
 ```
 
 ## #️⃣ Hashing for Anonymisation

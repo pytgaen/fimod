@@ -1,10 +1,144 @@
 # 🧰 Built-ins Reference
 
-fimod injects the following functions and globals into every mold — **no `import` needed**.
+Fimod exposes the following helpers to molds — **no `import` needed**.
+Deprecated helpers require explicit legacy activation as described below.
+
+---
+
+## Legacy built-ins
+
+`re_*` (including every `_fancy` variant), `it_unique`, `it_unique_by`, and
+`it_flatten` are deprecated and disabled by default. An error is raised only
+when a mold calls one of these helpers; the error names a replacement and the
+compatibility variable.
+
+For an existing mold that requires the old behavior:
+
+```bash
+FIMOD_LEGACY_BUILTINS=1 fimod s -i data.json -m old_mold.py
+```
+
+Only the exact value `1` enables them. Unset, `0`, or any other value leaves
+them disabled. Activation is silent: Fimod emits no deprecation warning.
+This is a process setting read by Fimod, so `--env` is not required and the
+variable is not automatically exposed in the mold's `env` parameter.
+The legacy implementations and their dependencies remain available during
+this transition; no removal version is scheduled yet.
+
+### Migrating regex calls
+
+Use Monty's `import re` in new molds:
+
+```python
+import re
+
+def transform(data, **_):
+    match = re.search(r"(?P<user>\w+)@(?P<domain>\w+)", data["email"])
+    if match:
+        return {"user": match.group("user"), "domain": match.group("domain")}
+    return None
+```
+
+| Legacy API | Native replacement / migration detail |
+|------------|---------------------------------------|
+| `re_search`, `re_match` | `re.search`, `re.match`; use Match methods instead of dict fields |
+| `match["match"]`, `match["groups"]`, `match["named"]` | `match.group()`, `match.groups()`, `match.groupdict()` |
+| `match["start"]`, `match["end"]` | `match.start()`, `match.end()` count characters, not UTF-8 bytes |
+| `re_findall` | `re.findall`; multiple groups produce tuples instead of lists; absent groups become `""` instead of `None` |
+| `re_sub` | `re.sub`; use explicit references such as `r"\g<1>_suffix"` |
+| `re_sub_fancy(..., "$1", ...)` | `re.sub(..., r"\g<1>", ...)`; dollar references are literal in the native API |
+| `re_split` | `re.split` for patterns without captures; Monty 1.0.0 currently omits captured separators |
+| Other `_fancy` aliases | Use the corresponding native `re` function |
+
+`count=0` replaces all matches in both substitution APIs; a negative count
+replaces all in the legacy helper but nothing in native `re.sub`. Backslash
+handling also differs, so test existing replacement strings before migration.
+Monty 1.0.0 has limitations: callable replacements are not implemented,
+`re.ASCII` does not currently restrict `\w` to ASCII, and a numbered replacement
+followed by a suffix (`r"\1_suffix"`) needs the explicit form `r"\g<1>_suffix"`.
+
+To retain captured separators, use `re.finditer` as in the shipped `@split_tags`
+mold:
+
+```python
+import re
+
+def split_with_captures(pattern, text):
+    parts = []
+    last_end = 0
+    for match in re.finditer(pattern, text):
+        parts.append(text[last_end:match.start()])
+        parts.extend(match.groups())
+        last_end = match.end()
+    parts.append(text[last_end:])
+    return parts
+```
+
+`FIMOD_REGEX_BACKTRACK_LIMIT` controls only the legacy regex helpers
+(default: 100,000). Native Monty regex uses its own engine limit
+(default: 1,000,000), unaffected by this variable.
+
+### Migrating deduplication and flattening
+
+For string values, `list(dict.fromkeys(values))` keeps the first occurrence
+and input order. Lists and dicts cannot be dict keys. The legacy deduplication
+helpers distinguish `1`, `True`, and `1.0`, and compare dicts in their key order,
+because their keys are JSON text. To retain that behavior for JSON-shaped data:
+
+```python
+import json
+
+def unique(values):
+    seen = set()
+    result = []
+    for value in values:
+        key = json.dumps(value)
+        if key not in seen:
+            seen.add(key)
+            result.append(value)
+    return result
+
+
+def unique_by(rows, field):
+    seen = set()
+    result = []
+    for row in rows:
+        value = row.get(field) if isinstance(row, dict) else None
+        key = json.dumps(value)
+        if key not in seen:
+            seen.add(key)
+            result.append(row)
+    return result
+```
+
+`unique_by` keeps the first record; missing fields and `None` share a key.
+The shipped `@dedup_by` mold implements this JSON-shaped behavior.
+
+For recursive flattening, retain strings and dicts as whole elements:
+
+```python
+def flatten(values):
+    result = []
+    for value in values:
+        if isinstance(value, (list, tuple)):
+            result.extend(flatten(value))
+        else:
+            result.append(value)
+    return result
+```
+
+`itertools.chain.from_iterable` flattens only one level and iterates strings
+and dict keys. The legacy helpers also normalize Python objects through
+Fimod's JSON conversion (dates become strings, tuples become lists, and
+integers outside the JSON integer range become strings). The Python recipes
+above do not reproduce every such conversion: adapt them or enable legacy
+compatibility when an existing mold depends on it.
 
 ---
 
 ## 🔍 Regex functions (`re_*`)
+
+**Legacy reference — requires `FIMOD_LEGACY_BUILTINS=1`.**
 
 Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — syntax based on Rust's `regex` crate and Oniguruma, with lookahead, lookbehind, backreferences, and atomic groups.
 
@@ -14,7 +148,7 @@ Powered by [fancy-regex](https://github.com/fancy-regex/fancy-regex) — syntax 
     Only the **replacement** syntax differs by mode. The pattern syntax always uses fancy-regex:
 
     - **Named groups**: `(?P<name>...)` (same as Python) or `(?<name>...)`
-    - **Advanced features**: atomic groups `(?>...)`, possessive quantifiers `a++` — not in Python `re`
+    - **Advanced features**: atomic groups `(?>...)`, possessive quantifiers `a++`
     - **Flags**: inline `(?i)`, `(?m)`, `(?s)` — no separate `re.IGNORECASE` etc.
 
 ### Match result format
@@ -112,17 +246,19 @@ Navigate and mutate nested structures using dot-separated paths.
 
 ## 🔁 Iteration helpers (`it_*`)
 
-Convenience functions for common list/dict operations not natively supported by Monty.
+Convenience functions for list/dict operations. `it_unique`, `it_unique_by`,
+and `it_flatten` require `FIMOD_LEGACY_BUILTINS=1`; other helpers in this table
+remain available by default. Native Python can also handle many of these operations.
 
 | Function | Signature | Returns |
 |----------|-----------|---------|
 | `it_keys` | `it_keys(dict)` | List of keys |
 | `it_values` | `it_values(dict)` | List of values |
-| `it_flatten` | `it_flatten(array)` | Recursively flattened list |
+| `it_flatten` (legacy) | `it_flatten(array)` | Recursively flattened list |
 | `it_group_by` | `it_group_by(array, key)` | Dict of lists, grouped by field name (insertion order) |
 | `it_sort_by` | `it_sort_by(array, key [, reverse])` | Sorted list by field name (stable sort); pass `True` for descending |
-| `it_unique` | `it_unique(array)` | Deduplicated list (first occurrence kept) |
-| `it_unique_by` | `it_unique_by(array, key)` | Deduplicated by field name (first occurrence kept) |
+| `it_unique` (legacy) | `it_unique(array)` | Deduplicated list (first occurrence kept) |
+| `it_unique_by` (legacy) | `it_unique_by(array, key)` | Deduplicated by field name (first occurrence kept) |
 | `it_count_by` | `it_count_by(array, key)` | Dict of counts, grouped by field name (insertion order) |
 | `it_min_by` | `it_min_by(array, key)` | Element with smallest field value, or `None` if empty |
 | `it_max_by` | `it_max_by(array, key)` | Element with largest field value, or `None` if empty |

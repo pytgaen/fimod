@@ -10,6 +10,9 @@ Usage:
 # fimod: input-format=lines
 # fimod: output-format=json
 
+import re
+
+
 def transform(data, args, **_):
     try:
         regex_arg = args.get("regex", "")
@@ -28,8 +31,16 @@ def transform(data, args, **_):
         if not line.strip():
             continue
 
-        matches = re_findall(regex, line)
-        # re_findall with N groups returns [[g1,g2,...], ...] per match.
+        # Preserve absent captures as None and multi-group captures as lists.
+        matches = []
+        for match in re.finditer(regex, line):
+            groups = list(match.groups())
+            if len(groups) > 1:
+                matches.append(groups)
+            elif groups:
+                matches.append(groups[0])
+            else:
+                matches.append(match.group())
         # For log parsing we typically have one match per line, so flatten.
         if matches and isinstance(matches[0], list):
             matches = matches[0]

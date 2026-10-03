@@ -1,32 +1,39 @@
-# AGENTS.base.md
+# Shared agent guidelines
 
-Behavioral guidelines to reduce common LLM coding mistakes. Bias toward caution over speed; use judgment on trivial tasks.
+## Execution and decisions
 
-## 1. Think Before Coding
-- State assumptions explicitly; if uncertain, ask.
-- Present multiple interpretations — don't pick silently.
-- If a simpler approach exists, say so.
+- Complete requested implementation and verification. A clear local change request
+  authorizes its edits and checks; reuse approvals already given. Reviews and
+  proposals stay read-only unless edits are requested.
+- Read what the task needs. Give a brief scope and validation plan for substantial
+  work; resolve routine choices from repository evidence.
+- State material assumptions. Ask only when missing information changes scope,
+  public behavior, compatibility, security, or existing user work.
+- If blocked, finish independent work and report the exact blocker. Distinguish
+  explicit requirements from your interpretation of guidelines.
 
-## 2. Simplicity First
-- Minimum code that solves the problem. Nothing speculative.
-- No features, abstractions, or error handling beyond what was asked.
-- If 200 lines could be 50, rewrite.
+## Scope and verification
 
-## 3. Surgical Changes
-- Touch only what the request requires; match existing style.
-- Don't refactor adjacent code or delete pre-existing dead code.
-- Remove only orphans YOUR changes created.
+- Make the smallest correct change using existing patterns and helpers. Add
+  dependencies or abstractions only when the requested outcome requires them.
+- Match local style, avoid unrelated cleanup, and retain safety guarantees.
+  Remove dead code introduced by your change.
+- Verify the requested behavior and complete required project checks. Add useful
+  regression coverage for bugs; avoid tests that merely mirror implementation.
+  Broaden or repeat passing checks only for new changes or unresolved concerns.
+- Report changes, checks, and limitations concisely in the user's language.
+  Separate observed evidence from assumptions and local checks from live proof.
 
-## 4. Goal-Driven Execution
-- Turn tasks into verifiable goals ("fix bug" → "write failing test, then pass it").
-- For multi-step work, state a brief plan with verification per step.
+## Git and user work
 
-## 5. Secure & Professional Git Workflow
-- Feature/fix work on dedicated branches via PR; never commit directly on `main`.
-- Atomic commits, semantic-release format (`feat(scope):`, `fix(scope):`); one logical change per commit.
-- Before any destructive op (`reset --hard`, `rebase`, squash, force-push), create a `backup/<name>` tag and confirm with user.
-- Never `--no-verify`, never bypass signing, never force-push shared branches.
-- Confirm before any remote-visible action (push, PR create/merge, tag push, gh comment).
-
----
-**Working if:** fewer unnecessary diffs, fewer rewrites from overcomplication, clarifying questions before implementation.
+- Check `git status --short --branch` before edits. Preserve staged, unstaged, and
+  untracked work. If the dirty state has not been authorized for this task, ask
+  one scope question before editing; reuse that answer throughout the task.
+- Commit only on an explicit request. Establish the full scope before staging;
+  do not guess a subset. `commit tout` authorizes `git add -A`.
+- Follow repository branch, commit, and release conventions. Never bypass hooks
+  or signing, or force-push shared branches.
+- Destructive or history-rewriting operations need explicit authorization and a
+  recovery plan. A backup tag protects commits, not dirty files.
+- Pushes, PR creation/merge, published tags, releases, and messages to others need
+  explicit authorization for the action; local edit approval alone does not grant it.

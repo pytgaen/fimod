@@ -7,15 +7,18 @@ Usage:
 # fimod: input-format=lines
 # fimod: output-format=json
 
+import re
+
+
 def transform(data, **_):
     toc = []
     for line in data:
-        match = re_match(r"^(#+)\s+(.+)", line)
+        match = re.match(r"^(#+)\s+(.+)", line)
         if match:
-            groups = match["groups"]
+            groups = match.groups()
             level = len(groups[0])
             title = groups[1].strip()
-            slug = re_sub(r"[^a-z0-9\-]", "", title.lower().replace(" ", "-"))
+            slug = re.sub(r"[^a-z0-9\-]", "", title.lower().replace(" ", "-"))
             toc.append({
                 "level": level,
                 "title": title,

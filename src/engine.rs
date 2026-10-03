@@ -1,3 +1,7 @@
+use monty_types::{
+    unstable::{self, MontyNode},
+    DateTimeSource, ObjectRef, OsPolicy, RandomStart, SleepMode,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -7,9 +11,9 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use monty::{MontyRun, RunProgress};
 use monty_types::{
-    CompileOptions, DictPairs, ExcType, ExtFunctionResult, MontyClassInstance, MontyClassType,
-    MontyDate, MontyDateTime, MontyException, MontyObject, MontyUuid, NameLookupResult,
-    OsFunctionCall, PrintWriter, PrintWriterCallback, ResourceLimits, ResourceTracker,
+    CompileOptions, ExcType, ExtFunctionResult, MontyDate, MontyDateTime, MontyException,
+    MontyObject, MontyUuid, NameLookupResult, OsFunctionCall, PrintWriter, PrintWriterCallback,
+    ResourceLimits, ResourceTracker,
 };
 use serde_json::{Number, Value};
 
@@ -155,6 +159,7 @@ struct MoldContext<'a> {
     objects: HostObjects,
     debug: bool,
     msg_level: u8,
+    legacy_builtins: bool,
     mold_base_dir: Option<&'a str>,
     exit_code: Arc<Mutex<Option<i32>>>,
     format_override: Arc<Mutex<Option<String>>>,
@@ -194,6 +199,19 @@ fn is_external_function(name: &str) -> bool {
         || template::EXTERNAL_FUNCTIONS.contains(&name)
 }
 
+/// Migration hints for helpers retained only through explicit legacy opt-in.
+fn legacy_builtin_replacement(name: &str) -> Option<&'static str> {
+    if regex::EXTERNAL_FUNCTIONS.contains(&name) {
+        return Some("use `import re` and the `re` module");
+    }
+    match name {
+        "it_unique" => Some("use a Python deduplication loop with JSON keys for lists/dicts"),
+        "it_unique_by" => Some("use a Python deduplication loop keyed by the field value"),
+        "it_flatten" => Some("use a recursive Python flatten function"),
+        _ => None,
+    }
+}
+
 /// Route an external function call to the correct module.
 fn dispatch_external(
     name: &str,
@@ -201,6 +219,13 @@ fn dispatch_external(
     _kwargs: Vec<(MontyObject, MontyObject)>,
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
+    if !ctx.legacy_builtins {
+        if let Some(replacement) = legacy_builtin_replacement(name) {
+            anyhow::bail!(
+                "{name}() is deprecated and disabled by default; {replacement}, or set FIMOD_LEGACY_BUILTINS=1 to enable legacy built-ins"
+            );
+        }
+    }
     if regex::EXTERNAL_FUNCTIONS.contains(&name) {
         regex::dispatch(name, args)
     } else if dotpath::EXTERNAL_FUNCTIONS.contains(&name) {
@@ -237,7 +262,7 @@ const STEP_SPEC_TYPE_ID: u64 = 0x6669_6d6f_6453_7063; // Step spec (from Step.cr
 /// Each mold invocation owns its registry and fresh UUIDs.
 #[derive(Default)]
 struct HostObjects {
-    classes: RefCell<HashMap<u64, MontyClassType>>,
+    classes: RefCell<HashMap<u64, MontyObject>>,
     instances: RefCell<HashMap<MontyUuid, (u64, MontyObject)>>,
     steps: RefCell<HashMap<usize, MontyObject>>,
 }
@@ -249,27 +274,28 @@ fn new_host_id() -> Result<MontyUuid> {
 }
 
 impl HostObjects {
-    fn build(&self, name: &str, kind: u64, attrs: DictPairs) -> Result<MontyObject> {
+    fn build(
+        &self,
+        name: &str,
+        kind: u64,
+        attrs: Vec<(MontyObject, MontyObject)>,
+    ) -> Result<MontyObject> {
         let mut classes = self.classes.borrow_mut();
         if let std::collections::hash_map::Entry::Vacant(entry) = classes.entry(kind) {
-            entry.insert(MontyClassType {
-                name: name.into(),
-                id: new_host_id()?,
-                host_defined: true,
-                is_dataclass: false,
-                attrs: DictPairs::default(),
-            });
+            entry.insert(MontyObject::class_type(
+                name,
+                new_host_id()?,
+                true,
+                false,
+                Vec::new(),
+            ));
         }
-        let object = MontyObject::ClassInstance(Box::new(MontyClassInstance {
-            class_type: classes[&kind].clone(),
-            instance_id: new_host_id()?,
-            attrs,
-        }));
-        if let MontyObject::ClassInstance(instance) = &object {
-            self.instances
-                .borrow_mut()
-                .insert(instance.instance_id, (kind, object.clone()));
-        }
+        let instance_id = new_host_id()?;
+        let object = MontyObject::class_instance(classes[&kind].clone(), instance_id, attrs);
+        self.instances
+            .borrow_mut()
+            .insert(instance_id, (kind, object.clone()));
+
         Ok(object)
     }
 
@@ -282,10 +308,10 @@ impl HostObjects {
     }
 
     fn kind(&self, object: &MontyObject) -> Option<u64> {
-        if let MontyObject::ClassInstance(instance) = object {
+        if let MontyNode::ClassInstance { instance_id, .. } = unstable::root_node(object) {
             self.instances
                 .borrow()
-                .get(&instance.instance_id)
+                .get(instance_id)
                 .map(|(kind, _)| *kind)
         } else {
             None
@@ -295,8 +321,8 @@ impl HostObjects {
 
 fn str_opt_to_monty(s: Option<&str>) -> MontyObject {
     match s {
-        Some(v) => MontyObject::String(v.to_string()),
-        None => MontyObject::None,
+        Some(v) => MontyObject::string(v.to_string()),
+        None => MontyObject::none(),
     }
 }
 
@@ -495,12 +521,10 @@ fn build_step_dc(step_idx: usize, ctx: &MoldContext<'_>) -> Result<MontyObject> 
         return Ok(step.clone());
     }
     let attrs: Vec<(MontyObject, MontyObject)> = vec![(
-        MontyObject::String("_step_idx".into()),
-        MontyObject::Int(step_idx as i64),
+        MontyObject::string("_step_idx"),
+        MontyObject::int(step_idx as i64),
     )];
-    let step = ctx
-        .objects
-        .build("Step", STEP_TYPE_ID, DictPairs::from(attrs))?;
+    let step = ctx.objects.build("Step", STEP_TYPE_ID, attrs)?;
     ctx.objects
         .steps
         .borrow_mut()
@@ -516,31 +540,21 @@ fn build_future_step_dc(step_idx: usize, ctx: &MoldContext<'_>) -> Result<MontyO
     build_step_dc(step_idx, ctx)
 }
 
-fn get_dc_attr<'a>(dc: &'a MontyObject, key: &str) -> Option<&'a MontyObject> {
-    if let MontyObject::ClassInstance(instance) = dc {
-        for (k, v) in &instance.attrs {
-            if let MontyObject::String(k_str) = k {
-                if k_str == key {
-                    return Some(v);
-                }
-            }
-        }
-    }
-    None
+fn get_dc_attr<'a>(dc: &'a MontyObject, key: &str) -> Option<ObjectRef<'a>> {
+    crate::monty_args::field(dc.as_ref(), key)
 }
 
 fn get_step_idx(dc: &MontyObject) -> Result<usize> {
-    match get_dc_attr(dc, "_step_idx") {
-        Some(MontyObject::Int(i)) => Ok(*i as usize),
-        _ => anyhow::bail!("pipeline step: missing _step_idx attribute"),
-    }
+    get_dc_attr(dc, "_step_idx")
+        .and_then(|v| v.as_int())
+        .map(|i| i as usize)
+        .ok_or_else(|| anyhow::anyhow!("pipeline step: missing _step_idx attribute"))
 }
 
 fn extract_int_arg(arg: &MontyObject, method_name: &str) -> Result<i64> {
-    match arg {
-        MontyObject::Int(i) => Ok(*i),
-        _ => anyhow::bail!("{method_name}: argument must be an integer"),
-    }
+    arg.as_ref()
+        .as_int()
+        .ok_or_else(|| anyhow::anyhow!("{method_name}: argument must be an integer"))
 }
 
 /// Dispatch a method call on a Pipeline, Step instance, or Step class object.
@@ -575,7 +589,7 @@ fn dispatch_method(
             } else {
                 let mut found = None;
                 for (k, v) in kwargs {
-                    if matches!(k, MontyObject::String(s) if s == "i" || s == "index") {
+                    if matches!(k.as_ref().as_str(), Some("i" | "index")) {
                         found = Some(extract_int_arg(v, "pipeline.step()")?);
                         break;
                     }
@@ -602,7 +616,7 @@ fn dispatch_method(
             }
             anyhow::bail!("pipeline.step({idx}): cannot access past steps")
         }
-        "length" => Ok(MontyObject::Int(ctx.total_steps as i64)),
+        "length" => Ok(MontyObject::int(ctx.total_steps as i64)),
         "create" if receiver_type == Some(STEP_CLASS_TYPE_ID) => dispatch_step_create(kwargs, ctx),
         "set" if args.len() >= 3 => {
             let step_idx = get_step_idx(&args[0])?;
@@ -626,7 +640,7 @@ fn dispatch_method(
                 },
                 spec,
             });
-            Ok(MontyObject::None)
+            Ok(MontyObject::none())
         }
         _ => anyhow::bail!("pipeline: unknown method '{name}'"),
     }
@@ -639,33 +653,27 @@ fn extract_step_spec(
     _kwargs: &[(MontyObject, MontyObject)],
     ctx: &MoldContext<'_>,
 ) -> Result<Value> {
-    if let Some(object @ MontyObject::ClassInstance(instance)) = args.get(1) {
+    if let Some(object) = args.get(1) {
         if ctx.objects.kind(object) == Some(STEP_SPEC_TYPE_ID) {
-            let MontyObject::ClassInstance(original) =
-                ctx.objects.receiver(instance.instance_id)?
-            else {
-                unreachable!()
-            };
-            return dataclass_attrs_to_json(&original.attrs);
-        }
-    }
-    anyhow::bail!("pipeline.{method_name}(): argument must be a Step.create(...) spec");
-}
-
-fn dataclass_attrs_to_json(attrs: &DictPairs) -> Result<Value> {
-    let mut map = serde_json::Map::new();
-    for (k, v) in attrs {
-        if let MontyObject::String(key) = k {
-            if !key.starts_with('_') {
-                map.insert(
-                    key.clone(),
-                    crate::convert::monty_to_json(v.clone())
-                        .context("Step spec: cannot convert field value")?,
-                );
+            if let MontyNode::ClassInstance { instance_id, .. } = unstable::root_node(object) {
+                let original = ctx.objects.receiver(*instance_id)?;
+                let mut map = serde_json::Map::new();
+                for (k, v) in original.as_ref().pairs().expect("host instance attributes") {
+                    if let Some(key) = k.as_str() {
+                        if !key.starts_with('_') {
+                            map.insert(
+                                key.to_owned(),
+                                crate::convert::object_to_json(v)
+                                    .context("Step spec: cannot convert field value")?,
+                            );
+                        }
+                    }
+                }
+                return Ok(Value::Object(map));
             }
         }
     }
-    Ok(Value::Object(map))
+    anyhow::bail!("pipeline.{method_name}(): argument must be a Step.create(...) spec");
 }
 
 fn get_step_field(step_idx: usize, key: &str, ctx: &MoldContext<'_>) -> Result<MontyObject> {
@@ -687,22 +695,22 @@ fn get_step_field(step_idx: usize, key: &str, ctx: &MoldContext<'_>) -> Result<M
     let is_current = step_idx == ctx.current_step_idx;
 
     Ok(match key {
-        "index" => MontyObject::Int(step_idx as i64),
-        "in_place" => MontyObject::Bool(ctx.in_place),
-        "slurp" => MontyObject::Bool(ctx.slurp),
-        "no_input" => MontyObject::Bool(ctx.no_input),
+        "index" => MontyObject::int(step_idx as i64),
+        "in_place" => MontyObject::bool(ctx.in_place),
+        "slurp" => MontyObject::bool(ctx.slurp),
+        "no_input" => MontyObject::bool(ctx.no_input),
         "input" => {
             if is_current {
                 str_opt_to_monty(ctx.input_path)
             } else {
-                MontyObject::None
+                MontyObject::none()
             }
         }
         "output" => {
             if is_current {
                 str_opt_to_monty(ctx.output_path)
             } else {
-                MontyObject::None
+                MontyObject::none()
             }
         }
         "input_format" | "output_format" => {
@@ -722,7 +730,7 @@ fn get_step_field(step_idx: usize, key: &str, ctx: &MoldContext<'_>) -> Result<M
                     .and_then(Value::as_str);
                 str_opt_to_monty(val)
             } else {
-                MontyObject::None
+                MontyObject::none()
             }
         }
         "args" => {
@@ -738,7 +746,7 @@ fn get_step_field(step_idx: usize, key: &str, ctx: &MoldContext<'_>) -> Result<M
                     .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
                 json_to_monty(&spec_args)
             } else {
-                MontyObject::None
+                MontyObject::none()
             }
         }
         _ => unreachable!(),
@@ -815,7 +823,7 @@ fn set_step_field(
             value,
         });
     }
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 /// Build a Step spec Dataclass from `Step.create(...)` kwargs.
@@ -826,27 +834,27 @@ fn dispatch_step_create(
     let mut mold: Option<String> = None;
     let mut expr: Option<String> = None;
     let mut spec_attrs: Vec<(MontyObject, MontyObject)> = vec![(
-        MontyObject::String("_type".into()),
-        MontyObject::String("step_spec".into()),
+        MontyObject::string("_type"),
+        MontyObject::string("step_spec"),
     )];
 
     for (k, v) in kwargs {
-        if let MontyObject::String(key) = k {
-            match key.as_str() {
+        if let Some(key) = k.as_ref().as_str() {
+            match key {
                 "mold" => {
-                    if let MontyObject::String(s) = v {
-                        mold = Some(s.clone());
-                        spec_attrs.push((MontyObject::String("mold".into()), v.clone()));
+                    if let Some(s) = v.as_ref().as_str() {
+                        mold = Some(s.to_owned());
+                        spec_attrs.push((MontyObject::string("mold"), v.clone()));
                     }
                 }
                 "expr" => {
-                    if let MontyObject::String(s) = v {
-                        expr = Some(s.clone());
-                        spec_attrs.push((MontyObject::String("expr".into()), v.clone()));
+                    if let Some(s) = v.as_ref().as_str() {
+                        expr = Some(s.to_owned());
+                        spec_attrs.push((MontyObject::string("expr"), v.clone()));
                     }
                 }
                 "input_format" | "output_format" => {
-                    spec_attrs.push((MontyObject::String(key.clone()), v.clone()));
+                    spec_attrs.push((MontyObject::string(key), v.clone()));
                 }
                 "args" => {
                     let json_val = crate::convert::monty_to_json(v.clone())
@@ -854,7 +862,7 @@ fn dispatch_step_create(
                     if !json_val.is_object() {
                         anyhow::bail!("Step.create(): args must be a dict");
                     }
-                    spec_attrs.push((MontyObject::String(key.clone()), v.clone()));
+                    spec_attrs.push((MontyObject::string(key), v.clone()));
                 }
                 _ => {}
             }
@@ -868,8 +876,7 @@ fn dispatch_step_create(
         anyhow::bail!("Step.create(): cannot specify both `mold=` and `expr=`");
     }
 
-    ctx.objects
-        .build("Step", STEP_SPEC_TYPE_ID, DictPairs::from(spec_attrs))
+    ctx.objects.build("Step", STEP_SPEC_TYPE_ID, spec_attrs)
 }
 
 /// Execute a mold Python script against input data using Monty.
@@ -898,7 +905,7 @@ pub(crate) fn execute_mold_with_chain_start(
     let headers_obj = json_to_monty(opts.headers_value);
 
     let objects = HostObjects::default();
-    let pipeline_dc = objects.build("Pipeline", PIPELINE_TYPE_ID, DictPairs::default())?;
+    let pipeline_dc = objects.build("Pipeline", PIPELINE_TYPE_ID, Vec::new())?;
 
     let input_names = vec![
         "data".to_string(),
@@ -932,6 +939,7 @@ pub(crate) fn execute_mold_with_chain_start(
         objects,
         debug: opts.debug,
         msg_level: opts.msg_level,
+        legacy_builtins: std::env::var("FIMOD_LEGACY_BUILTINS").is_ok_and(|value| value == "1"),
         mold_base_dir: opts.mold_base_dir,
         exit_code: Arc::new(Mutex::new(None)),
         format_override: Arc::new(Mutex::new(opts.format_override_init.clone())),
@@ -1016,10 +1024,11 @@ fn run_loop(
                 Some(format_duration(max_duration)),
             ));
         }
-        limits = limits.max_duration(max_duration - elapsed);
+        limits = limits.max_feed_duration(max_duration - elapsed);
     }
     let tracker = ResourceTracker::new(limits);
     let mut progress = runner
+        .with_os_policy(sandbox_os_policy())
         .start(
             inputs,
             tracker,
@@ -1038,18 +1047,23 @@ fn run_loop(
         }
         match progress {
             RunProgress::Complete(result) => return Ok(result),
-            RunProgress::FunctionCall(mut call) => {
+            RunProgress::FunctionCall(call) => {
                 let function_name = call.function_name.clone();
+                let mut positional: Vec<_> = call.args.args().map(|v| v.to_owned()).collect();
+                let kwargs: Vec<_> = call
+                    .args
+                    .kwargs()
+                    .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                    .collect();
                 let result = if let Some(id) = call.object_id {
                     // Keep the internal dispatch convention explicit: receiver first.
-                    let mut args = Vec::with_capacity(call.args.len() + 1);
+                    let mut args = Vec::with_capacity(positional.len() + 1);
                     args.push(ctx.objects.receiver(id)?);
-                    args.append(&mut call.args);
-                    dispatch_method(&function_name, &args, &call.kwargs, ctx)
+                    args.append(&mut positional);
+                    dispatch_method(&function_name, &args, &kwargs, ctx)
                         .map_err(|e| anyhow::anyhow!("Method call '{function_name}' failed: {e}"))?
                 } else {
-                    let args = std::mem::take(&mut call.args);
-                    let kwargs = std::mem::take(&mut call.kwargs);
+                    let args = positional;
                     dispatch_external(&function_name, args, kwargs, ctx).map_err(|e| {
                         anyhow::anyhow!("External function '{function_name}' failed: {e}")
                     })?
@@ -1098,13 +1112,10 @@ fn run_loop(
                     NameLookupResult::Value(ctx.objects.build(
                         "Step",
                         STEP_CLASS_TYPE_ID,
-                        DictPairs::default(),
+                        Vec::new(),
                     )?)
                 } else if is_external_function(&name) {
-                    NameLookupResult::Value(MontyObject::Function {
-                        name,
-                        docstring: None,
-                    })
+                    NameLookupResult::Value(MontyObject::function(name, None))
                 } else {
                     NameLookupResult::Undefined
                 };
@@ -1127,11 +1138,21 @@ fn run_loop(
     }
 }
 
+/// Route sensitive operations to fimod on every execution path.
+pub fn sandbox_os_policy() -> OsPolicy {
+    OsPolicy {
+        datetime: DateTimeSource::CallHost,
+        random_start: RandomStart::CallHost,
+        sleep: SleepMode::CallHost,
+        ..OsPolicy::default()
+    }
+}
+
 /// Build `ResourceLimits` from a `SandboxPolicy`.
 pub fn sandbox_resource_limits(policy: &SandboxPolicy) -> ResourceLimits {
     let mut limits = ResourceLimits::default().max_suspensions(policy.max_suspensions);
     if let Some(d) = policy.max_duration {
-        limits = limits.max_duration(d);
+        limits = limits.max_feed_duration(d);
     }
     if let Some(m) = policy.max_memory {
         limits = limits.max_memory(m);
@@ -1158,18 +1179,35 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
     match function_call {
         OsFunctionCall::DateToday => {
             if policy.allow_clock {
-                OsCallOutcome::Value(MontyObject::Date(current_date()))
+                OsCallOutcome::Value(MontyObject::date(current_date()))
             } else {
                 OsCallOutcome::Error(permission_denied(clock_denied_message("date.today")))
             }
         }
-        OsFunctionCall::DateTimeNow(_) => {
+        OsFunctionCall::DateTimeNow(tz) => {
             if policy.allow_clock {
-                OsCallOutcome::Value(MontyObject::DateTime(current_datetime()))
+                OsCallOutcome::Value(MontyObject::datetime(current_datetime(tz)))
             } else {
                 OsCallOutcome::Error(permission_denied(clock_denied_message("datetime.now")))
             }
         }
+        OsFunctionCall::Time(caller) => {
+            if policy.allow_clock {
+                OsCallOutcome::Value(MontyObject::float(
+                    chrono::Utc::now().timestamp_micros() as f64 / 1_000_000.0,
+                ))
+            } else {
+                OsCallOutcome::Error(permission_denied(clock_denied_message(caller.as_str())))
+            }
+        }
+        call @ (OsFunctionCall::Urandom(_)
+        | OsFunctionCall::Sleep(_)
+        | OsFunctionCall::SystemSleep(_)
+        | OsFunctionCall::AsyncSleep(_)
+        | OsFunctionCall::AsyncSystemSleep(_)) => OsCallOutcome::Error(permission_denied(format!(
+            "{}() denied by sandbox policy",
+            call.name()
+        ))),
         OsFunctionCall::Getenv(args) => {
             OsCallOutcome::Value(lookup_env(&args.key, args.default, policy))
         }
@@ -1192,7 +1230,7 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
         | OsFunctionCall::Mkdir(_)
         | OsFunctionCall::Unlink(_)
         | OsFunctionCall::Rmdir(_)
-        | OsFunctionCall::Rename(_) => OsCallOutcome::Value(MontyObject::None),
+        | OsFunctionCall::Rename(_) => OsCallOutcome::Value(MontyObject::none()),
     }
 }
 
@@ -1213,9 +1251,14 @@ fn current_date() -> MontyDate {
 }
 
 /// Naive datetime (no tz) matches Python's `datetime.now()` without args.
-fn current_datetime() -> MontyDateTime {
+fn current_datetime(tz: Option<monty_types::MontyTimeZone>) -> MontyDateTime {
     use chrono::{Datelike, Local, Timelike};
-    let now = Local::now().naive_local();
+    let now = match &tz {
+        Some(tz) => {
+            chrono::Utc::now().naive_utc() + chrono::Duration::seconds(i64::from(tz.offset_seconds))
+        }
+        None => Local::now().naive_local(),
+    };
     MontyDateTime {
         year: now.year(),
         month: now.month() as u8,
@@ -1224,8 +1267,8 @@ fn current_datetime() -> MontyDateTime {
         minute: now.minute() as u8,
         second: now.second() as u8,
         microsecond: now.nanosecond() / 1_000,
-        offset_seconds: None,
-        timezone_name: None,
+        offset_seconds: tz.as_ref().map(|tz| tz.offset_seconds),
+        timezone_name: tz.and_then(|tz| tz.name),
     }
 }
 
@@ -1257,16 +1300,16 @@ fn permission_denied(msg: String) -> MontyException {
 
 fn lookup_env(key: &str, default: MontyObject, policy: &SandboxPolicy) -> MontyObject {
     if !policy.env_allowed(key) {
-        return MontyObject::None;
+        return MontyObject::none();
     }
     match std::env::var(key) {
-        Ok(v) => MontyObject::String(v),
+        Ok(v) => MontyObject::string(v),
         Err(_) => default,
     }
 }
 
 fn empty_environ() -> MontyObject {
-    MontyObject::Dict(DictPairs::from(Vec::<(MontyObject, MontyObject)>::new()))
+    MontyObject::dict(Vec::<(MontyObject, MontyObject)>::new())
 }
 
 /// Upgrades resource-limit exceptions (`TimeoutError`, `MemoryError`) into `SandboxLimitExceeded`

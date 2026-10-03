@@ -107,8 +107,10 @@ fn test_cookbook_regex_extract_urls() {
     let mold = setup_mold(
         &dir,
         "urls.py",
-        r#"def transform(data, args, env, headers, **_):
-    urls = re_findall(r"https?://[^\s]+", data["text"])
+        r#"import re
+
+def transform(data, args, env, headers, **_):
+    urls = re.findall(r"https?://[^\s]+", data["text"])
     return {"urls": urls, "count": len(urls)}
 "#,
     );
@@ -144,15 +146,14 @@ fn test_cookbook_regex_parse_kv() {
     let mold = setup_mold(
         &dir,
         "parse_kv.py",
-        r#"def transform(data, args, env, headers, **_):
+        r#"import re
+
+def transform(data, args, env, headers, **_):
     result = {}
     for line in data["text"].strip().split("\n"):
-        m = re_search(r"^(\w+)=(.+)$", line)
+        m = re.search(r"^(?P<key>\w+)=(?P<val>.+)$", line)
         if m:
-            key_match = re_search(r"^(\w+)", line)
-            val_match = re_search(r"=(.+)$", line)
-            if key_match and val_match:
-                result[key_match["match"]] = val_match["match"][1:]
+            result[m.group("key")] = m.group("val")
     return result
 "#,
     );

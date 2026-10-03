@@ -4,8 +4,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Result};
 use minijinja::Environment;
-#[cfg(test)]
-use monty_types::DictPairs;
 use monty_types::MontyObject;
 
 use crate::convert::monty_to_json;
@@ -62,8 +60,8 @@ fn parse_render_args(args: &[MontyObject], fn_name: &str) -> Result<(MontyObject
 
     // auto_escape is the optional third arg, default False
     let auto_escape = if args.len() > 2 {
-        match &args[2] {
-            MontyObject::Bool(b) => *b,
+        match args[2].as_ref().as_bool() {
+            Some(b) => b,
             _ => bail!("{fn_name}() auto_escape must be a bool"),
         }
     } else {
@@ -84,7 +82,7 @@ fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<Mon
         .render(ctx_value)
         .map_err(|e| anyhow::anyhow!("Template render error: {e}"))?;
 
-    Ok(MontyObject::String(rendered))
+    Ok(MontyObject::string(rendered))
 }
 
 fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Environment<'static>>> {
@@ -175,16 +173,16 @@ mod tests {
     use super::*;
 
     fn s(val: &str) -> MontyObject {
-        MontyObject::String(val.to_string())
+        MontyObject::string(val.to_string())
     }
 
     fn dict(pairs: Vec<(&str, MontyObject)>) -> MontyObject {
-        MontyObject::Dict(DictPairs::from(
+        MontyObject::dict(
             pairs
                 .into_iter()
-                .map(|(k, v)| (MontyObject::String(k.to_string()), v))
+                .map(|(k, v)| (MontyObject::string(k.to_string()), v))
                 .collect::<Vec<_>>(),
-        ))
+        )
     }
 
     #[test]
@@ -207,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_render_str_loop() {
-        let items = MontyObject::List(vec![s("a"), s("b"), s("c")]);
+        let items = MontyObject::list(vec![s("a"), s("b"), s("c")]);
         let result = dispatch(
             "tpl_render_str",
             vec![
@@ -227,7 +225,7 @@ mod tests {
             vec![
                 s("{{ content }}"),
                 dict(vec![("content", s("<b>bold</b>"))]),
-                MontyObject::Bool(true),
+                MontyObject::bool(true),
             ],
             None,
         )

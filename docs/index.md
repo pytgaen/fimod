@@ -56,7 +56,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["name"]' --output
 
     ---
 
-    `re_*` regex · `dp_*` dotpath · `it_*` iteration · `hs_*` hashing · `msg_*` logging · `gk_*` validation · `env_subst` — no imports needed.
+    Native `import re` for regex; `dp_*` dotpath · active `it_*` iteration · `hs_*` hashing · `msg_*` logging · `gk_*` validation · `env_subst` helpers require no imports. Deprecated helpers need [legacy activation](reference/built-ins.md#legacy-built-ins).
 
 -   :material-web:{ .lg .middle } **🚀 Awesome 🔥 Your input can be an HTTPS request!**
 
@@ -127,7 +127,11 @@ fimod s -i customers.csv -e '[{**r, "email": hs_sha256(r["email"])} for r in dat
 
 ```bash
 # 🕵️ Mask IPs with regex — 192.168.1.42 → 192.168.x.x
-fimod s -i logs.json -e '[{**r, "ip": re_sub(r"\d+\.\d+$", "x.x", r["ip"])} for r in data]'
+fimod s -i logs.json -e '
+import re
+def transform(data, **_):
+    return [{**row, "ip": re.sub(r"\d+\.\d+$", "x.x", row["ip"])} for row in data]
+'
 ```
 
 ```bash
@@ -174,7 +178,7 @@ Start here if you're new to fimod.
 
     ---
 
-    Write transforms with built-in regex, dotpath, iteration, and hash helpers.
+    Write transforms with native `import re`, dotpath, iteration, and hash helpers.
 
     [:octicons-arrow-right-24: Write molds](guides/mold-scripting.md)
 
@@ -208,7 +212,7 @@ Lookup tables and complete specifications.
 
     ---
 
-    Complete signatures for `re_*`, `dp_*`, `it_*`, `hs_*`, `msg_*`, `gk_*`, `env_subst`, `set_exit`, `set_input_format`, `set_output_format`, `set_output_file`, `args`, `headers`.
+    Active helper signatures, legacy activation and migration, pipeline controls, `args`, and `headers`.
 
     [:octicons-arrow-right-24: Built-ins](reference/built-ins.md)
 
@@ -243,22 +247,15 @@ Lookup tables and complete specifications.
 !!! warning "Early-stage software"
     fimod is young software, built with AI-assisted development ("vibe coding").
 
-    - **[Monty](https://github.com/pydantic/monty)** is an early-stage Rust implementation of Python by Pydantic. It is not CPython, and its API may introduce breaking changes.
-    - **fimod** depends directly on Monty and inherits that instability. Expect breaking changes as both projects mature.
+    - **[Monty](https://github.com/pydantic/monty)** is Pydantic's Rust implementation of a Python subset. Fimod pins Monty 1.0.0; this is not CPython or full standard-library parity.
+    - **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
     - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
     - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
-    - Built-in helpers (`re_*`, `dp_*`, `it_*`, `hs_*`, `tpl_*`, `msg_*`, `gk_*`, `env_subst`) are implemented in **Rust** as part of fimod's data-shaping API. In particular, regex functions use [fancy-regex](https://github.com/fancy-regex/fancy-regex) syntax, based on Rust's `regex` crate and Oniguruma, **not** Python's `re` module — see [Built-ins → Regex](reference/built-ins.md#regex-functions-re_).
+    - Fimod adds Rust helpers for dot paths, iteration, hashing, templating, logging, and validation. Legacy regex and selected iteration helpers require explicit activation; new regex molds use `import re`.
 
-!!! note "Regex: Fimod built-ins vs Monty's `re` module"
-    Fimod was originally built on Monty v0.0.6, which had no regex support.
-    We introduced `re_search`, `re_sub`, `re_findall`, etc. as Fimod built-in functions to fill that gap — a good example of the challenges of moving fast alongside a young runtime.
-
-    Since Monty v0.0.8, `import re` works — Monty implements a subset of Python's `re` module.
-    Both approaches now work side by side:
-
-    - **Fimod's `re_*` built-ins** — direct access to [fancy-regex](https://github.com/fancy-regex/fancy-regex), including advanced features like variable-length lookbehind/lookahead
-    - **`import re`** — familiar Python API, but only [partially implemented in Monty](https://github.com/pydantic/monty/pull/157) (also backed by fancy-regex under the hood)
-
-    The `re_*` built-ins are here to stay for the foreseeable future (at least until late 2027). As Monty's `re` module matures, we'll reconsider.
-
-    Since `import re` is already well-known to Python developers, the documentation focuses on the `re_*` built-ins which are specific to Fimod.
+!!! note "Legacy built-ins"
+    New molds use Monty's `import re` and Python deduplication/flattening code.
+    Existing molds can keep `re_*`, `it_unique`, `it_unique_by`, and `it_flatten`
+    by setting `FIMOD_LEGACY_BUILTINS=1`. No warning is emitted when enabled.
+    Without activation, calling one raises an error with migration guidance.
+    See the [migration guide](reference/built-ins.md#legacy-built-ins) for API differences.

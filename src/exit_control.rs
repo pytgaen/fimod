@@ -29,19 +29,19 @@ fn dispatch_set_exit(
             args.len()
         );
     }
-    let code = match &args[0] {
-        MontyObject::Int(i) => {
-            if *i < 0 || *i > 255 {
+    let code = match args[0].as_ref().as_int() {
+        Some(i) => {
+            if !(0..=255).contains(&i) {
                 bail!("set_exit() code must be 0-255, got {i}");
             }
-            *i as i32
+            i as i32
         }
         _ => bail!("set_exit() expects an integer argument"),
     };
 
     let mut lock = exit_code.lock().unwrap();
     *lock = Some(code);
-    Ok(MontyObject::None)
+    Ok(MontyObject::none())
 }
 
 #[cfg(test)]
@@ -51,16 +51,16 @@ mod tests {
     #[test]
     fn test_set_exit_stores_code() {
         let exit_code = Arc::new(Mutex::new(None));
-        let result = dispatch("set_exit", vec![MontyObject::Int(42)], &exit_code).unwrap();
-        assert_eq!(result, MontyObject::None);
+        let result = dispatch("set_exit", vec![MontyObject::int(42)], &exit_code).unwrap();
+        assert_eq!(result, MontyObject::none());
         assert_eq!(*exit_code.lock().unwrap(), Some(42));
     }
 
     #[test]
     fn test_set_exit_out_of_range() {
         let exit_code = Arc::new(Mutex::new(None));
-        assert!(dispatch("set_exit", vec![MontyObject::Int(256)], &exit_code).is_err());
-        assert!(dispatch("set_exit", vec![MontyObject::Int(-1)], &exit_code).is_err());
+        assert!(dispatch("set_exit", vec![MontyObject::int(256)], &exit_code).is_err());
+        assert!(dispatch("set_exit", vec![MontyObject::int(-1)], &exit_code).is_err());
     }
 
     #[test]
@@ -68,7 +68,7 @@ mod tests {
         let exit_code = Arc::new(Mutex::new(None));
         assert!(dispatch(
             "set_exit",
-            vec![MontyObject::String("bad".to_string())],
+            vec![MontyObject::string("bad".to_string())],
             &exit_code
         )
         .is_err());

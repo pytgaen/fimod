@@ -39,10 +39,15 @@ For reusable transforms, write a `transform(data, **_)` function in a `.py` file
 ```python
 # cleanup.py
 def transform(data, **_):
+    seen = set()
+    result = []
     for row in data:
         row["name"] = row["name"].strip().title()
         row["email"] = row["email"].strip().lower()
-    return it_unique_by(data, "email")
+        if row["email"] not in seen:
+            seen.add(row["email"])
+            result.append(row)
+    return result
 ```
 
 ```bash
@@ -88,15 +93,14 @@ Load scripts directly from URLs — no local file needed:
 fimod s -i data.json -m https://example.com/transforms/normalize.py
 ```
 
-## 🧰 Built-in helpers — no imports needed
+## 🧰 Python modules and built-in helpers
 
 ```python
 # 🔍 Regex (fancy-regex: lookahead, lookbehind, backrefs, atomic groups)
-# re_sub uses Python \1/\g<name> syntax; re_sub_fancy uses $1/${name}
-emails = re_findall(r"\w+@\w+\.\w+", text)
-cleaned = re_sub(r"\s+", " ", text)
-swapped = re_sub(r"(\w+)@(\w+)", r"\2/\1", text)        # Python syntax
-swapped = re_sub_fancy(r"(\w+)@(\w+)", "$2/$1", text)   # fancy syntax
+import re
+emails = re.findall(r"\w+@\w+\.\w+", text)
+cleaned = re.sub(r"\s+", " ", text)
+swapped = re.sub(r"(\w+)@(\w+)", r"\2/\1", text)        # Python syntax
 
 # 🗂️ Deep access into nested structures
 city = dp_get(data, "users.0.address.city", "unknown")
@@ -105,11 +109,14 @@ data = dp_set(data, "meta.processed", True)
 # 🔁 Collections
 grouped = it_group_by(data, "department")
 sorted_list = it_sort_by(data, "created_at")
-unique = it_unique_by(data, "email")
+# Field deduplication: use @dedup_by --arg field=email
 
 # #️⃣ Hashing for anonymization
 anon_email = hs_sha256(user["email"])
 ```
+
+Legacy `re_*`, `it_unique`, `it_unique_by`, and `it_flatten` require
+`FIMOD_LEGACY_BUILTINS=1`. See the [migration guide](../reference/built-ins.md#legacy-built-ins).
 
 ## 🎛️ Parameterized scripts
 

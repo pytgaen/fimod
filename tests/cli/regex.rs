@@ -7,6 +7,7 @@ fn test_re_search_found() {
     let input = setup_input(&dir, "data.json", r#"{"text": "order-12345-confirmed"}"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"re_search(r"(\d+)", data["text"])"#])
         .assert()
@@ -20,6 +21,7 @@ fn test_re_search_not_found() {
     let input = setup_input(&dir, "data.json", r#"{"text": "no digits here"}"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"re_search(r"\d+", data["text"])"#])
         .assert()
@@ -34,6 +36,7 @@ fn test_re_match_anchored() {
 
     // re_match should match at the start
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"re_match(r"\d+", data["text"])"#])
         .assert()
@@ -43,6 +46,7 @@ fn test_re_match_anchored() {
     // re_match should NOT match if pattern is not at start
     let input2 = setup_input(&dir, "data2.json", r#"{"text": "abc123"}"#);
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input2, "-e", r#"re_match(r"\d+", data["text"])"#])
         .assert()
@@ -56,6 +60,7 @@ fn test_re_findall() {
     let input = setup_input(&dir, "data.json", r#"{"text": "a1 b22 c333"}"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"re_findall(r"\d+", data["text"])"#])
         .assert()
@@ -82,6 +87,7 @@ def transform(data, args, env, headers, **_):
     let mold = setup_mold(&dir, "find_emails.py", script);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-m", &mold])
         .assert()
@@ -102,6 +108,7 @@ def transform(data, args, env, headers, **_):
     let mold = setup_mold(&dir, "clean.py", script);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-m", &mold])
         .assert()
@@ -115,6 +122,7 @@ fn test_re_split() {
     let input = setup_input(&dir, "data.json", r#"{"text": "one,two; three,four"}"#);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-e", r#"re_split(r"[,;]\s*", data["text"])"#])
         .assert()
@@ -132,6 +140,7 @@ fn test_re_findall_lookahead() {
 
     // Lookahead: match word chars before @
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args([
             "-i",
@@ -160,6 +169,7 @@ def transform(data, args, env, headers, **_):
     let mold = setup_mold(&dir, "multi_regex.py", script);
 
     assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "-m", &mold])
         .assert()
@@ -187,6 +197,7 @@ def transform(data, args, env, headers, **_):
     let mold = setup_mold(&dir, "filter_errors.py", script);
 
     let output = assert_cmd::cargo_bin_cmd!("fimod")
+        .env("FIMOD_LEGACY_BUILTINS", "1")
         .arg("shape")
         .args(["-i", &input, "--input-format", "lines", "-m", &mold])
         .assert()
