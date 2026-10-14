@@ -30,7 +30,7 @@ required-features = ["fast"]
 
 [dependencies]
 monty = "=1.0.0"
-monty-types = "=1.0.0"
+monty-types = "=1.1.0"
 getrandom = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
@@ -49,7 +49,7 @@ sha2 = "0.11"
 digest = "0.11.3"
 hex = "0.4"
 mimalloc = "0.1"
-minijinja = { version = "2", features = ["json", "loop_controls", "preserve_order"] }
+minijinja = { version = "3", features = ["json", "loop_controls", "preserve_order"] }
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 notify = { version = "8", optional = true }
