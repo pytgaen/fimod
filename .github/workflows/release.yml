@@ -24,17 +24,17 @@ jobs:
           # ── standard (avec reqwest, chargement HTTP des molds) ───────────────
           - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: standard, features: "" }
           - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: standard, features: "" }
-          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: standard, features: "" }
+          - { target: aarch64-apple-darwin,        runner: macos-15,       cross: false, ext: tar.gz, variant: standard, features: "" }
           - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: standard, features: "" }
           # ── slim (sans reqwest, binaire léger) ───────────────────────────
           - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
           - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: slim, features: "--no-default-features" }
-          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: slim, features: "--no-default-features" }
+          - { target: aarch64-apple-darwin,        runner: macos-15,       cross: false, ext: tar.gz, variant: slim, features: "--no-default-features" }
           - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: slim, features: "--no-default-features" }
           # ── fast (speed optimized, no UPX) ───────────────────────────────
           - { target: x86_64-unknown-linux-musl,   runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
           - { target: aarch64-unknown-linux-musl,  runner: ubuntu-latest,  cross: true,  ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
-          - { target: aarch64-apple-darwin,        runner: macos-14,       cross: false, ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
+          - { target: aarch64-apple-darwin,        runner: macos-15,       cross: false, ext: tar.gz, variant: fast, features: "--features fast --bin fimod-fast" }
           - { target: x86_64-pc-windows-msvc,      runner: windows-latest, cross: false, ext: zip,    variant: fast, features: "--features fast --bin fimod-fast" }
 
     steps:

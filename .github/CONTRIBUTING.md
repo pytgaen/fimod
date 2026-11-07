@@ -44,10 +44,10 @@ push / pull_request
 │   ├── cargo fmt --check
 │   └── cargo clippy --all-targets --all-features -- -D warnings
 │
-├── test          (matrix: ubuntu-latest, macos-14)
+├── test          (matrix: ubuntu-latest, macos-15)
 │   └── cargo test --all-features
 │
-├── installer-posix (matrix: ubuntu-latest, macos-14)
+├── installer-posix (matrix: ubuntu-latest, macos-15)
 │   └── fail-closed checksum fixtures
 │
 ├── windows-smoke (windows-latest)
@@ -94,7 +94,7 @@ tag v*
 ├── build (matrix, parallel)
 │   ├── x86_64-unknown-linux-musl   (ubuntu, cross/Docker)
 │   ├── aarch64-unknown-linux-musl  (ubuntu, cross/Docker)
-│   ├── aarch64-apple-darwin        (macos-14, native cargo)
+│   ├── aarch64-apple-darwin        (macos-15, native cargo)
 │   └── x86_64-pc-windows-msvc     (windows-latest, native cargo)
 │
 └── release
