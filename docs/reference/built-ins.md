@@ -47,32 +47,15 @@ def transform(data, **_):
 | `re_findall` | `re.findall`; multiple groups produce tuples instead of lists; absent groups become `""` instead of `None` |
 | `re_sub` | `re.sub`; use explicit references such as `r"\g<1>_suffix"` |
 | `re_sub_fancy(..., "$1", ...)` | `re.sub(..., r"\g<1>", ...)`; dollar references are literal in the native API |
-| `re_split` | `re.split` for patterns without captures; Monty 1.0.0 currently omits captured separators |
+| `re_split` | `re.split`; captured separators are included, as in the legacy helper |
 | Other `_fancy` aliases | Use the corresponding native `re` function |
 
 `count=0` replaces all matches in both substitution APIs; a negative count
 replaces all in the legacy helper but nothing in native `re.sub`. Backslash
 handling also differs, so test existing replacement strings before migration.
-Monty 1.0.0 has limitations: callable replacements are not implemented,
+Monty 1.5.0 has limitations: callable replacements are not implemented,
 `re.ASCII` does not currently restrict `\w` to ASCII, and a numbered replacement
 followed by a suffix (`r"\1_suffix"`) needs the explicit form `r"\g<1>_suffix"`.
-
-To retain captured separators, use `re.finditer` as in the shipped `@split_tags`
-mold:
-
-```python
-import re
-
-def split_with_captures(pattern, text):
-    parts = []
-    last_end = 0
-    for match in re.finditer(pattern, text):
-        parts.append(text[last_end:match.start()])
-        parts.extend(match.groups())
-        last_end = match.end()
-    parts.append(text[last_end:])
-    return parts
-```
 
 `FIMOD_REGEX_BACKTRACK_LIMIT` controls only the legacy regex helpers
 (default: 100,000). Native Monty regex uses its own engine limit

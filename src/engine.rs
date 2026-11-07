@@ -1175,6 +1175,7 @@ pub fn sandbox_os_call_result(
 /// - `os.environ`: returns an empty dict when denied (no raise).
 /// - `Path.*`: returns `None` (legacy behavior; proper filesystem gating lands with `[[mount]]`).
 /// - `open()`: raises `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
+/// - `import` of a module Monty does not bundle (e.g. a local `.py` file): `ModuleNotFoundError`; `typing.get_type_hints()` host hints: `{}`. Both use Monty's own unserved-call answer.
 fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> OsCallOutcome {
     match function_call {
         OsFunctionCall::DateToday => {
@@ -1230,7 +1231,11 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
         | OsFunctionCall::Mkdir(_)
         | OsFunctionCall::Unlink(_)
         | OsFunctionCall::Rmdir(_)
-        | OsFunctionCall::Rename(_) => OsCallOutcome::Value(MontyObject::none()),
+        | OsFunctionCall::Rename(_)
+        | OsFunctionCall::Scan(_) => OsCallOutcome::Value(MontyObject::none()),
+        call @ (OsFunctionCall::Import(_)
+        | OsFunctionCall::ImportStubs(_)
+        | OsFunctionCall::GetTypeHints(_)) => OsCallOutcome::Unserved(call.no_handler_result()),
     }
 }
 
@@ -1272,10 +1277,12 @@ fn current_datetime(tz: Option<monty_types::MontyTimeZone>) -> MontyDateTime {
     }
 }
 
-/// Result of dispatching an `OsCall` — either a return value or a Python exception.
+/// Result of dispatching an `OsCall` — a return value, a Python exception, or
+/// Monty's own answer for a call fimod does not serve.
 enum OsCallOutcome {
     Value(MontyObject),
     Error(MontyException),
+    Unserved(ExtFunctionResult),
 }
 
 impl From<OsCallOutcome> for ExtFunctionResult {
@@ -1283,6 +1290,7 @@ impl From<OsCallOutcome> for ExtFunctionResult {
         match outcome {
             OsCallOutcome::Value(v) => ExtFunctionResult::Return(v),
             OsCallOutcome::Error(e) => ExtFunctionResult::Error(e),
+            OsCallOutcome::Unserved(r) => r,
         }
     }
 }
@@ -1291,6 +1299,7 @@ fn describe_os_result(outcome: &OsCallOutcome) -> String {
     match outcome {
         OsCallOutcome::Value(_) => "allowed".to_string(),
         OsCallOutcome::Error(_) => "denied".to_string(),
+        OsCallOutcome::Unserved(_) => "not served".to_string(),
     }
 }
 

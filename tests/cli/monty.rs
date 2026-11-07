@@ -93,6 +93,97 @@ def transform(data, **_):
 }
 
 #[test]
+fn test_monty_15_language_and_stdlib_additions() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = super::helpers::setup_mold(
+        &dir,
+        "monty15.py",
+        r#"
+import bisect
+import csv
+import fnmatch
+import hashlib
+import os.path
+import re
+import tomllib
+from dataclasses import dataclass, field
+from decimal import Decimal
+
+@dataclass
+class Order:
+    items: list = field(default_factory=list)
+    total: int = 0
+
+    def __post_init__(self):
+        self.total = sum(self.items)
+
+def kind(value):
+    match value:
+        case {"type": "point", "x": x, "y": y}:
+            return f"point {x},{y}"
+        case [first, *rest]:
+            return f"list of {1 + len(rest)}"
+        case _:
+            return "other"
+
+def transform(data, **_):
+    return {
+        "match": [kind(v) for v in data],
+        "sha256": hashlib.sha256(b"fimod").hexdigest()[:12],
+        "toml": tomllib.loads('name = "x"\nn = 2'),
+        "csv": list(csv.reader(["a,b", "1,2"])),
+        "bisect": bisect.bisect_left([1, 3, 5], 4),
+        "fnmatch": fnmatch.fnmatch("mold.py", "*.py"),
+        "join": os.path.join("molds", "clean.py"),
+        "decimal": str(Decimal("19.90") + Decimal("0.10")),
+        "split": re.split(r"(\d)", "a1b2c"),
+        "post_init": Order([1, 2, 3]).total,
+    }
+"#,
+    );
+    let output = assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-m", &mold, "--output-format", "json-compact"])
+        .write_stdin(r#"[{"type":"point","x":1,"y":2},[1,2,3],7]"#)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        result,
+        serde_json::json!({
+            "match": ["point 1,2", "list of 3", "other"],
+            "sha256": "04ef922ce5ac",
+            "toml": {"name": "x", "n": 2},
+            "csv": [["a", "b"], ["1", "2"]],
+            "bisect": 2,
+            "fnmatch": true,
+            "join": "molds/clean.py",
+            "decimal": "20.00",
+            "split": ["a", "1", "b", "2", "c"],
+            "post_init": 6,
+        })
+    );
+}
+
+#[test]
+fn test_monty_decimal_result_is_not_serialized() {
+    // Decimal output support is deferred (notes/ROADMAP.md); molds must convert explicitly.
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = super::helpers::setup_mold(
+        &dir,
+        "decimal.py",
+        "from decimal import Decimal\ndef transform(data, **_):\n    return Decimal('1.10')\n",
+    );
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-m", &mold])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Decimal(\"1.10\")"));
+}
+
+#[test]
 fn test_monty_repl_continues_decorators_and_triple_quoted_strings() {
     assert_cmd::cargo_bin_cmd!("fimod")
         .args(["monty", "repl", "--sandbox-file="])

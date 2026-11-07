@@ -247,7 +247,7 @@ Lookup tables and complete specifications.
 !!! warning "Early-stage software"
     fimod is young software, built with AI-assisted development ("vibe coding").
 
-    - **[Monty](https://github.com/pydantic/monty)** is Pydantic's Rust implementation of a Python subset. Fimod pins Monty 1.0.0; this is not CPython or full standard-library parity.
+    - **[Monty](https://github.com/pydantic/monty)** is Pydantic's Rust implementation of a Python subset. Fimod pins Monty 1.5.0; this is not CPython or full standard-library parity.
     - **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
     - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
     - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.
