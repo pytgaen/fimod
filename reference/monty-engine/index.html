@@ -13,6 +13,7 @@
         <link rel="canonical" href="https://pytgaen.github.io/fimod/reference/monty-engine/">
       
       
+      
         <link rel="prev" href="../exit-codes/">
       
       
@@ -23,7 +24,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.0.67">
+      <meta name="generator" content="zensical-0.1.0">
     
     
       
@@ -34,12 +35,12 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.4ae390e2.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.4ab2de0c.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.96d1a7e4.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.b60ce83d.min.css">
       
       
 
@@ -79,14 +80,11 @@
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
     <div data-md-component="skip">
-      
-        
-        <a href="#monty-engine-capabilities-security-model" class="md-skip">
-          Skip to content
-        </a>
-      
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
     </div>
     <div data-md-component="announce">
       
@@ -104,9 +102,10 @@
   <img src="../../assets/logo-favicon.jpg" alt="fimod - the data shaper CLI">
 
     </a>
-    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+    <label class="md-header__button md-icon" for="__drawer">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+      <span class="md-visually-hidden">Navigation</span>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -158,9 +157,10 @@
     
       
       
-        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+        <label class="md-header__button md-icon" for="__search">
           
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+          <span class="md-visually-hidden">Search</span>
         </label>
         <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
   <button type="button" class="md-search__button">
@@ -1493,6 +1493,7 @@
             <div class="md-content" data-md-component="content">
               
               <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
                 
                   
 
@@ -1502,7 +1503,7 @@
 
 <h1 id="monty-engine-capabilities-security-model">Monty Engine — Capabilities &amp; Security Model</h1>
 <p>Monty is a Python interpreter written in Rust from scratch by Pydantic. It is <strong>not</strong> CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.</p>
-<p>Fimod uses Monty (v1.0.0) as its execution engine for mold scripts.</p>
+<p>Fimod uses Monty (v1.5.0) as its execution engine for mold scripts.</p>
 <p><strong>Source</strong>: <a href="https://github.com/pydantic/monty">pydantic/monty</a> — <a href="https://pydantic.dev/articles/pydantic-monty">blog post</a></p>
 <h2 id="python-language-support">Python Language Support</h2>
 <h3 id="supported">Supported</h3>
@@ -1548,7 +1549,11 @@
 </tr>
 <tr>
 <td>Dataclasses</td>
-<td>Defined in molds; <code>eq</code> and <code>frozen</code> options supported</td>
+<td>Defined in molds; <code>eq</code> and <code>frozen</code> options, <code>field()</code> / <code>default_factory</code>, <code>__post_init__</code></td>
+</tr>
+<tr>
+<td>Match statements</td>
+<td><code>match</code> / <code>case</code> with literal, sequence, mapping, class and capture patterns</td>
 </tr>
 <tr>
 <td>Async/await</td>
@@ -1616,7 +1621,15 @@
 </tr>
 <tr>
 <td>Set/frozenset operators</td>
-<td><code>s1 | s2</code>, <code>s1 &amp; s2</code>, <code>s1 - s2</code>, <code>s1 ^ s2</code>; dict view operators</td>
+<td><code>s1 | s2</code>, <code>s1 &amp; s2</code>, <code>s1 - s2</code>, <code>s1 ^ s2</code>, subset/superset ordering (<code>&lt;</code>, <code>&lt;=</code>); dict view operators</td>
+</tr>
+<tr>
+<td>Slice assignment</td>
+<td><code>items[1:3] = [...]</code></td>
+</tr>
+<tr>
+<td>Complex numbers</td>
+<td><code>complex</code> type and <code>1j</code> literals</td>
 </tr>
 <tr>
 <td><code>str</code> comparison</td>
@@ -1641,10 +1654,6 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td>Match statements</td>
-<td>Coming soon</td>
-</tr>
 <tr>
 <td>Third-party packages</td>
 <td>Will probably never be supported</td>
@@ -1739,6 +1748,34 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 <tr>
 <td><code>time</code></td>
 <td>Clock reads require <code>allow_clock = true</code>; sleep is denied</td>
+</tr>
+<tr>
+<td><code>hashlib</code></td>
+<td>Hash digests (<code>sha256</code>, <code>md5</code>, <code>sha1</code>, …)</td>
+</tr>
+<tr>
+<td><code>csv</code></td>
+<td><code>csv.reader</code> over lists of strings; <code>csv.writer</code> needs an object with a <code>write()</code> method (<code>io</code> is not available). Fimod's <code>--input-format csv</code> / <code>--output-format csv</code> remain the usual path for CSV data</td>
+</tr>
+<tr>
+<td><code>tomllib</code></td>
+<td><code>tomllib.loads()</code>; <code>tomllib.load()</code> needs a file and is denied</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td><code>Decimal</code> arithmetic; convert with <code>str()</code> or <code>float()</code> before returning — <code>Decimal</code> results are not serialized to JSON</td>
+</tr>
+<tr>
+<td><code>bisect</code>, <code>fnmatch</code></td>
+<td>Sorted-list insertion points; shell-style name matching</td>
+</tr>
+<tr>
+<td><code>os.path</code></td>
+<td>Pure path manipulation (<code>join</code>, <code>basename</code>, <code>splitext</code>, …); filesystem queries follow the <code>pathlib</code> policy</td>
+</tr>
+<tr>
+<td><code>annotationlib</code></td>
+<td>Annotation introspection; <code>typing.get_type_hints()</code> is also available</td>
 </tr>
 <tr>
 <td><code>zip(..., strict=True)</code></td>
@@ -1842,6 +1879,11 @@ as decimal strings instead of being rounded through <code>f64</code>.</p>
 <td>Fails</td>
 <td><code>test_sandbox_no_socket</code></td>
 </tr>
+<tr>
+<td><code>import helpers</code> (local <code>helpers.py</code>)</td>
+<td><code>ModuleNotFoundError</code></td>
+<td><code>test_sandbox_local_module_import_is_not_served</code></td>
+</tr>
 </tbody>
 </table>
 <p>These tests serve as a <strong>regression guard</strong>: if Monty's behavior changes or fimod's OsCall handling is modified, these tests will catch it.</p>
@@ -1921,13 +1963,13 @@ UTC offsets when present, through both fimod serialization paths.</p>
 <li><strong>You can use <code>import datetime</code></strong> — <code>datetime.date</code>, <code>datetime.datetime</code>, <code>datetime.timedelta</code>, <code>datetime.timezone</code>. Datetime objects returned in the output are automatically serialized as ISO 8601 strings</li>
 <li><strong>You can use <code>import collections</code></strong> (Monty 0.0.20+) — <code>Counter</code>, <code>defaultdict</code>, <code>deque</code>, <code>namedtuple</code>. The <code>User*</code> classes are not implemented</li>
 <li><strong>You can use <code>import itertools</code></strong> (Monty 0.0.20+) — <code>count</code>, <code>repeat</code>, <code>pairwise</code>, <code>compress</code>, <code>islice</code>, <code>chain</code>, <code>cycle</code></li>
-<li><strong>You can use <code>import dataclasses</code></strong> (Monty 0.0.20+) — <code>@dataclass</code> and <code>is_dataclass</code> work on classes defined in the mold itself; <code>__post_init__</code> is not supported and is rejected rather than silently skipped</li>
+<li><strong>You can use <code>import dataclasses</code></strong> (Monty 0.0.20+) — <code>@dataclass</code>, <code>field()</code> (including <code>default_factory</code>), <code>__post_init__</code> and <code>is_dataclass</code> work on classes defined in the mold itself</li>
 <li><strong>You can define classes and use decorators</strong> — plain <code>class</code> with <code>__init__</code> and methods works, and so do function decorators</li>
 <li><strong>You can merge dicts with <code>a | b</code> or <code>{**a, **b}</code></strong></li>
 <li><strong>Keep <code>**_</code> in mold signatures</strong> — <code>def transform(data, args, **_):</code> is the recommended convention; fimod passes <code>args</code>, <code>env</code>, <code>headers</code>, and <code>pipeline</code> as keyword arguments, and <code>**_</code> absorbs anything the mold does not use</li>
 <li><strong>You cannot read files</strong> — <code>Path(...)</code> calls return <code>None</code> in fimod</li>
 <li><strong>You cannot access env vars via os unless sandbox policy allows them</strong> — denied <code>os.getenv(...)</code> calls return <code>None</code>; the <code>env</code> parameter with <code>--env PATTERN</code> is still the portable fimod-native path</li>
-<li><strong>You cannot import pip packages</strong> — no <code>requests</code>, <code>pandas</code>, etc.</li>
+<li><strong>You cannot import pip packages or local <code>.py</code> files</strong> — no <code>requests</code>, <code>pandas</code>, etc.; <code>import helpers</code> raises <code>ModuleNotFoundError</code> even when <code>helpers.py</code> sits next to the mold</li>
 <li><strong>Use <code>import x</code>, not <code>__import__("x")</code></strong> — fimod resolves external functions by name and rejects <code>__import__</code></li>
 <li><strong>All I/O goes through fimod</strong> — data in via <code>data</code> parameter, extra context via <code>args</code>, <code>env</code>, <code>headers</code>, <code>pipeline</code>, data out via <code>return</code></li>
 <li><strong>Use <code>import re</code> for new molds</strong> — <code>re_*</code> is deprecated and requires <code>FIMOD_LEGACY_BUILTINS=1</code>. Legacy compatibility retains dict results and the configurable <code>FIMOD_REGEX_BACKTRACK_LIMIT</code>; native regex has its own backtracking limit. See the <a href="../built-ins/#legacy-built-ins">migration guide</a>.</li>
@@ -1935,7 +1977,7 @@ UTC offsets when present, through both fimod serialization paths.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p>The <code>fimod monty repl</code> command opens an interactive Python session powered by Monty. Use it to experiment, prototype mold logic, and explore what Monty supports before writing a full transform. The REPL resolves the same sandbox policy as <code>fimod shape</code>, including <code>--sandbox-file &lt;path&gt;</code> and <code>--sandbox-file=""</code>. Mold-only helper families such as <code>re_*</code> and <code>dp_*</code> are not imported into the REPL.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>$ fimod monty repl
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v1.0.0 — fimod v0.11.0 (exit or Ctrl+D to quit)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Monty REPL v1.5.0 — fimod v0.12.1 (exit or Ctrl+D to quit)
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>&gt;&gt;&gt; data = {"name": "Alice", "age": 30}
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&gt;&gt;&gt; data["name"].upper()
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>'ALICE'
@@ -2011,10 +2053,10 @@ UTC offsets when present, through both fimod serialization paths.</p>
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"redirect":null,"search":"../../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.67a597eb.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d31f0ffa.min.js"></script>
       
     
   </body>
