@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v1.0.0) as its execution engine for mold scripts.
+Fimod uses Monty (v1.5.0) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -20,7 +20,8 @@ Fimod uses Monty (v1.0.0) as its execution engine for mold scripts.
 | Comprehensions | list, dict, set, generator expressions |
 | Type hints | Annotations preserved, used for type checking |
 | Classes and decorators | Classes with `__init__` and methods; function decorators |
-| Dataclasses | Defined in molds; `eq` and `frozen` options supported |
+| Dataclasses | Defined in molds; `eq` and `frozen` options, `field()` / `default_factory`, `__post_init__` |
+| Match statements | `match` / `case` with literal, sequence, mapping, class and capture patterns |
 | Async/await | `async def`, `await`, `asyncio.gather` |
 | Exceptions | `try`/`except`/`finally`/`raise`, tracebacks |
 | Walrus operator | `:=` assignment expressions |
@@ -37,7 +38,9 @@ Fimod uses Monty (v1.0.0) as its execution engine for mold scripts.
 | Nested subscript assignment | `data[0][1] = x`, `matrix[i][j] = v` |
 | Chain assignment | `a = b = 1` assigns the same value to multiple targets |
 | Named keyword args | `str.split(sep=",")`, `max(items, key=...)` |
-| Set/frozenset operators | `s1 | s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`; dict view operators |
+| Set/frozenset operators | `s1 | s2`, `s1 & s2`, `s1 - s2`, `s1 ^ s2`, subset/superset ordering (`<`, `<=`); dict view operators |
+| Slice assignment | `items[1:3] = [...]` |
+| Complex numbers | `complex` type and `1j` literals |
 | `str` comparison | `"a" < "b"`, `>=`, `<=` |
 | Context managers (`with`) | Supported, including `with open(...) as f:` when the host permits `open()` |
 
@@ -50,7 +53,6 @@ as decimal strings instead of being rounded through `f64`.
 
 | Feature | Status |
 |---------|--------|
-| Match statements | Coming soon |
 | Third-party packages | Will probably never be supported |
 | Full standard library | Only selected modules |
 
@@ -84,6 +86,13 @@ Standard Python builtins: `len`, `range`, `enumerate`, `zip`, `map`, `filter`, `
 | `copy` | `copy`, `deepcopy` |
 | `random` | Explicitly seeded generators; unseeded draws requesting host entropy are denied |
 | `time` | Clock reads require `allow_clock = true`; sleep is denied |
+| `hashlib` | Hash digests (`sha256`, `md5`, `sha1`, …) |
+| `csv` | `csv.reader` over lists of strings; `csv.writer` needs an object with a `write()` method (`io` is not available). Fimod's `--input-format csv` / `--output-format csv` remain the usual path for CSV data |
+| `tomllib` | `tomllib.loads()`; `tomllib.load()` needs a file and is denied |
+| `decimal` | `Decimal` arithmetic; convert with `str()` or `float()` before returning — `Decimal` results are not serialized to JSON |
+| `bisect`, `fnmatch` | Sorted-list insertion points; shell-style name matching |
+| `os.path` | Pure path manipulation (`join`, `basename`, `splitext`, …); filesystem queries follow the `pathlib` policy |
+| `annotationlib` | Annotation introspection; `typing.get_type_hints()` is also available |
 | `zip(..., strict=True)` | Supported since v0.0.12 — raises `ValueError` on length mismatch |
 
 ## External Function Mechanism
@@ -163,6 +172,7 @@ RunProgress::OsCall(call) => {
 | `open("/etc/passwd")` | `PermissionError` | `test_sandbox_open_is_denied` |
 | `import subprocess` | Fails | `test_sandbox_no_subprocess` |
 | `import socket` | Fails | `test_sandbox_no_socket` |
+| `import helpers` (local `helpers.py`) | `ModuleNotFoundError` | `test_sandbox_local_module_import_is_not_served` |
 
 These tests serve as a **regression guard**: if Monty's behavior changes or fimod's OsCall handling is modified, these tests will catch it.
 
@@ -226,13 +236,13 @@ For comparison: Docker startup is ~195ms, Pyodide ~2800ms.
 6. **You can use `import datetime`** — `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`. Datetime objects returned in the output are automatically serialized as ISO 8601 strings
 7. **You can use `import collections`** (Monty 0.0.20+) — `Counter`, `defaultdict`, `deque`, `namedtuple`. The `User*` classes are not implemented
 8. **You can use `import itertools`** (Monty 0.0.20+) — `count`, `repeat`, `pairwise`, `compress`, `islice`, `chain`, `cycle`
-9. **You can use `import dataclasses`** (Monty 0.0.20+) — `@dataclass` and `is_dataclass` work on classes defined in the mold itself; `__post_init__` is not supported and is rejected rather than silently skipped
+9. **You can use `import dataclasses`** (Monty 0.0.20+) — `@dataclass`, `field()` (including `default_factory`), `__post_init__` and `is_dataclass` work on classes defined in the mold itself
 10. **You can define classes and use decorators** — plain `class` with `__init__` and methods works, and so do function decorators
 11. **You can merge dicts with `a | b` or `{**a, **b}`**
 12. **Keep `**_` in mold signatures** — `def transform(data, args, **_):` is the recommended convention; fimod passes `args`, `env`, `headers`, and `pipeline` as keyword arguments, and `**_` absorbs anything the mold does not use
 13. **You cannot read files** — `Path(...)` calls return `None` in fimod
 14. **You cannot access env vars via os unless sandbox policy allows them** — denied `os.getenv(...)` calls return `None`; the `env` parameter with `--env PATTERN` is still the portable fimod-native path
-15. **You cannot import pip packages** — no `requests`, `pandas`, etc.
+15. **You cannot import pip packages or local `.py` files** — no `requests`, `pandas`, etc.; `import helpers` raises `ModuleNotFoundError` even when `helpers.py` sits next to the mold
 16. **Use `import x`, not `__import__("x")`** — fimod resolves external functions by name and rejects `__import__`
 17. **All I/O goes through fimod** — data in via `data` parameter, extra context via `args`, `env`, `headers`, `pipeline`, data out via `return`
 18. **Use `import re` for new molds** — `re_*` is deprecated and requires `FIMOD_LEGACY_BUILTINS=1`. Legacy compatibility retains dict results and the configurable `FIMOD_REGEX_BACKTRACK_LIMIT`; native regex has its own backtracking limit. See the [migration guide](built-ins.md#legacy-built-ins).
@@ -243,7 +253,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v1.0.0 — fimod v0.11.0 (exit or Ctrl+D to quit)
+Monty REPL v1.5.0 — fimod v0.12.1 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

@@ -99,7 +99,7 @@ fimod uses [Monty](https://github.com/pydantic/monty), a **Rust implementation o
     Molds run on Monty, not CPython. You get Python syntax, common built-ins, and selected standard-library modules, but not PyPI packages or full stdlib parity. Fimod adds Rust-powered helpers for regex, dot paths, iteration, hashing, templating, logging, and validation.
 
 !!! info "Pinned Monty runtime"
-    Fimod pins Monty 1.0.0 from crates.io. Its Python subset is not full CPython; upgrading the runtime may require adapting molds when supported behavior changes.
+    Fimod pins Monty 1.5.0 from crates.io. Its Python subset is not full CPython; upgrading the runtime may require adapting molds when supported behavior changes.
 
 Fimod exposes Rust-powered helpers for dot paths, iteration, hashing, templating, logging, and validation. Use `import re` for new regex molds. Deprecated `re_*`, `it_unique`, `it_unique_by`, and `it_flatten` require `FIMOD_LEGACY_BUILTINS=1`; activation is silent. See the [migration guide](../reference/built-ins.md#legacy-built-ins).
 

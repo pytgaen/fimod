@@ -531,7 +531,7 @@ fn test_version_flag() {
         .assert()
         .success()
         .stdout(format!(
-            "fimod {} {variant} (Monty 1.0.0)\n",
+            "fimod {} {variant} (Monty 1.5.0)\n",
             env!("CARGO_PKG_VERSION")
         ))
         .stderr("");

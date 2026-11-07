@@ -236,6 +236,8 @@ def transform(data, args, env, headers, **_):
 
 All Jinja2 features are available: loops, conditions, filters (`upper`, `join`, `tojson`, `default`, `selectattr`, …), macros, and `{% break %}`/`{% continue %}`. Dict key order is preserved.
 
+Rendering follows Jinja2 semantics: a list or dict printed directly renders like Python (`{{ ["x", 1] }}` → `['x', 1]`), so use `{{ value | tojson }}` when the output must be JSON (`{"a": 1, "b": [1, "x"]}`). `round` rounds half to even (`{{ 2.5 | round }}` → `2.0`), and division by zero is a render error that fails the mold.
+
 !!! tip
     Combine with `--output-format txt` (or `# fimod: output-format=txt` in mold defaults) so the rendered text is written as-is, without JSON quoting.
 

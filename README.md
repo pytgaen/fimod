@@ -458,7 +458,7 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune it with `fimod
 
 Design decisions, invariants, and architectural boundaries stay explicit — see [`notes/`](notes/) for the vision, architecture map, and design log. The discipline you see in the code (`cargo deny`, `#[must_use]`, layered serde/Monty boundary, conventional commits, ~500 tests + e2e fixtures) is intentional; the speed is the AI.
 
-- **Monty** is Pydantic's embedded Python runtime. Fimod pins Monty 1.0.0; it is a Python subset, not full CPython.
+- **Monty** is Pydantic's embedded Python runtime. Fimod pins Monty 1.5.0; it is a Python subset, not full CPython.
 - **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
 - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
 - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.

@@ -274,7 +274,7 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` follows the latest stable Rust toolchain; the separate MSRV check uses Rust `1.96`, required by Monty v1.0.0. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` follows the latest stable Rust toolchain; the separate MSRV check uses Rust `1.96`, required by Monty v1.5.0. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
@@ -314,3 +314,14 @@ and entropy are denied. Explicit random seeds need no host entropy. Duration
 configuration maps to the feed budget, retaining the chain's remaining-time
 calculation and the non-catchable host suspension quota. Rust MSRV is 1.96;
 local tooling remains on stable/latest, with a separate MSRV check.
+
+### Monty 1.5.0 host calls
+
+Monty 1.5 adds four `OsFunctionCall` variants. Fimod drives Monty iteratively, so
+it does not inherit the non-iterative runner's automatic answers and must handle
+them in `dispatch_os_call`. `Path.scan` joins the filesystem group returning
+`None`. `import` of a module Monty does not bundle (local `.py` files),
+`import_stubs` and `typing.get_type_hints` host hints return Monty's own
+`no_handler_result()`: `ModuleNotFoundError`, an error, and `{}` respectively.
+Serving local imports is deferred by decision; `Decimal` output is an
+uncommitted idea in `ROADMAP.md`.

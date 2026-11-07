@@ -61,7 +61,7 @@ fimod s -i users.json -e '[u for u in data if u["active"]]'
 | **Regex** | built-in | RE2 | `import re` | 🟢 `import re` (Monty) |
 | **Deep access** | `.a.b.c` | `.a.b.c` | manual | 🟢 `dp_get(data, "a.b.c")` |
 | **Group/sort/unique** | `group_by` | `group_by` | manual | 🟢 `it_group_by`, `it_sort_by`, `@dedup_by` |
-| **Hashing** | ❌ | ❌ | `import hashlib` | 🟢 `hs_sha256`, `hs_md5`, `hs_sha1` |
+| **Hashing** | ❌ | ❌ | `import hashlib` | 🟢 `import hashlib` (Monty), `hs_sha256`, `hs_md5`, `hs_sha1` |
 | **In-place edit** | sponge hack | `-i` | manual | 🟢 `--in-place` |
 | **Batch files** | loop | loop | loop | 🟢 `fimod s -i *.json -m t.py -o out/` |
 | **Chaining** | `|` (inside jq) | `|` (inside yq) | manual | 🟢 `-e expr1 -e expr2` |

@@ -74,7 +74,7 @@ fn parse_render_args(args: &[MontyObject], fn_name: &str) -> Result<(MontyObject
 /// Render a Jinja2 template string and return the rendered text.
 fn render(template_str: &str, ctx: MontyObject, auto_escape: bool) -> Result<MontyObject> {
     let ctx_json = monty_to_json(ctx)?;
-    let ctx_value = minijinja::Value::from_serialize(NativeNumbers(&ctx_json));
+    let ctx_value = minijinja::Value::from(minijinja::value::Serde(NativeNumbers(&ctx_json)));
 
     let env = get_or_compile_env(template_str, auto_escape)?;
     let tmpl = env.get_template("__inline__").unwrap();
@@ -99,8 +99,13 @@ fn get_or_compile_env(template_str: &str, auto_escape: bool) -> Result<Arc<Envir
     }
 
     let mut env = Environment::new();
-    env.set_trim_blocks(true);
-    env.set_lstrip_blocks(true);
+    env.set_syntax(
+        minijinja::syntax::SyntaxConfig::builder()
+            .trim_blocks(true)
+            .lstrip_blocks(true)
+            .build()
+            .expect("default delimiters are valid"),
+    );
     if auto_escape {
         env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
     }

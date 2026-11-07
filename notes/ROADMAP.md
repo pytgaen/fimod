@@ -262,6 +262,33 @@ Requirements for a `1.0-rc`:
 Release signing or attestations should only be added with an explicit trust
 model. Checksums remain necessary but should not be described as signatures.
 
+## Ideas not yet committed
+
+### `Decimal` values at the JSON output boundary
+
+- **Status:** idea, recorded 2026-11-06 during the Monty 1.5.0 upgrade analysis
+  (`notes/monty-v1.5.0.md`).
+- **Context:** Monty 1.4 added the `decimal` module, so molds can build
+  `Decimal` values (e.g. money computations). Fimod's output conversion does not
+  handle the `MontyNode::Decimal` variant and fails:
+
+  ```text
+  $ fimod s -i order.json -m total.py
+  Error: Failed to convert mold chain result to JSON
+      Cannot convert MontyObject variant to JSON: Decimal("20.00")
+  ```
+
+  Current workaround: `str(value)` or `float(value)` before returning.
+- **Target user:** data plumbers doing exact arithmetic (amounts, quantities)
+  who expect `Decimal` results to serialize like other scalars.
+- **Contract touched:** MontyObject → JSON conversion (`src/convert.rs`, both
+  `object_to_json` and the direct `ObjectSerialize` path) and per-format output.
+- **Open question:** exact JSON number versus string. A number must not be
+  rounded through `f64`; the integer bridge already serializes out-of-range
+  values as decimal strings, which is one precedent.
+- **Acceptance:** a mold returning `Decimal("19.90")` produces the agreed
+  representation in JSON, YAML, TOML and CSV output, without precision loss.
+
 ## Features not to prioritize
 
 Do not prioritize these without evidence from real workflows:

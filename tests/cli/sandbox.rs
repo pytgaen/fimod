@@ -153,6 +153,48 @@ def transform(data, args, env, headers, **_):
         .failure();
 }
 
+/// Monty 1.5 asks the host to resolve imports of local `.py` files; fimod does not
+/// serve them, even when the file sits in the working directory next to the mold.
+#[test]
+fn test_sandbox_local_module_import_is_not_served() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("helpers.py")
+        .write_str("print('HELPERS_EXECUTED')\nVALUE = 1\n")
+        .unwrap();
+    let mold = setup_mold(
+        &dir,
+        "local_import.py",
+        r#"
+import helpers
+
+def transform(data, **_):
+    return helpers.VALUE
+"#,
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .current_dir(dir.path())
+        .args(["s", "--no-input", "-m", &mold])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("HELPERS_EXECUTED").not())
+        .stderr(predicate::str::contains(
+            "ModuleNotFoundError: No module named 'helpers'",
+        ));
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .current_dir(dir.path())
+        .args(["monty", "repl", "--sandbox-file="])
+        .write_stdin("import helpers\n42\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("HELPERS_EXECUTED").not())
+        .stdout(predicate::str::contains("42"))
+        .stderr(predicate::str::contains(
+            "ModuleNotFoundError: No module named 'helpers'",
+        ));
+}
+
 // ── New sandbox policy tests (0.5.0) ────────────────────────────────────────
 
 /// Helper: write a TOML sandbox file and return its path.
