@@ -48,15 +48,20 @@ jobs:
         if: matrix.variant == 'fast'
         run: cargo zigbuild --profile release-fast --target x86_64-unknown-linux-musl ${{ matrix.features }}
 
+      # Same packaging as release.yml: Zopfli-level gzip through pigz -11.
+      - name: Install pigz
+        run: command -v pigz >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq pigz)
+
       - name: Package
         id: pkg
+        shell: bash
         run: |
           ASSET="${{ matrix.asset_prefix }}-${GITHUB_REF_NAME}-x86_64-unknown-linux-musl.tar.gz"
           PKG_DIR="package-${{ matrix.variant }}"
           mkdir -p "$PKG_DIR"
           cp "target/x86_64-unknown-linux-musl/${{ matrix.profile }}/${{ matrix.package_bin }}" \
             "$PKG_DIR/${{ matrix.package_bin }}"
-          tar czf "$ASSET" -C "$PKG_DIR" "${{ matrix.package_bin }}"
+          tar cf - -C "$PKG_DIR" "${{ matrix.package_bin }}" | pigz -11 > "$ASSET"
           echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
 
       - name: Compute SHA256
