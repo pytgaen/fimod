@@ -19,7 +19,7 @@ use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
 
 const MAX_DYNAMIC_PIPELINE_STEPS: usize = 1_024;
-static STREAM_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
+static OUTPUT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A single pipeline step reference — either a mold path/name or an inline expression.
 #[derive(Debug, Clone)]
@@ -232,6 +232,7 @@ pub fn execute_chain(
             .collect();
 
         let opts = engine::MoldOptions {
+            script_name: steps[i].source.script_name(),
             extra_args: ctx.extra_args,
             arg_specs: &steps[i].defaults.arg_specs,
             env_value: ctx.env_value,
@@ -1012,7 +1013,7 @@ fn write_json_array_reader_as_format<R: Read>(
     csv_opts: &CsvOptions,
 ) -> Result<()> {
     match output_path {
-        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+        Some(path) => write_output_file(path, |writer| match out_fmt {
             DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
             DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
             _ => unreachable!("guard restricts streamable JSON array output formats"),
@@ -1040,7 +1041,7 @@ fn write_ndjson_reader_as_json<R: BufRead>(
     out_fmt: DataFormat,
 ) -> Result<()> {
     match output_path {
-        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+        Some(path) => write_output_file(path, |writer| match out_fmt {
             DataFormat::Json => format::stream_ndjson_to_json(reader, writer),
             DataFormat::JsonCompact => format::stream_ndjson_to_json_compact(reader, writer),
             _ => unreachable!("guard restricts streaming NDJSON output formats"),
@@ -1064,20 +1065,44 @@ fn write_ndjson_reader_as_json<R: BufRead>(
     }
 }
 
-fn write_stream_output_file(
+/// Writes an output file without ever exposing a truncated target: data goes to
+/// a temporary sibling that replaces the target by rename once complete.
+///
+/// A symlinked target is resolved so the link survives. Targets that are not
+/// regular files (`/dev/null`, FIFOs, terminals) cannot be replaced and are
+/// written in place.
+fn write_output_file(
     output_path: &str,
     write: impl FnOnce(BufWriter<fs::File>) -> Result<()>,
 ) -> Result<()> {
-    let output = Path::new(output_path);
-    let existing_permissions = match fs::metadata(output) {
-        Ok(metadata) => Some(metadata.permissions()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+    let requested = Path::new(output_path);
+    let (output, existing_permissions) = match fs::metadata(requested) {
+        Ok(metadata) if !metadata.is_file() => {
+            let file = fs::OpenOptions::new()
+                .write(true)
+                .open(requested)
+                .with_context(|| format!("Failed to open output: {}", requested.display()))?;
+            return write(BufWriter::new(file));
+        }
+        Ok(metadata) => {
+            let output = if fs::symlink_metadata(requested)?.is_symlink() {
+                fs::canonicalize(requested).with_context(|| {
+                    format!("Failed to resolve output link: {}", requested.display())
+                })?
+            } else {
+                requested.to_path_buf()
+            };
+            (output, Some(metadata.permissions()))
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (requested.to_path_buf(), None),
         Err(error) => {
-            return Err(error)
-                .with_context(|| format!("Failed to inspect output file: {}", output.display()));
+            return Err(error).with_context(|| {
+                format!("Failed to inspect output file: {}", requested.display())
+            });
         }
     };
-    let temporary = stream_output_temp_path(output);
+    let output = output.as_path();
+    let temporary = output_temp_path(output);
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -1101,22 +1126,31 @@ fn write_stream_output_file(
         }
     }
 
-    install_stream_output(&temporary, output)
+    install_output_file(&temporary, output)
 }
 
-fn stream_output_temp_path(output: &Path) -> PathBuf {
+fn output_temp_path(output: &Path) -> PathBuf {
     let file_name = output
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("output");
-    let counter = STREAM_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let counter = OUTPUT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     output.with_file_name(format!(
-        ".{file_name}.fimod-stream-{}-{counter}.tmp",
+        ".{file_name}.fimod-{}-{counter}.tmp",
         std::process::id()
     ))
 }
 
-fn install_stream_output(temporary: &Path, output: &Path) -> Result<()> {
+/// Writes complete output bytes through [`write_output_file`].
+fn write_output_bytes(path: &str, bytes: &[u8]) -> Result<()> {
+    write_output_file(path, |mut writer| {
+        writer.write_all(bytes)?;
+        writer.flush()?;
+        Ok(())
+    })
+}
+
+fn install_output_file(temporary: &Path, output: &Path) -> Result<()> {
     if let Err(rename_error) = fs::rename(temporary, output) {
         let _ = fs::remove_file(temporary);
         return Err(rename_error)
@@ -1484,7 +1518,7 @@ pub fn output_result(
 fn write_output(output_path: Option<&str>, bytes: &[u8]) -> Result<()> {
     match output_path {
         Some(path) => {
-            fs::write(path, bytes)
+            write_output_bytes(path, bytes)
                 .with_context(|| format!("Failed to write output file: {path}"))?;
         }
         None => {
@@ -1581,7 +1615,7 @@ pub fn url_filename(url: &str) -> Result<String> {
 /// Used by the binary / raw output paths in `pipeline` and `cmd::shape`.
 pub fn write_bytes_to(actual_output: Option<&str>, bytes: &[u8]) -> Result<()> {
     match actual_output {
-        Some(path) => fs::write(path, bytes)
+        Some(path) => write_output_bytes(path, bytes)
             .with_context(|| format!("Failed to write binary output to: {path}")),
         None => write_stdout(bytes).context("Failed to write binary output to stdout"),
     }

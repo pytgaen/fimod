@@ -149,7 +149,12 @@ fn discover_test_cases(tests_dir: &str) -> Result<Vec<TestCase>> {
 }
 
 /// Run a single test case. Returns `Ok(None)` on pass, `Ok(Some(msg))` on failure.
-fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Result<Option<String>> {
+fn run_case(
+    script: &str,
+    script_name: &str,
+    case: &TestCase,
+    mold_base_dir: Option<&str>,
+) -> Result<Option<String>> {
     let input_str = case.input_path.to_str().unwrap_or("");
     let input_content = fs::read_to_string(&case.input_path)
         .with_context(|| format!("Cannot read: {}", case.input_path.display()))?;
@@ -191,6 +196,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         no_input: false,
     };
     let opts = engine::MoldOptions {
+        script_name,
         extra_args: &extra_args,
         arg_specs: &defaults.arg_specs,
         env_value: &env_value,
@@ -289,7 +295,7 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResul
     let mut failed = 0usize;
 
     for case in &cases {
-        match run_case(&script, case, base_dir.as_deref()) {
+        match run_case(&script, source.script_name(), case, base_dir.as_deref()) {
             Ok(None) => {
                 stdout_println!("  ✓ {}", case.name);
                 passed += 1;

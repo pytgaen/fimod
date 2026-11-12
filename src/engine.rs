@@ -13,7 +13,7 @@ use monty::{MontyRun, RunProgress};
 use monty_types::{
     CompileOptions, ExcType, ExtFunctionResult, MontyDate, MontyDateTime, MontyException,
     MontyObject, MontyUuid, NameLookupResult, OsFunctionCall, PrintWriter, PrintWriterCallback,
-    ResourceLimits, ResourceTracker,
+    ResourceLimits, ResourceTracker, StackFrame,
 };
 use serde_json::{Number, Value};
 
@@ -180,6 +180,8 @@ pub struct PipelineMetadata<'a> {
 
 /// Runtime options for mold execution.
 pub struct MoldOptions<'a> {
+    /// Filename shown in Python tracebacks: the mold reference as typed, or `<expr>`.
+    pub script_name: &'a str,
     pub extra_args: &'a [(String, String)],
     pub arg_specs: &'a [MoldArgSpec],
     pub env_value: &'a Value,
@@ -214,6 +216,9 @@ pub struct MoldOptions<'a> {
 /// Internal runtime context — extends MoldOptions with mutable shared state.
 struct MoldContext<'a> {
     objects: HostObjects,
+    script_name: &'a str,
+    /// Line of the `transform(...)` call appended to the mold script.
+    invocation_line: u32,
     debug: bool,
     msg_level: u8,
     legacy_builtins: bool,
@@ -984,16 +989,20 @@ pub(crate) fn execute_mold_with_chain_start(
         eprintln!("---");
     }
 
+    let invocation_line = u32::try_from(full_script.lines().count()).unwrap_or(u32::MAX);
     let runner = MontyRun::new(
         full_script,
-        "mold.py",
-        input_names,
+        opts.script_name,
+        input_names.clone(),
         CompileOptions::default(),
     )
+    .map_err(|err| script_compile_error(script, opts.script_name, input_names, err))
     .context("Failed to compile mold script")?;
 
     let ctx = MoldContext {
         objects,
+        script_name: opts.script_name,
+        invocation_line,
         debug: opts.debug,
         msg_level: opts.msg_level,
         legacy_builtins: std::env::var("FIMOD_LEGACY_BUILTINS").is_ok_and(|value| value == "1"),
@@ -1065,6 +1074,51 @@ impl SuspensionBudget {
     }
 }
 
+/// Reports a compile error against the mold script alone.
+///
+/// An unclosed bracket in the script swallows the appended `transform(...)`
+/// call, so the error compiling the full script points at that generated line.
+/// Compiling the script without it locates the error where the user wrote it.
+/// Runs only after a failure, so successful compiles pay nothing.
+fn script_compile_error(
+    script: &str,
+    script_name: &str,
+    input_names: Vec<String>,
+    err: MontyException,
+) -> MontyException {
+    MontyRun::new(
+        script.to_owned(),
+        script_name,
+        input_names,
+        CompileOptions::default(),
+    )
+    .err()
+    .unwrap_or(err)
+}
+
+impl MoldContext<'_> {
+    /// Translates a Monty exception without the traceback frame of the
+    /// `transform(...)` call fimod appends: users never wrote that line.
+    fn monty_error(&self, err: MontyException) -> anyhow::Error {
+        let is_invocation = |frame: &StackFrame| {
+            frame.filename == self.script_name && frame.start.line == self.invocation_line
+        };
+        let err = if err.traceback().iter().any(is_invocation) {
+            let frames = err
+                .traceback()
+                .iter()
+                .filter(|frame| !is_invocation(frame))
+                .cloned()
+                .collect();
+            MontyException::with_traceback(err.exc_type(), err.message().map(str::to_owned), frames)
+                .with_data(err.data().clone())
+        } else {
+            err
+        };
+        translate_monty_error(err, self.policy)
+    }
+}
+
 fn run_loop(
     runner: MontyRun,
     inputs: Vec<MontyObject>,
@@ -1087,7 +1141,7 @@ fn run_loop(
     let mut progress = runner
         .with_os_policy(sandbox_os_policy())
         .start(inputs, tracker, PrintWriter::Callback(&mut sp))
-        .map_err(|e| translate_monty_error(e, ctx.policy))?;
+        .map_err(|e| ctx.monty_error(e))?;
 
     let mut budget = SuspensionBudget::new(ctx.policy.max_suspensions);
     loop {
@@ -1125,7 +1179,7 @@ fn run_loop(
                 };
                 progress = call
                     .resume(result, PrintWriter::Callback(&mut sp))
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::OsCall(call) => {
                 progress = call
@@ -1141,7 +1195,7 @@ fn run_loop(
                         }
                         result.into()
                     })
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::NameLookup(lookup) => {
                 let name = lookup.name.clone();
@@ -1160,7 +1214,7 @@ fn run_loop(
                 };
                 progress = lookup
                     .resume(result, PrintWriter::Callback(&mut sp))
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::ResolveFutures(_) => {
                 anyhow::bail!("Async futures are not supported in fimod molds");

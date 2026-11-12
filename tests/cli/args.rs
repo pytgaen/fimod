@@ -648,6 +648,7 @@ fn test_error_registry_label_preserves_at_form() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("step 1/1 (@broken)"))
+        .stderr(predicate::str::contains("File \"@broken\", line 2"))
         .stderr(predicate::str::contains("KeyError"))
         // Resolved tmpdir path must NOT leak into the error label.
         .stderr(predicate::str::contains(resolved_path.as_str()).not());

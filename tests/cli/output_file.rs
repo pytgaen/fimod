@@ -487,3 +487,83 @@ def transform(data, args, env, headers, **_):
     let content = std::fs::read_to_string(&out_path).unwrap();
     assert!(content.contains("3"));
 }
+
+// ── Atomic output files ────────────────────────────────────────────────────────
+
+/// A write interrupted by the file-size limit (SIGXFSZ kills the process
+/// mid-write) must leave the previous target intact, never a truncated file.
+#[cfg(unix)]
+#[test]
+fn test_interrupted_output_write_leaves_target_intact() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("out.json");
+    for (args, data_flag) in [
+        (vec!["-o", target.to_str().unwrap()], "--no-input"),
+        (vec!["--in-place"], "-i"),
+    ] {
+        std::fs::write(&target, r#"{"keep": "me"}"#).unwrap();
+        let mut command = vec!["s".to_string(), data_flag.to_string()];
+        if data_flag == "-i" {
+            command.push(target.to_str().unwrap().to_string());
+        }
+        command.extend(["-e".into(), "['x' * 100 for _ in range(10000)]".into()]);
+        command.extend(args.iter().map(|arg| arg.to_string()));
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(r#"ulimit -f 4; exec "$0" "$@""#)
+            .arg(env!("CARGO_BIN_EXE_fimod"))
+            .args(&command)
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(
+            !status.success(),
+            "{command:?} must hit the file-size limit"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            r#"{"keep": "me"}"#,
+            "{command:?}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_in_place_through_symlink_keeps_link_and_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("target.json");
+    let link = dir.path().join("link.json");
+    std::fs::write(&target, r#"{"a": 1}"#).unwrap();
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+    std::os::unix::fs::symlink("target.json", &link).unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-e", "{'b': 2}", "--in-place", "-i"])
+        .arg(&link)
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(&link).unwrap().is_symlink());
+    let target_meta = std::fs::metadata(&target).unwrap();
+    assert_eq!(target_meta.permissions().mode() & 0o777, 0o640);
+    assert!(std::fs::read_to_string(&target)
+        .unwrap()
+        .contains(r#""b": 2"#));
+    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_output_to_special_file_is_written_in_place() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-e", "[1]", "-o", "/dev/null"])
+        .assert()
+        .success();
+}
