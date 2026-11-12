@@ -17,7 +17,7 @@
 
 ---
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~3.3 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~4.2 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
 
 Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
 

@@ -89,17 +89,74 @@ impl std::fmt::Display for SandboxLimitExceeded {
 
 impl std::error::Error for SandboxLimitExceeded {}
 
-/// Custom PrintWriterCallback that redirects Monty's print() output to stderr.
-/// Used in --debug mode so that Python print statements don't corrupt stdout.
-struct StderrPrint;
+/// Routes a mold's `print()` output.
+///
+/// In `--debug` mode stdout text goes to stderr so that it does not mix with
+/// the data. Otherwise it goes to stdout, where a closed pipe (`BrokenPipe`)
+/// is a normal end: writing stops and the mold keeps running. Any other write
+/// failure is raised to the mold. `print(..., file=sys.stderr)` always goes to
+/// stderr.
+struct MoldPrint {
+    debug: bool,
+    stdout_closed: bool,
+    /// First stdout write failure other than `BrokenPipe`.
+    write_error: Option<String>,
+}
 
-impl PrintWriterCallback for StderrPrint {
+impl MoldPrint {
+    fn new(debug: bool) -> Self {
+        Self {
+            debug,
+            stdout_closed: false,
+            write_error: None,
+        }
+    }
+
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), MontyException> {
+        use std::io::{self, Write};
+        if self.stdout_closed {
+            return Ok(());
+        }
+        match io::stdout().write_all(bytes) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
+                self.stdout_closed = true;
+                Ok(())
+            }
+            Err(error) => {
+                let message = format!("Failed to write to stdout: {error}");
+                self.write_error.get_or_insert_with(|| message.clone());
+                Err(MontyException::new(ExcType::OSError, Some(message)))
+            }
+        }
+    }
+}
+
+impl PrintWriterCallback for MoldPrint {
     fn stdout_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
+        if self.debug {
+            eprint!("{output}");
+            Ok(())
+        } else {
+            self.write_stdout(output.as_bytes())
+        }
+    }
+
+    fn stdout_push(&mut self, end: char) -> Result<(), MontyException> {
+        if self.debug {
+            eprint!("{end}");
+            Ok(())
+        } else {
+            self.write_stdout(end.encode_utf8(&mut [0; 4]).as_bytes())
+        }
+    }
+
+    fn stderr_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
         eprint!("{output}");
         Ok(())
     }
 
-    fn stdout_push(&mut self, end: char) -> Result<(), MontyException> {
+    fn stderr_push(&mut self, end: char) -> Result<(), MontyException> {
         eprint!("{end}");
         Ok(())
     }
@@ -1013,7 +1070,7 @@ fn run_loop(
     inputs: Vec<MontyObject>,
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
-    let mut sp = StderrPrint;
+    let mut sp = MoldPrint::new(ctx.debug);
     let mut limits = sandbox_resource_limits(ctx.policy);
     if let (Some(started_at), Some(max_duration)) = (ctx.chain_started_at, ctx.policy.max_duration)
     {
@@ -1029,15 +1086,7 @@ fn run_loop(
     let tracker = ResourceTracker::new(limits);
     let mut progress = runner
         .with_os_policy(sandbox_os_policy())
-        .start(
-            inputs,
-            tracker,
-            if ctx.debug {
-                PrintWriter::Callback(&mut sp)
-            } else {
-                PrintWriter::Stdout
-            },
-        )
+        .start(inputs, tracker, PrintWriter::Callback(&mut sp))
         .map_err(|e| translate_monty_error(e, ctx.policy))?;
 
     let mut budget = SuspensionBudget::new(ctx.policy.max_suspensions);
@@ -1046,7 +1095,13 @@ fn run_loop(
             budget.charge()?;
         }
         match progress {
-            RunProgress::Complete(result) => return Ok(result),
+            RunProgress::Complete(result) => {
+                // The mold may have swallowed the OSError raised by print().
+                if let Some(message) = sp.write_error.take() {
+                    anyhow::bail!(message);
+                }
+                return Ok(result);
+            }
             RunProgress::FunctionCall(call) => {
                 let function_name = call.function_name.clone();
                 let mut positional: Vec<_> = call.args.args().map(|v| v.to_owned()).collect();
@@ -1068,40 +1123,24 @@ fn run_loop(
                         anyhow::anyhow!("External function '{function_name}' failed: {e}")
                     })?
                 };
-                let mut sp2 = StderrPrint;
                 progress = call
-                    .resume(
-                        result,
-                        if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                    )
+                    .resume(result, PrintWriter::Callback(&mut sp))
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::OsCall(call) => {
-                let mut sp2 = StderrPrint;
                 progress = call
-                    .resume_with(
+                    .resume_with(PrintWriter::Callback(&mut sp), |function_call| {
+                        let function_name = function_call.to_string();
+                        let result = dispatch_os_call(function_call, ctx.policy);
                         if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                        |function_call| {
-                            let function_name = function_call.to_string();
-                            let result = dispatch_os_call(function_call, ctx.policy);
-                            if ctx.debug {
-                                eprintln!(
-                                    "[debug] OsCall {} -> {}",
-                                    function_name,
-                                    describe_os_result(&result)
-                                );
-                            }
-                            result.into()
-                        },
-                    )
+                            eprintln!(
+                                "[debug] OsCall {} -> {}",
+                                function_name,
+                                describe_os_result(&result)
+                            );
+                        }
+                        result.into()
+                    })
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::NameLookup(lookup) => {
@@ -1119,16 +1158,8 @@ fn run_loop(
                 } else {
                     NameLookupResult::Undefined
                 };
-                let mut sp2 = StderrPrint;
                 progress = lookup
-                    .resume(
-                        result,
-                        if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                    )
+                    .resume(result, PrintWriter::Callback(&mut sp))
                     .map_err(|e| translate_monty_error(e, ctx.policy))?;
             }
             RunProgress::ResolveFutures(_) => {

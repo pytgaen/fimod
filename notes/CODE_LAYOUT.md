@@ -90,6 +90,8 @@ src/
 ├── serde_compat.rs    NativeNumbers wrapper — preserves i64 vs f64 through non-serde_json
 │                      serializers (TOML, YAML lose this otherwise)
 ├── sandbox.rs         sandbox.toml schema and runtime enforcement (deny-list-driven OsCall)
+├── stdout.rs          `stdout_print!`/`stdout_println!` for command output: a closed stdout
+│                      (BrokenPipe) is a normal end, other write errors surface through main
 ├── paths.rs           XDG-style path helpers ($FIMOD_HOME, config dir, cache dir)
 ├── monty_args.rs      tiny helper: build the kwargs dict passed to transform(…)
 ├── test_runner.rs     `fimod mold test` — discovers *.input.* / *.expected.* pairs,

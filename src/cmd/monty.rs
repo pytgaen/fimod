@@ -1,11 +1,40 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 use monty::{MontyRepl, ReplProgress};
 use monty_types::{
     CompileOptions, ExcType, MontyException, MontyObject, NameLookupResult, PrintWriter,
-    ResourceTracker,
+    PrintWriterCallback, ResourceTracker,
 };
 
-use fimod::{sandbox::SandboxPolicy, MONTY_VERSION};
+use fimod::{sandbox::SandboxPolicy, stdout_println, MONTY_VERSION};
+
+/// REPL `print()` output. Stdout text goes through `fimod::stdout`, so a closed
+/// stdout ends the writing without failing; stderr text stays on stderr (the
+/// trait routes it to stdout by default).
+struct ReplPrint;
+
+impl PrintWriterCallback for ReplPrint {
+    fn stdout_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
+        fimod::stdout::write_bytes(output.as_bytes());
+        Ok(())
+    }
+
+    fn stdout_push(&mut self, end: char) -> Result<(), MontyException> {
+        fimod::stdout::write_bytes(end.encode_utf8(&mut [0; 4]).as_bytes());
+        Ok(())
+    }
+
+    fn stderr_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
+        eprint!("{output}");
+        Ok(())
+    }
+
+    fn stderr_push(&mut self, end: char) -> Result<(), MontyException> {
+        eprint!("{end}");
+        Ok(())
+    }
+}
 
 type FimodRepl = MontyRepl;
 type ReplRunResult = Result<(FimodRepl, MontyObject), Box<(FimodRepl, String)>>;
@@ -101,7 +130,7 @@ fn repl_feed(repl: &mut Option<FimodRepl>, snippet: &str, policy: &SandboxPolicy
     match execute_repl_snippet(active_repl, snippet, policy) {
         Ok((returned_repl, output)) => {
             if output != MontyObject::none() {
-                println!("{output}");
+                stdout_println!("{output}");
             }
             *repl = Some(returned_repl);
         }
@@ -114,7 +143,8 @@ fn repl_feed(repl: &mut Option<FimodRepl>, snippet: &str, policy: &SandboxPolicy
 }
 
 fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) -> ReplRunResult {
-    let mut progress = match repl.feed_start(snippet, vec![], PrintWriter::Stdout) {
+    let mut print = ReplPrint;
+    let mut progress = match repl.feed_start(snippet, vec![], PrintWriter::Callback(&mut print)) {
         Ok(progress) => progress,
         Err(err) => return Err(Box::new((err.repl, format_repl_error(err.error, policy)))),
     };
@@ -137,14 +167,17 @@ fn execute_repl_snippet(repl: FimodRepl, snippet: &str, policy: &SandboxPolicy) 
             ReplProgress::Complete { repl, value } => return Ok((repl, value)),
             ReplProgress::OsCall(call) => {
                 progress = call
-                    .resume_with(PrintWriter::Stdout, |function_call| {
+                    .resume_with(PrintWriter::Callback(&mut print), |function_call| {
                         fimod::engine::sandbox_os_call_result(function_call, policy)
                     })
                     .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
             }
             ReplProgress::NameLookup(lookup) => {
                 progress = lookup
-                    .resume(NameLookupResult::Undefined, PrintWriter::Stdout)
+                    .resume(
+                        NameLookupResult::Undefined,
+                        PrintWriter::Callback(&mut print),
+                    )
                     .map_err(|err| Box::new((err.repl, format_repl_error(err.error, policy))))?;
             }
             ReplProgress::FunctionCall(call) => {

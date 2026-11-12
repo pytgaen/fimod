@@ -82,6 +82,152 @@ fn test_inferred_output_does_not_hide_nonfinite_float_errors() {
     assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
 }
 
+#[test]
+fn test_default_json_output_is_identical_on_direct_and_value_paths() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (expression, expected) in [
+        (
+            "[{'id': 1, 'name': 'alice'}, {'id': 2, 'name': 'bob'}]",
+            "[\n  {\n    \"id\": 1,\n    \"name\": \"alice\"\n  },\n  {\n    \"id\": 2,\n    \"name\": \"bob\"\n  }\n]\n",
+        ),
+        (
+            "{'b': [1, [2, {'c': None}]], 'a': {'x': []}}",
+            "{\n  \"b\": [\n    1,\n    [\n      2,\n      {\n        \"c\": null\n      }\n    ]\n  ],\n  \"a\": {\n    \"x\": []\n  }\n}\n",
+        ),
+        ("[]", "[]\n"),
+        ("{}", "{}\n"),
+        ("'h\u{e9}llo \u{4e16}\u{754c}'", "\"h\u{e9}llo \u{4e16}\u{754c}\"\n"),
+        ("'say \"hi\"\\nbye'", "\"say \\\"hi\\\"\\nbye\"\n"),
+        ("0.5", "0.5\n"),
+        ("1.0", "1.0\n"),
+        ("-0.0", "-0.0\n"),
+        ("18446744073709551615", "18446744073709551615\n"),
+        ("True", "true\n"),
+        ("False", "false\n"),
+        ("None", "null\n"),
+    ] {
+        let plain = setup_mold(
+            &dir,
+            "plain.py",
+            &format!("def transform(data, **_):\n    return {expression}\n"),
+        );
+        let overridden = setup_mold(
+            &dir,
+            "override.py",
+            &format!(
+                "def transform(data, **_):\n    set_output_format('json')\n    return {expression}\n"
+            ),
+        );
+        let target = dir.path().join("out.json");
+        for debug in [false, true] {
+            for mode in ["stdout", "explicit", "file", "override"] {
+                let mold = if mode == "override" { &overridden } else { &plain };
+                let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+                cmd.args(["s", "--no-input", "-m", mold]);
+                match mode {
+                    "explicit" => {
+                        cmd.args(["--output-format", "json"]);
+                    }
+                    "file" => {
+                        let _ = std::fs::remove_file(&target);
+                        cmd.arg("-o").arg(&target);
+                    }
+                    _ => {}
+                }
+                if debug {
+                    cmd.arg("--debug");
+                }
+                if mode == "file" {
+                    cmd.assert().success();
+                    assert_eq!(
+                        std::fs::read_to_string(&target).unwrap(),
+                        expected,
+                        "{expression} ({mode}, debug={debug})"
+                    );
+                } else {
+                    cmd.assert().success().stdout(expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_default_json_output_keeps_value_path_for_non_native_results() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (expression, expected) in [
+        ("(1, 'a')", "[\n  1,\n  \"a\"\n]\n"),
+        ("date(2026, 9, 9)", "\"2026-09-09\"\n"),
+        ("{1: 'first', '1': 'last'}", "{\n  \"1\": \"last\"\n}\n"),
+        ("18446744073709551616", "\"18446744073709551616\"\n"),
+    ] {
+        let mold = setup_mold(
+            &dir,
+            "native.py",
+            &format!(
+                "from datetime import date\ndef transform(data, **_):\n    return {expression}\n"
+            ),
+        );
+        for debug in [false, true] {
+            let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+            cmd.args(["s", "--no-input", "-m", &mold]);
+            if debug {
+                cmd.arg("--debug");
+            }
+            cmd.assert().success().stdout(expected);
+        }
+    }
+}
+
+#[test]
+fn test_default_json_output_errors_leave_target_untouched() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("out.json");
+    std::fs::write(&target, "keep me").unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-e", "float('nan')", "-o"])
+        .arg(&target)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Cannot represent float"));
+    assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
+}
+
+#[test]
+fn test_default_json_output_write_errors_keep_value_path_messages() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("missing").join("out.json");
+    for debug in [false, true] {
+        let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+        cmd.args(["s", "--no-input", "-e", "[1]", "-o"])
+            .arg(&target);
+        if debug {
+            cmd.arg("--debug");
+        }
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Failed to write output file"));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_default_json_output_to_full_stdout_keeps_value_path_message() {
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fimod"))
+        .args(["s", "--no-input", "-e", "[1]"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(full))
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .unwrap();
+    assert_ne!(output.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Failed to write output to stdout"));
+}
+
 // ── set_output_file() basic behaviour ──────────────────────────────────────────
 
 /// set_output_file() writes output to the specified file instead of stdout.

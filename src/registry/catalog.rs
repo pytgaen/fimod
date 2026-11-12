@@ -3,6 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+
+use crate::stdout_println;
 use serde::{Deserialize, Serialize};
 
 use super::config::{load_config, Source, SourceType};
@@ -279,9 +281,9 @@ pub fn cache_clear(name: Option<&str>) -> Result<()> {
     if base.exists() {
         fs::remove_dir_all(&base)
             .with_context(|| format!("Failed to remove cache directory: {}", base.display()))?;
-        println!("Cache cleared: {}", base.display());
+        stdout_println!("Cache cleared: {}", base.display());
     } else {
-        println!("Cache directory does not exist: {}", base.display());
+        stdout_println!("Cache directory does not exist: {}", base.display());
     }
     Ok(())
 }
@@ -289,10 +291,10 @@ pub fn cache_clear(name: Option<&str>) -> Result<()> {
 /// Show cache directory location and disk usage.
 pub fn cache_info() -> Result<()> {
     let base = crate::paths::cache_dir();
-    println!("Cache directory: {}", base.display());
+    stdout_println!("Cache directory: {}", base.display());
 
     if !base.exists() {
-        println!("  (empty — no cached data)");
+        stdout_println!("  (empty — no cached data)");
         return Ok(());
     }
 
@@ -352,9 +354,9 @@ pub fn cache_info() -> Result<()> {
         format!("{:.1} MB", total_size as f64 / (1024.0 * 1024.0))
     };
 
-    println!("  Catalogs: {catalog_count}");
-    println!("  Molds:    {mold_count}");
-    println!("  Size:     {size_str}");
+    stdout_println!("  Catalogs: {catalog_count}");
+    stdout_println!("  Molds:    {mold_count}");
+    stdout_println!("  Size:     {size_str}");
 
     Ok(())
 }
@@ -558,16 +560,16 @@ pub fn build_catalog(registry_name: Option<&str>, direct_path: Option<&str>) -> 
     fs::write(&catalog_path, &content)
         .with_context(|| format!("Failed to write catalog: {}", catalog_path.display()))?;
 
-    println!("Scanned {} molds:", molds.len());
+    stdout_println!("Scanned {} molds:", molds.len());
     for (name, desc, rel) in &molds {
-        println!(
+        stdout_println!(
             "  {:<20} \"{}\"  [{}]",
             name,
             desc.as_deref().unwrap_or("(no description)"),
             rel
         );
     }
-    println!("Wrote {}", catalog_path.display());
+    stdout_println!("Wrote {}", catalog_path.display());
 
     Ok(())
 }

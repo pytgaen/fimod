@@ -8,6 +8,8 @@ use crate::format::{self, DataFormat};
 use crate::mold::MoldSource;
 use anyhow::{bail, Context, Result};
 
+use crate::stdout_println;
+
 /// Metadata from an optional `{case}.run-test.toml` alongside input/expected files.
 ///
 /// ```toml
@@ -275,7 +277,7 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResul
     let cases = discover_test_cases(tests_dir)?;
 
     if cases.is_empty() {
-        println!("No test cases found in {tests_dir}");
+        stdout_println!("No test cases found in {tests_dir}");
         return Ok(crate::pipeline::CliResult::Done);
     }
 
@@ -289,30 +291,30 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResul
     for case in &cases {
         match run_case(&script, case, base_dir.as_deref()) {
             Ok(None) => {
-                println!("  ✓ {}", case.name);
+                stdout_println!("  ✓ {}", case.name);
                 passed += 1;
             }
             Ok(Some(msg)) => {
-                println!("  ✗ {} — {msg}", case.name);
+                stdout_println!("  ✗ {} — {msg}", case.name);
                 failed += 1;
             }
             Err(e) => {
-                println!("  ✗ {} — error: {:#}", case.name, e);
+                stdout_println!("  ✗ {} — error: {:#}", case.name, e);
                 failed += 1;
             }
         }
     }
 
-    println!();
+    stdout_println!();
     if failed == 0 {
-        println!(
+        stdout_println!(
             "{} test{} passed",
             passed,
             if passed == 1 { "" } else { "s" }
         );
         Ok(crate::pipeline::CliResult::Done)
     } else {
-        println!(
+        stdout_println!(
             "{} test{}, {} passed, {} failed",
             cases.len(),
             if cases.len() == 1 { "" } else { "s" },

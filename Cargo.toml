@@ -56,7 +56,7 @@ notify = { version = "8", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
-opt-level = "z"  # Optimize for size.
+opt-level = "s"  # Optimize for size; faster than "z" for a slightly larger binary (see notes/perf-baseline.md).
 lto = true
 codegen-units = 1
 panic = "abort"

@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+
+use crate::stdout_println;
 use clap::ValueEnum;
 
 use super::catalog::{
@@ -21,7 +23,7 @@ fn print_registry_molds(name: &str, source: &Source, prio_label: &str) -> Result
     } else {
         format!(" {prio_label}")
     };
-    println!("{} [{}]{}", name, source.kind, marker);
+    stdout_println!("{} [{}]{}", name, source.kind, marker);
 
     match &source.kind {
         SourceType::Local => {
@@ -31,10 +33,10 @@ fn print_registry_molds(name: &str, source: &Source, prio_label: &str) -> Result
                 .ok_or_else(|| anyhow::anyhow!("Local registry '{name}' has no path configured"))?;
             let molds = scan_local_molds(Path::new(base));
             if molds.is_empty() {
-                println!("  (no molds found)");
+                stdout_println!("  (no molds found)");
             } else {
                 for (mold_name, desc, _rel) in &molds {
-                    println!("  {:<20} {}", mold_name, desc.as_deref().unwrap_or(""));
+                    stdout_println!("  {:<20} {}", mold_name, desc.as_deref().unwrap_or(""));
                 }
             }
         }
@@ -47,10 +49,10 @@ fn print_registry_molds(name: &str, source: &Source, prio_label: &str) -> Result
                 )
             })?;
             if catalog.molds.is_empty() {
-                println!("  (no molds in catalog)");
+                stdout_println!("  (no molds in catalog)");
             } else {
                 for (mold_name, entry) in &catalog.molds {
-                    println!(
+                    stdout_println!(
                         "  {:<20} {}",
                         mold_name,
                         entry.description.as_deref().unwrap_or("")
@@ -213,19 +215,19 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                     })
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&arr)?);
+            stdout_println!("{}", serde_json::to_string_pretty(&arr)?);
         }
         MoldListFormat::Lines => {
             let molds = collect_all_molds(&cfg, registry_name)?;
             for (reg, _prio, name, desc) in molds {
-                println!("@{reg}/{name}\t{}", desc.unwrap_or_default());
+                stdout_println!("@{reg}/{name}\t{}", desc.unwrap_or_default());
             }
         }
         MoldListFormat::Text => {
             // text format — existing human-readable output
             let env_entries = parse_env_registries();
             if cfg.sources.is_empty() && env_entries.is_empty() {
-                println!("No registries configured. Use 'fimod registry add' to add one.");
+                stdout_println!("No registries configured. Use 'fimod registry add' to add one.");
                 return Ok(());
             }
             if let Some(name) = registry_name {
@@ -240,7 +242,7 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                 let mut first = true;
                 for (name, source, _) in ordered_sources(&cfg) {
                     if !first {
-                        println!();
+                        stdout_println!();
                     }
                     first = false;
                     let label = priority_label(&cfg, name);
@@ -249,7 +251,7 @@ pub fn list_molds(registry_name: Option<&str>, output_format: MoldListFormat) ->
                 let mut anon_index = 0;
                 for entry in &env_entries {
                     if !first {
-                        println!();
+                        stdout_println!();
                     }
                     first = false;
                     let base_name = env_display_name(entry, &mut anon_index);
@@ -460,8 +462,8 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
         format!(" {}", m.prio_label)
     };
     match &m.reg_name {
-        Some(name) => println!("{mold_name}  [{name}]{marker}"),
-        None => println!("{mold_name}"),
+        Some(name) => stdout_println!("{mold_name}  [{name}]{marker}"),
+        None => stdout_println!("{mold_name}"),
     }
     match &m.detail {
         MoldDetail::Local {
@@ -470,51 +472,51 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
         } => {
             if defaults.docs.is_none() {
                 if let Some(desc) = effective_description(defaults) {
-                    println!("  Description:    {desc}");
+                    stdout_println!("  Description:    {desc}");
                 }
             }
             if let Some(docs) = &defaults.docs {
                 for line in docs.lines() {
-                    println!("  {line}");
+                    stdout_println!("  {line}");
                 }
-                println!();
+                stdout_println!();
             }
-            println!("  Source:         {}", script_path.display());
-            println!();
+            stdout_println!("  Source:         {}", script_path.display());
+            stdout_println!();
             if let Some(fmt) = &defaults.input_format {
-                println!("  Input format:   {fmt}");
+                stdout_println!("  Input format:   {fmt}");
             }
             if let Some(fmt) = &defaults.output_format {
-                println!("  Output format:  {fmt}");
+                stdout_println!("  Output format:  {fmt}");
             }
             let opts = format_defaults_options(defaults);
             if !opts.is_empty() {
-                println!("  Options:        {}", opts.join(", "));
+                stdout_println!("  Options:        {}", opts.join(", "));
             }
             if !defaults.args.is_empty() {
-                println!("  Args:");
+                stdout_println!("  Args:");
                 for (name, desc) in &defaults.args {
                     let arg_name = local_arg_declaration(defaults, name);
                     match desc {
-                        Some(d) => println!("    {arg_name:<16}  {d}"),
-                        None => println!("    {arg_name}"),
+                        Some(d) => stdout_println!("    {arg_name:<16}  {d}"),
+                        None => stdout_println!("    {arg_name}"),
                     }
                 }
             }
             if !defaults.envs.is_empty() {
-                println!("  Environment:");
+                stdout_println!("  Environment:");
                 for (name, desc) in &defaults.envs {
                     match desc {
-                        Some(d) => println!("    {name:<16}  {d}"),
-                        None => println!("    {name}"),
+                        Some(d) => stdout_println!("    {name:<16}  {d}"),
+                        None => stdout_println!("    {name}"),
                     }
                 }
             }
             if let Some(parent) = script_path.parent() {
                 let readme = parent.join("README.md");
                 if readme.exists() {
-                    println!();
-                    println!("  Readme:         {}", readme.display());
+                    stdout_println!();
+                    stdout_println!("  Readme:         {}", readme.display());
                 }
             }
         }
@@ -529,47 +531,47 @@ fn print_mold_match(mold_name: &str, m: &MoldMatch) {
             });
             if let Some(docs) = &remote_docs {
                 for line in docs.lines() {
-                    println!("  {line}");
+                    stdout_println!("  {line}");
                 }
-                println!();
+                stdout_println!();
             } else if let Some(desc) = &entry.description {
-                println!("  Description:    {desc}");
+                stdout_println!("  Description:    {desc}");
             }
             if let Some(fmt) = &entry.input_format {
-                println!("  Input format:   {fmt}");
+                stdout_println!("  Input format:   {fmt}");
             }
             if let Some(fmt) = &entry.output_format {
-                println!("  Output format:  {fmt}");
+                stdout_println!("  Output format:  {fmt}");
             }
             if !entry.options.is_empty() {
-                println!("  Options:        {}", entry.options.join(", "));
+                stdout_println!("  Options:        {}", entry.options.join(", "));
             }
             if !entry.args.is_empty() {
-                println!("  Args:");
+                stdout_println!("  Args:");
                 for (name, desc) in &entry.args {
                     let arg_name = remote_arg_declaration(entry, name);
                     if desc.is_empty() {
-                        println!("    {arg_name}");
+                        stdout_println!("    {arg_name}");
                     } else {
-                        println!("    {arg_name:<16}  {desc}");
+                        stdout_println!("    {arg_name:<16}  {desc}");
                     }
                 }
             }
             if !entry.envs.is_empty() {
-                println!("  Environment:");
+                stdout_println!("  Environment:");
                 for (name, desc) in &entry.envs {
                     if desc.is_empty() {
-                        println!("    {name}");
+                        stdout_println!("    {name}");
                     } else {
-                        println!("    {name:<16}  {desc}");
+                        stdout_println!("    {name:<16}  {desc}");
                     }
                 }
             }
-            println!();
-            println!("  Registry:       {registry_url}");
+            stdout_println!();
+            stdout_println!("  Registry:       {registry_url}");
             if let Some(readme) = &entry.readme {
                 let base = registry_url.trim_end_matches('/');
-                println!("  Readme:         {base}/{readme}");
+                stdout_println!("  Readme:         {base}/{readme}");
             }
         }
     }
@@ -607,7 +609,7 @@ pub fn show_mold(
     match output_format {
         MoldShowFormat::Json => {
             let json = mold_match_to_json(mold_name, m);
-            println!("{}", serde_json::to_string_pretty(&json)?);
+            stdout_println!("{}", serde_json::to_string_pretty(&json)?);
         }
         MoldShowFormat::Text => {
             // When a specific registry was requested (or only one match), show it directly
@@ -623,8 +625,8 @@ pub fn show_mold(
                         )
                     })
                     .collect();
-                println!();
-                println!("  See also:       {}", others.join(", "));
+                stdout_println!();
+                stdout_println!("  See also:       {}", others.join(", "));
             }
         }
     }
@@ -672,7 +674,7 @@ pub fn show_mold_by_path(
     match output_format {
         MoldShowFormat::Json => {
             let json = mold_match_to_json(&mold_name, &m);
-            println!("{}", serde_json::to_string_pretty(&json)?);
+            stdout_println!("{}", serde_json::to_string_pretty(&json)?);
         }
         MoldShowFormat::Text => {
             print_mold_match(&mold_name, &m);

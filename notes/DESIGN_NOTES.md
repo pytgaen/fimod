@@ -67,12 +67,17 @@ historical type-only ordering. Python-specific values, key collisions and
 unsupported values still follow the existing JSON normalization/error path.
 
 For single-input and batch CLI execution, the output serializer is chosen
-after the mold's final format and destination overrides. Compact JSON, NDJSON,
-Lines and TXT can use direct serialization even when the format comes from an
-extension, input fallback or `set_output_format()`. Newly eligible paths retain
-`Value` normalization for non-native JSON values. The library, `--check` and
-`--debug` retain their materialized `Value` behavior. Output remains buffered;
-this is separate from the exact-identity streaming conversions above.
+after the mold's final format and destination overrides. Indented JSON (the
+default), compact JSON, NDJSON, Lines and TXT can use direct serialization even
+when the format comes from an extension, input fallback or `set_output_format()`.
+Indented JSON joins the direct serializers but always requires a JSON-native
+value (`convert::is_json_native`), including when the format was requested
+explicitly, so it is never part of the explicitly-requested set. The direct
+serializer borrows string dictionary keys instead of copying them. Newly
+eligible paths retain `Value` normalization for non-native JSON values. The
+library, `--check` and `--debug` retain their materialized `Value` behavior.
+Output remains buffered; this is separate from the exact-identity streaming
+conversions above.
 
 ### Batch mode (multiple inputs)
 
@@ -234,7 +239,11 @@ sandbox policy as `fimod s`, including `--sandbox-file <path>` and
 
 ### Debug on stderr
 
-`--debug` prints to stderr with a `[debug]` prefix. In debug mode, Python's `print()` also goes to stderr via `StderrPrint` (implements `PrintWriter`). This never corrupts stdout.
+`--debug` prints to stderr with a `[debug]` prefix. In debug mode, Python's `print()` also goes to stderr via `MoldPrint` (implements `PrintWriterCallback`). This never corrupts stdout.
+
+### Closed stdout is a normal end
+
+When the reader of stdout closes the pipe early (`fimod ... | head -1`), fimod stops writing quietly and exits with the status it would otherwise have had (0, or the `set_exit()` code). Only `io::ErrorKind::BrokenPipe` is treated this way; any other stdout write failure (for example `/dev/full`) is an error with exit status 1. It is enforced in three places: `write_stdout` in `src/pipeline.rs` (used by `output_result` and the stdout arm of `write_bytes_to`), the streaming identity conversions (`ClosedStdoutTracker` and `end_on_closed_stdout` in the same file, which stop reading the input), and `MoldPrint` in `src/engine.rs`, which replaces `PrintWriter::Stdout` so that a mold's `print()` stops writing after `BrokenPipe` while the mold runs to completion. A streaming failure counts as a normal end only when it is the failed write itself: the writer is kept alive until the result has been inspected, and the error chain must contain the recorded write failure. A `print()` that hit another stdout write error makes the run fail at the end even if the mold caught the exception. File outputs are unchanged. Every other command (listing, registry, setup, the `mold test` report, the REPL) writes through `src/stdout.rs`: the `stdout_print!` and `stdout_println!` macros (usable from the library and the binary) call a write function that remembers `BrokenPipe` and skips later writes, and remembers the first other error, also skipping later writes. The state is process-wide because the call sites are deep in listing code with no writer to thread through. `main` calls `stdout::take_write_error()` and, if the command would exit with status 0 (`Done` or `Exit(0)`), fails with `Failed to write output to stdout`; a non-zero `Exit` code, such as the `mold test` exit code 1, is kept and the message `Failed to write output to stdout: <cause>` is printed on stderr; a command that returns an error keeps its own. Because `main` flushes stdout and reports the remembered error after every command, a `fimod shape` run with `-o out.json` whose mold did `print("x", end="")` on a full stdout now exits 1 instead of losing the `x` silently. The REPL uses a `PrintWriterCallback` (`ReplPrint` in `src/cmd/monty.rs`) that overrides `stderr_write` and `stderr_push` to keep stderr text on stderr, the `confirm` prompt uses the `stdout::Stdout` writer adapter, and `setup completions` maps `BrokenPipe` to success itself. Do not use `println!` or `print!` in command output code.
 
 ### Shell completions
 
@@ -307,6 +316,18 @@ children without allocating a JSON tree. `engine.rs` uses the same representatio
 access for host-instance UUIDs, and ordering helpers for exact scalar categories.
 Both Monty dependencies are pinned exactly because these accessors are explicitly
 outside upstream's API stability guarantee.
+
+`json_to_monty` and `json_into_monty` also write through `unstable`: they count
+the nodes of the JSON value, allocate one `MontyGraph::with_capacity` of exactly
+that size (the sandbox charges allocated capacity, so no doubling slack), push
+children before their container, and wrap the arena with
+`unstable::object_from_graph`. This replaces one small arena per value merged
+level by level. A test-only reference built on the public constructors
+(`MontyObject::string/list/dict/...`) guards equivalence across Monty upgrades:
+the corpus, generated-document, arena-shape and round-trip tests in `convert.rs`
+compare both implementations by `==`, `py_repr()` and node-by-node arena
+equality (which tells `Int` from `BigInt` and compares floats bit for bit); the
+arena-shape test also checks that node count and capacity equal `count_nodes`.
 
 All mold and REPL entry points install OsPolicy with CallHost for clocks, sleep
 and initial random entropy. Clock access remains governed by allow_clock; sleep

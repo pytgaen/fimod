@@ -19,10 +19,15 @@ pub fn print_completion_script(shell: Option<CompletionShell>) -> Result<()> {
     let completer = shells
         .completer(shell_name)
         .with_context(|| format!("unsupported shell: {shell_name}"))?;
-    completer
-        .write_registration("COMPLETE", "fimod", "fimod", "fimod", &mut io::stdout())
-        .context("failed to write completion script")?;
-    Ok(())
+    let mut stdout = io::stdout();
+    let written = completer
+        .write_registration("COMPLETE", "fimod", "fimod", "fimod", &mut stdout)
+        .and_then(|()| io::Write::flush(&mut stdout));
+    match written {
+        // A closed stdout is a normal end.
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other.context("failed to write completion script"),
+    }
 }
 
 fn detect_shell() -> Result<CompletionShell> {

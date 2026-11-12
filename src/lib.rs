@@ -19,6 +19,7 @@ pub mod regex;
 pub mod registry;
 pub mod sandbox;
 pub mod serde_compat;
+pub mod stdout;
 pub mod template;
 pub mod test_runner;
 
