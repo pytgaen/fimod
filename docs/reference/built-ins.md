@@ -53,7 +53,7 @@ def transform(data, **_):
 `count=0` replaces all matches in both substitution APIs; a negative count
 replaces all in the legacy helper but nothing in native `re.sub`. Backslash
 handling also differs, so test existing replacement strings before migration.
-Monty 1.5.0 has limitations: callable replacements are not implemented,
+Monty 1.6.0 has limitations: callable replacements are not implemented,
 `re.ASCII` does not currently restrict `\w` to ASCII, and a numbered replacement
 followed by a suffix (`r"\1_suffix"`) needs the explicit form `r"\g<1>_suffix"`.
 

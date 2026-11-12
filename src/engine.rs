@@ -1174,7 +1174,7 @@ pub fn sandbox_os_call_result(
 /// - `os.getenv(key)`: returns `None` silently when `key` is not in `allow_env` — mirrors the standard Python behavior for unset vars.
 /// - `os.environ`: returns an empty dict when denied (no raise).
 /// - `Path.*`: returns `None` (legacy behavior; proper filesystem gating lands with `[[mount]]`).
-/// - `open()`: raises `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
+/// - `open()` and exclusive file creation: raise `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
 /// - `import` of a module Monty does not bundle (e.g. a local `.py` file): `ModuleNotFoundError`; `typing.get_type_hints()` host hints: `{}`. Both use Monty's own unserved-call answer.
 fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> OsCallOutcome {
     match function_call {
@@ -1213,7 +1213,9 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
             OsCallOutcome::Value(lookup_env(&args.key, args.default, policy))
         }
         OsFunctionCall::GetEnviron => OsCallOutcome::Value(empty_environ()),
-        call @ OsFunctionCall::Open(_) => OsCallOutcome::Error(call.on_no_handler()),
+        call @ (OsFunctionCall::Open(_) | OsFunctionCall::CreateExclusive(_)) => {
+            OsCallOutcome::Error(call.on_no_handler())
+        }
         OsFunctionCall::Exists(_)
         | OsFunctionCall::IsFile(_)
         | OsFunctionCall::IsDir(_)

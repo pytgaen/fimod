@@ -274,7 +274,7 @@ env:
 
 ### Local tooling (mise.toml)
 
-All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` follows the latest stable Rust toolchain; the separate MSRV check uses Rust `1.96`, required by Monty v1.5.0. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
+All build tools are managed by mise: `rust`, `zig`, `upx`, `uv`. `mise.toml` follows the latest stable Rust toolchain; the separate MSRV check uses Rust `1.98`, required by Monty v1.6.0. `rust-toolchain.toml` pins the cross-compilation targets (read by rustup and mise). Windows packaging uses `uv run python3 -c "import zipfile; ..."` to avoid any system dependency.
 
 ## Watchpoints
 
@@ -312,7 +312,7 @@ All mold and REPL entry points install OsPolicy with CallHost for clocks, sleep
 and initial random entropy. Clock access remains governed by allow_clock; sleep
 and entropy are denied. Explicit random seeds need no host entropy. Duration
 configuration maps to the feed budget, retaining the chain's remaining-time
-calculation and the non-catchable host suspension quota. Rust MSRV is 1.96;
+calculation and the non-catchable host suspension quota. Rust MSRV is 1.98;
 local tooling remains on stable/latest, with a separate MSRV check.
 
 ### Monty 1.5.0 host calls
@@ -325,3 +325,7 @@ them in `dispatch_os_call`. `Path.scan` joins the filesystem group returning
 `no_handler_result()`: `ModuleNotFoundError`, an error, and `{}` respectively.
 Serving local imports is deferred by decision; `Decimal` output is an
 uncommitted idea in `ROADMAP.md`.
+
+Monty 1.6 adds `CreateExclusive` (exclusive file creation returning a handle,
+groundwork for `tempfile`; no sandbox Python API yet). It shares the `open()` arm
+and raises `PermissionError`, since `None` would not be a file object.
