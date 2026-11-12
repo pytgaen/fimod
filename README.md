@@ -60,6 +60,8 @@ Before extraction, the installer requires the release checksum manifest and an e
 > The standard build includes HTTP/HTTPS and proxy support through `reqwest` + `rustls` + AWS-LC. Use `FIMOD_VARIANT=slim` when binary size matters more than HTTP input or remote mold loading.
 >
 > The `fast` build keeps the standard feature set but uses the speed profile (`opt-level=3`) and ships without UPX compression. Internal smoke tests show roughly 15-25% faster CPU-heavy JSON/CSV/chain workloads; use it for large files, long chains, or repeated batch jobs.
+>
+> UPX keeps the `standard` and `slim` downloads small, but on Linux and Windows those binaries unpack themselves at every start, which adds about 0.2-0.4 s per invocation (`fast` and the macOS builds start in a few milliseconds). In a script that calls fimod once per file, pass all the files to a single invocation instead (`fimod s -i logs/*.json -m normalize.py -o cleaned/`), or use `fimod-fast`.
 
 ### Windows
 

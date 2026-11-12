@@ -46,6 +46,9 @@ ni `set_output_format()` dans le mold.
 Note : fast-path input (`json_str_to_monty` via `serde::de::Visitor`) implémenté puis
 retiré — `monty` active `serde_json::arbitrary_precision` ce qui force les nombres
 dans `visit_map` via un sentinel interne, annulant le gain.
+Mise à jour 2026-11-12 : cette raison ne tient plus. Monty 1.6.0 ne dépend plus
+de `serde_json` et `arbitrary_precision` n'est pas activée
+(`cargo tree -e features -i serde_json`).
 
 ### Comparaisons CLI — outil / fimod / fimod-fast
 

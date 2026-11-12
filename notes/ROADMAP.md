@@ -289,6 +289,34 @@ model. Checksums remain necessary but should not be described as signatures.
 - **Acceptance:** a mold returning `Decimal("19.90")` produces the agreed
   representation in JSON, YAML, TOML and CSV output, without precision loss.
 
+### Typed CSV values
+
+- **Status:** idea, recorded 2026-11-12 during the November evaluation
+  (`notes/eval_112026.md`, section 3).
+- **Context:** every CSV value reaches the mold as a string. Comparisons fail,
+  and sorting is silently lexical:
+
+  ```text
+  $ fimod s -i scores.csv -e '[r for r in data if r["score"] > 30]'
+  TypeError: '>' not supported between instances of 'str' and 'int'
+
+  $ fimod s -i scores.csv -e 'sorted(data, key=lambda r: r["score"])'
+  [{"name": "ana", "score": "42"}, {"name": "bob", "score": "7"}]
+  ```
+
+  Current workaround: convert in the mold (`int(r["score"])`).
+- **Target user:** anyone writing `-e` one-liners over CSV exports, where an
+  explicit conversion per field defeats the point of a one-liner.
+- **Contract touched:** CSV input (`parse_csv`, `csv_to_monty`), and the
+  round trip to CSV output, which must not change values the user did not
+  touch (`"007"` must stay `"007"`).
+- **Open questions:** opt-in only (strings stay the default); inference
+  (`--csv-infer`) versus declared types per column (a CLI option or a mold
+  default); handling of empty cells, leading zeros, and values that look
+  numeric but are identifiers.
+- **Acceptance:** with the option, the two commands above filter and sort
+  numerically; without it, output is byte-identical to today.
+
 ## Features not to prioritize
 
 Do not prioritize these without evidence from real workflows:
