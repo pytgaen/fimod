@@ -26,6 +26,9 @@
     | `FIMOD_SETUP_SANDBOX` | *prompt if needed* | `yes` / `no` answer for the sandbox policy |
     | `FIMOD_SETUP_ALL` | *prompt if needed* | `yes` / `no` shortcut applied to both when granulars are unset |
 
+    !!! info "Startup cost of the compressed builds"
+        `standard` and `slim` are UPX-compressed on Linux and Windows: they unpack themselves at every start, which adds about 0.2-0.4 s per invocation. `fast` and the macOS builds start in a few milliseconds. In a script that calls fimod once per file, pass all the files to a single invocation instead (`fimod s -i logs/*.json -m normalize.py -o cleaned/`), or use `fimod-fast`.
+
     !!! warning "Env vars with `curl | sh`"
         Put installer variables on the `sh` side of the pipe, or export them first. `FIMOD_VARIANT=fast curl ... | sh` sets the variable only for `curl`, so the installer still sees the default `standard` variant.
 

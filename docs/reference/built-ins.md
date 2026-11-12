@@ -222,6 +222,9 @@ Navigate and mutate nested structures using dot-separated paths.
 | Text | dict key | `"user.address.city"` |
 | Integer | array index | `"items.0"` (first), `"items.-1"` (last) |
 
+!!! tip "Per-record access on large lists"
+    Each `dp_*` call crosses from the Python VM to Rust and back. When the path is known and present, direct indexing is faster in a loop: on 100,000 records (whole command, standard build), `[r["name"] for r in data]` takes about 300 ms against 490 ms for `[dp_get(r, "name") for r in data]`. Keep `dp_get` for deep or optional paths.
+
 !!! tip
     Missing intermediate keys or out-of-range indices return `None` for `dp_get`. `dp_set` creates missing intermediate keys automatically. `dp_delete` is a silent no-op when the path is missing; it shifts array elements (no null holes) and rejects empty paths.
 
@@ -248,6 +251,9 @@ remain available by default. Native Python can also handle many of these operati
 
 !!! warning "Field name, not lambda"
     `it_group_by`, `it_sort_by`, `it_unique_by`, `it_count_by`, `it_min_by`, and `it_max_by` take a **field name string** — not a lambda.
+
+!!! tip "Large lists: prefer native Python"
+    Helpers run in Rust, but each call crosses from the Python VM to Rust and back, and a helper that receives the whole list copies it on the way in and out. On large lists, native Python is faster: on 100,000 records (whole command, standard build), `sorted(data, key=lambda r: r["score"])` takes about 590 ms against 1,000 ms for `it_sort_by(data, "score")`. Keep the helpers for short, readable molds; on large inputs, prefer `sorted(..., key=..., reverse=...)` and comprehensions.
 
 !!! info "it_flatten is recursive"
     `[1, [2, [3, 4]]]` → `[1, 2, 3, 4]`

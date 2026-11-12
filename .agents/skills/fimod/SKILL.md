@@ -11,7 +11,7 @@ If this environment has `fimod` installed, you have a powerful, dependency-free 
 
 ## What is Fimod?
 
-`fimod` is a single-binary CLI tool (~2 MB) that parses structured data, runs a Python expression over it via its embedded interpreter ([Monty](https://github.com/pydantic/monty)), and writes it back to any format. No system Python installation required. The parsed data is automatically loaded into a global Python variable called `data`.
+`fimod` is a single-binary CLI tool (~4.2 MB) that parses structured data, runs a Python expression over it via its embedded interpreter ([Monty](https://github.com/pydantic/monty)), and writes it back to any format. No system Python installation required. The parsed data is automatically loaded into a global Python variable called `data`.
 
 The main subcommand is `shape` (alias `s`) for all data transformation operations.
 
@@ -348,9 +348,11 @@ All mold scripts receive: `def transform(data, args, env, headers):`
 ## Monty Python Subset Notes
 
 The embedded Monty interpreter supports a Python subset:
-- Core types, control flow, comprehensions, f-strings, string methods work
-- **No file I/O, no network calls, no imports** — all I/O stays in Rust (security boundary)
-- Dict merging: use `.update()` instead of `{**a, **b}` or `a | b` (not supported)
+- Core types, control flow, comprehensions, f-strings, string methods, classes, dataclasses and `match` work
+- Dict merging works: `{**a, **b}`, `a | b`, `.update()`
+- Part of the standard library imports: `re`, `json`, `math`, `datetime`, `collections`, `itertools`, `functools`, `hashlib`, … (see `docs/reference/monty-engine.md`); no PyPI packages
+- Not supported: generators (`yield`), and modules such as `statistics`, `string`, `urllib`
+- **No file I/O, no network calls** — all I/O stays in Rust (security boundary)
 - `sorted()`, `min()`, `max()`, `len()`, `range()`, `enumerate()`, `zip()`, `type()`, `str()`, `int()`, `float()`, `bool()`, `list()`, `dict()` are available
 
 ## Security Model
