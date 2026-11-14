@@ -149,8 +149,11 @@ impl DataFormat {
                     .collect();
                 Ok(Value::Array(values?))
             }
-            DataFormat::Yaml => serde_saphyr::from_str(content).context("Failed to parse YAML"),
-            DataFormat::Toml => toml::from_str(content).context("Failed to parse TOML"),
+            DataFormat::Yaml => serde_saphyr::from_str_with_options(content, yaml_options(content))
+                .context("Failed to parse YAML"),
+            DataFormat::Toml => toml::from_str::<toml::Table>(content)
+                .map(|table| toml_to_json(toml::Value::Table(table)))
+                .context("Failed to parse TOML"),
             DataFormat::Csv => {
                 bail!("Use parse_csv() with CsvOptions for CSV format")
             }
@@ -244,6 +247,47 @@ impl DataFormat {
                 bail!("HTTP format is input-only and cannot be used for output")
             }
         }
+    }
+}
+
+/// YAML parse options with size limits that scale with the input.
+///
+/// `serde-saphyr`'s default budget caps any document at 250,000 nodes, which
+/// ordinary data files exceed (about 23,000 five-field records). Without
+/// aliases, nodes and events grow linearly with the input bytes, so these
+/// limits only stop alias expansion; the defaults remain the floor, and alias
+/// and depth limits are unchanged.
+fn yaml_options(content: &str) -> serde_saphyr::Options {
+    let input_bytes = content.len();
+    let mut budget = serde_saphyr::Budget::default();
+    budget.max_nodes = budget.max_nodes.max(input_bytes.saturating_mul(2));
+    budget.max_events = budget.max_events.max(input_bytes.saturating_mul(4));
+    budget.max_total_scalar_bytes = budget.max_total_scalar_bytes.max(input_bytes);
+    let mut options = serde_saphyr::Options::default();
+    options.budget = Some(budget);
+    options
+}
+
+/// Converts parsed TOML into the JSON value model.
+///
+/// Datetimes become their RFC 3339 text (`2024-01-02T03:04:05Z`, `2024-01-02`,
+/// `03:04:05`). Deserializing straight into `serde_json::Value` would instead
+/// leak the `toml` crate's private `{"$__toml_private_datetime": ...}` wrapper.
+/// Non-finite floats become `null`, as `serde_json::Value` cannot hold them.
+fn toml_to_json(value: toml::Value) -> Value {
+    match value {
+        toml::Value::String(s) => Value::String(s),
+        toml::Value::Integer(i) => Value::from(i),
+        toml::Value::Float(f) => serde_json::Number::from_f64(f).map_or(Value::Null, Value::Number),
+        toml::Value::Boolean(b) => Value::Bool(b),
+        toml::Value::Datetime(datetime) => Value::String(datetime.to_string()),
+        toml::Value::Array(items) => Value::Array(items.into_iter().map(toml_to_json).collect()),
+        toml::Value::Table(table) => Value::Object(
+            table
+                .into_iter()
+                .map(|(key, value)| (key, toml_to_json(value)))
+                .collect(),
+        ),
     }
 }
 
@@ -985,6 +1029,50 @@ mod tests {
 
         let output = DataFormat::Toml.serialize(&value).unwrap();
         assert!(output.contains("name = \"Alice\""));
+    }
+
+    #[test]
+    fn test_parse_yaml_beyond_default_node_budget() {
+        // 30,000 records of 5 fields = 330,001 nodes, above serde-saphyr's 250,000 default.
+        let input: String = (0..30_000)
+            .map(|i| format!("- {{id: {i}, name: u{i}, active: true, score: {i}, team: t}}\n"))
+            .collect();
+        let value = DataFormat::Yaml.parse(&input).unwrap();
+        assert_eq!(value.as_array().unwrap().len(), 30_000);
+        assert_eq!(value[29_999]["name"], "u29999");
+    }
+
+    #[test]
+    fn test_parse_yaml_still_rejects_alias_expansion_bomb() {
+        // 10^9 leaves from about 400 bytes: limits scale with the input, not with expansion.
+        let mut input = String::from("a0: &a0 [x, x, x, x, x, x, x, x, x, x]\n");
+        for i in 1..=8 {
+            let refs = vec![format!("*a{}", i - 1); 10].join(", ");
+            input.push_str(&format!("a{i}: &a{i} [{refs}]\n"));
+        }
+        let error = format!("{:#}", DataFormat::Yaml.parse(&input).unwrap_err());
+        assert!(error.contains("budget breached"), "{error}");
+    }
+
+    #[test]
+    fn test_parse_toml_datetimes_as_rfc3339_strings() {
+        let input = "offset = 2024-01-02T03:04:05Z\nlocal = 2024-01-02T03:04:05\n\
+                     date = 2024-01-02\ntime = 03:04:05.5\n\
+                     [nested]\nlist = [2024-01-02, 2025-02-03]\n";
+        let value = DataFormat::Toml.parse(input).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "offset": "2024-01-02T03:04:05Z",
+                "local": "2024-01-02T03:04:05",
+                "date": "2024-01-02",
+                "time": "03:04:05.5",
+                "nested": {"list": ["2024-01-02", "2025-02-03"]},
+            })
+        );
+        let output = DataFormat::Toml.serialize(&value).unwrap();
+        assert!(output.contains("date = \"2024-01-02\""), "{output}");
+        assert!(!output.contains("toml_private"), "{output}");
     }
 
     #[test]

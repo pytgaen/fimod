@@ -9,7 +9,7 @@ homepage = "https://pytgaen.github.io/fimod"
 documentation = "https://pytgaen.github.io/fimod"
 categories = ["command-line-utilities", "development-tools"]
 keywords = ["cli", "data-shaper", "data-transformation", "json", "yaml"]
-rust-version = "1.96"
+rust-version = "1.98"
 
 [features]
 default = ["reqwest", "watch"]
@@ -29,8 +29,8 @@ path = "src/main.rs"
 required-features = ["fast"]
 
 [dependencies]
-monty = "=1.5.0"
-monty-types = "=1.5.0"
+monty = "=1.6.0"
+monty-types = "=1.6.0"
 getrandom = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4.6.3", features = ["unstable-dynamic"] }
@@ -56,7 +56,7 @@ notify = { version = "8", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
-opt-level = "z"  # Optimize for size.
+opt-level = "s"  # Optimize for size; faster than "z" for a slightly larger binary (see notes/perf-baseline.md).
 lto = true
 codegen-units = 1
 panic = "abort"

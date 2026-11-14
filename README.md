@@ -17,7 +17,7 @@
 
 ---
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~3.3 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) is a single Rust binary (~4.2 MB in the UPX-compressed standard build) with an embedded Python runtime ([Monty](https://github.com/pydantic/monty)). It reads **JSON, YAML, TOML, CSV, NDJSON, and plain text** - from files or directly from **HTTP URLs** - lets you transform data with Python expressions, and writes the result in any of those formats. No system Python, no `pip install`, no dependencies.
 
 Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
 
@@ -458,7 +458,7 @@ Bootstrap it with `fimod setup sandbox defaults --yes`, then tune it with `fimod
 
 Design decisions, invariants, and architectural boundaries stay explicit — see [`notes/`](notes/) for the vision, architecture map, and design log. The discipline you see in the code (`cargo deny`, `#[must_use]`, layered serde/Monty boundary, conventional commits, ~500 tests + e2e fixtures) is intentional; the speed is the AI.
 
-- **Monty** is Pydantic's embedded Python runtime. Fimod pins Monty 1.5.0; it is a Python subset, not full CPython.
+- **Monty** is Pydantic's embedded Python runtime. Fimod pins Monty 1.6.0; it is a Python subset, not full CPython.
 - **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
 - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
 - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.

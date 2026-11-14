@@ -8,6 +8,8 @@ use crate::format::{self, DataFormat};
 use crate::mold::MoldSource;
 use anyhow::{bail, Context, Result};
 
+use crate::stdout_println;
+
 /// Metadata from an optional `{case}.run-test.toml` alongside input/expected files.
 ///
 /// ```toml
@@ -147,7 +149,12 @@ fn discover_test_cases(tests_dir: &str) -> Result<Vec<TestCase>> {
 }
 
 /// Run a single test case. Returns `Ok(None)` on pass, `Ok(Some(msg))` on failure.
-fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Result<Option<String>> {
+fn run_case(
+    script: &str,
+    script_name: &str,
+    case: &TestCase,
+    mold_base_dir: Option<&str>,
+) -> Result<Option<String>> {
     let input_str = case.input_path.to_str().unwrap_or("");
     let input_content = fs::read_to_string(&case.input_path)
         .with_context(|| format!("Cannot read: {}", case.input_path.display()))?;
@@ -189,6 +196,7 @@ fn run_case(script: &str, case: &TestCase, mold_base_dir: Option<&str>) -> Resul
         no_input: false,
     };
     let opts = engine::MoldOptions {
+        script_name,
         extra_args: &extra_args,
         arg_specs: &defaults.arg_specs,
         env_value: &env_value,
@@ -275,7 +283,7 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResul
     let cases = discover_test_cases(tests_dir)?;
 
     if cases.is_empty() {
-        println!("No test cases found in {tests_dir}");
+        stdout_println!("No test cases found in {tests_dir}");
         return Ok(crate::pipeline::CliResult::Done);
     }
 
@@ -287,32 +295,32 @@ pub fn run(mold_path: &str, tests_dir: &str) -> Result<crate::pipeline::CliResul
     let mut failed = 0usize;
 
     for case in &cases {
-        match run_case(&script, case, base_dir.as_deref()) {
+        match run_case(&script, source.script_name(), case, base_dir.as_deref()) {
             Ok(None) => {
-                println!("  ✓ {}", case.name);
+                stdout_println!("  ✓ {}", case.name);
                 passed += 1;
             }
             Ok(Some(msg)) => {
-                println!("  ✗ {} — {msg}", case.name);
+                stdout_println!("  ✗ {} — {msg}", case.name);
                 failed += 1;
             }
             Err(e) => {
-                println!("  ✗ {} — error: {:#}", case.name, e);
+                stdout_println!("  ✗ {} — error: {:#}", case.name, e);
                 failed += 1;
             }
         }
     }
 
-    println!();
+    stdout_println!();
     if failed == 0 {
-        println!(
+        stdout_println!(
             "{} test{} passed",
             passed,
             if passed == 1 { "" } else { "s" }
         );
         Ok(crate::pipeline::CliResult::Done)
     } else {
-        println!(
+        stdout_println!(
             "{} test{}, {} passed, {} failed",
             cases.len(),
             if cases.len() == 1 { "" } else { "s" },

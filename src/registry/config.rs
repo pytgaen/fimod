@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::stdout_println;
+
 /// Prompt the user with a yes/no question. Returns `false` in non-interactive contexts.
 /// `default_yes` controls the default when the user presses Enter without typing.
 pub fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
@@ -47,9 +49,9 @@ pub fn confirm(prompt: &str, default_yes: bool) -> Result<bool> {
     }
 
     let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
     let mut input = stdin.lock();
-    let mut output = stdout.lock();
+    // A closed stdout must neither panic nor fail the command.
+    let mut output = crate::stdout::Stdout;
     ask(&mut input, &mut output, prompt, default_yes)
 }
 
@@ -252,7 +254,7 @@ pub fn add(name: &str, location: &str, token_env: Option<&str>) -> Result<()> {
     cfg.sources.insert(name.to_string(), source);
 
     save_config(&cfg)?;
-    println!("Added registry '{name}' → {location_display}");
+    stdout_println!("Added registry '{name}' → {location_display}");
     Ok(())
 }
 
@@ -264,7 +266,7 @@ pub fn remove(name: &str) -> Result<()> {
     }
     cfg.priority.remove(name);
     save_config(&cfg)?;
-    println!("Removed registry '{name}'");
+    stdout_println!("Removed registry '{name}'");
     Ok(())
 }
 
@@ -315,13 +317,13 @@ pub fn list(output_format: &str) -> Result<()> {
                 from_env: true,
             });
         }
-        println!("{}", serde_json::to_string_pretty(&entries)?);
+        stdout_println!("{}", serde_json::to_string_pretty(&entries)?);
         return Ok(());
     }
 
     if cfg.sources.is_empty() && env_entries.is_empty() {
-        println!("No registries configured.");
-        println!("Use 'fimod registry add <name> <path-or-url>' to add one.");
+        stdout_println!("No registries configured.");
+        stdout_println!("Use 'fimod registry add <name> <path-or-url>' to add one.");
         return Ok(());
     }
     // Show FIMOD_REGISTRY entries first (they are always P0)
@@ -339,9 +341,12 @@ pub fn list(output_format: &str) -> Result<()> {
             .as_deref()
             .or(entry.source.url.as_deref())
             .unwrap_or("?");
-        println!(
+        stdout_println!(
             "{:20} [{:6}] {:44} {}",
-            display_name, entry.source.kind, location, marker
+            display_name,
+            entry.source.kind,
+            location,
+            marker
         );
     }
     // Then sources.toml entries in priority order
@@ -352,7 +357,7 @@ pub fn list(output_format: &str) -> Result<()> {
             .as_deref()
             .or(source.url.as_deref())
             .unwrap_or("?");
-        println!("{:20} [{:6}] {:44} {}", name, source.kind, location, label);
+        stdout_println!("{:20} [{:6}] {:44} {}", name, source.kind, location, label);
     }
     Ok(())
 }
@@ -364,23 +369,23 @@ pub fn show(name: &str) -> Result<()> {
         .sources
         .get(name)
         .ok_or_else(|| anyhow::anyhow!("Registry '{name}' not found"))?;
-    println!("Name:    {name}");
-    println!("Type:    {}", source.kind);
+    stdout_println!("Name:    {name}");
+    stdout_println!("Type:    {}", source.kind);
     if let Some(p) = &source.path {
-        println!("Path:    {p}");
-        println!(
+        stdout_println!("Path:    {p}");
+        stdout_println!(
             "Exists:  {}",
             if Path::new(p).is_dir() { "yes" } else { "no" }
         );
     }
     if let Some(u) = &source.url {
-        println!("URL:     {u}");
+        stdout_println!("URL:     {u}");
     }
     if let Some(e) = &source.token_env {
-        println!("Token:   ${e}");
+        stdout_println!("Token:   ${e}");
     } else if let Some(default_env) = source.kind.default_token_env() {
         let set = std::env::var(default_env).is_ok();
-        println!(
+        stdout_println!(
             "Token:   ${} (auto) — {}",
             default_env,
             if set { "set" } else { "not set" }
@@ -388,7 +393,7 @@ pub fn show(name: &str) -> Result<()> {
     }
     let label = priority_label(&cfg, name);
     if !label.is_empty() {
-        println!("Priority: {label}");
+        stdout_println!("Priority: {label}");
     }
     Ok(())
 }
@@ -401,9 +406,9 @@ pub fn set_priority(name: &str, rank: Option<u32>, clear: bool, cascade: bool) -
     if clear {
         if cfg.priority.remove(name).is_some() {
             save_config(&cfg)?;
-            println!("Cleared priority for '{name}'");
+            stdout_println!("Cleared priority for '{name}'");
         } else {
-            println!("'{name}' has no priority set");
+            stdout_println!("'{name}' has no priority set");
         }
         return Ok(());
     }
@@ -454,6 +459,6 @@ pub fn set_priority(name: &str, rank: Option<u32>, clear: bool, cascade: bool) -
     cfg.priority.insert(name.to_string(), rank);
 
     save_config(&cfg)?;
-    println!("Set '{name}' to P{rank}");
+    stdout_println!("Set '{name}' to P{rank}");
     Ok(())
 }

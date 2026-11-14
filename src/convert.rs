@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use monty_types::{
-    unstable::{self, MontyNode},
+    unstable::{self, MontyGraph, MontyNode, NodeId},
     ObjectRef,
 };
 use monty_types::{
@@ -71,52 +71,89 @@ fn fmt_timezone(tz: &MontyTimeZone) -> String {
     }
 }
 
-fn json_number_to_monty(number: &Number) -> MontyObject {
+/// Number of arena nodes needed for a value: one per JSON value plus one per object key.
+fn count_nodes(value: &Value) -> usize {
+    match value {
+        Value::Array(items) => 1 + items.iter().map(count_nodes).sum::<usize>(),
+        Value::Object(map) => 1 + map.len() + map.values().map(count_nodes).sum::<usize>(),
+        _ => 1,
+    }
+}
+
+fn push_number(number: &Number, graph: &mut MontyGraph) -> NodeId {
     if let Some(i) = number.as_i64() {
-        MontyObject::int(i)
+        graph.push(MontyNode::Int(i))
     } else if let Some(u) = number.as_u64() {
-        MontyObject::bigint(u.into())
+        graph.push(MontyNode::BigInt(u.into()))
     } else {
-        MontyObject::float(number.as_f64().unwrap_or(0.0))
+        graph.push(MontyNode::Float(number.as_f64().unwrap_or(0.0)))
+    }
+}
+
+/// Push `value` into `graph`, children before their container, cloning strings.
+fn push_value_ref(value: &Value, graph: &mut MontyGraph) -> NodeId {
+    match value {
+        Value::Null => graph.push(MontyNode::None),
+        Value::Bool(b) => graph.push(MontyNode::Bool(*b)),
+        Value::Number(n) => push_number(n, graph),
+        Value::String(s) => graph.push(MontyNode::String(s.clone())),
+        Value::Array(items) => {
+            let ids = items.iter().map(|v| push_value_ref(v, graph)).collect();
+            graph.push(MontyNode::List(ids))
+        }
+        Value::Object(map) => {
+            let pairs = map
+                .iter()
+                .map(|(k, v)| {
+                    let key = graph.push(MontyNode::String(k.clone()));
+                    (key, push_value_ref(v, graph))
+                })
+                .collect();
+            graph.push(MontyNode::Dict(pairs))
+        }
+    }
+}
+
+/// Push `value` into `graph`, children before their container, moving strings.
+fn push_value(value: Value, graph: &mut MontyGraph) -> NodeId {
+    match value {
+        Value::Null => graph.push(MontyNode::None),
+        Value::Bool(b) => graph.push(MontyNode::Bool(b)),
+        Value::Number(n) => push_number(&n, graph),
+        Value::String(s) => graph.push(MontyNode::String(s)),
+        Value::Array(items) => {
+            let ids = items.into_iter().map(|v| push_value(v, graph)).collect();
+            graph.push(MontyNode::List(ids))
+        }
+        Value::Object(map) => {
+            let pairs = map
+                .into_iter()
+                .map(|(k, v)| {
+                    let key = graph.push(MontyNode::String(k));
+                    (key, push_value(v, graph))
+                })
+                .collect();
+            graph.push(MontyNode::Dict(pairs))
+        }
     }
 }
 
 /// Convert a serde_json::Value into a MontyObject for Monty consumption.
 /// All serde stays in Rust — Monty only sees Python dicts/lists/primitives.
+/// Fills one arena allocated at its exact final size.
 pub fn json_to_monty(value: &Value) -> MontyObject {
-    match value {
-        Value::Null => MontyObject::none(),
-        Value::Bool(b) => MontyObject::bool(*b),
-        Value::Number(n) => json_number_to_monty(n),
-        Value::String(s) => MontyObject::string(s.clone()),
-        Value::Array(arr) => MontyObject::list(arr.iter().map(json_to_monty)),
-        Value::Object(map) => {
-            let pairs: Vec<(MontyObject, MontyObject)> = map
-                .iter()
-                .map(|(k, v)| (MontyObject::string(k.clone()), json_to_monty(v)))
-                .collect();
-            MontyObject::dict(pairs)
-        }
-    }
+    let mut graph = MontyGraph::with_capacity(count_nodes(value));
+    let root = push_value_ref(value, &mut graph);
+    unstable::object_from_graph(graph, root).expect("root was just pushed")
 }
 
 /// Convert an owned serde_json::Value into a MontyObject, moving strings instead of cloning.
 /// Use this on the hot path when the Value will not be needed after conversion.
+/// Fills one arena allocated at its exact final size.
 pub fn json_into_monty(value: Value) -> MontyObject {
-    match value {
-        Value::Null => MontyObject::none(),
-        Value::Bool(b) => MontyObject::bool(b),
-        Value::Number(n) => json_number_to_monty(&n),
-        Value::String(s) => MontyObject::string(s),
-        Value::Array(arr) => MontyObject::list(arr.into_iter().map(json_into_monty)),
-        Value::Object(map) => {
-            let pairs: Vec<(MontyObject, MontyObject)> = map
-                .into_iter()
-                .map(|(k, v)| (MontyObject::string(k), json_into_monty(v)))
-                .collect();
-            MontyObject::dict(pairs)
-        }
-    }
+    let mut graph = MontyGraph::with_capacity(count_nodes(&value));
+    let root = push_value(value, &mut graph);
+    unstable::object_from_graph(graph, root).expect("root was just pushed")
 }
 
 /// Convert a MontyObject back into a serde_json::Value.
@@ -236,10 +273,12 @@ impl serde::Serialize for ObjectSerialize<'_> {
             MontyNode::Dict(pairs) => {
                 let mut map = serializer.serialize_map(Some(pairs.len()))?;
                 for (k, v) in pairs {
-                    map.serialize_entry(
-                        &unstable::child(obj, *k).to_string(),
-                        &ObjectSerialize(unstable::child(obj, *v)),
-                    )?;
+                    let key = unstable::child(obj, *k);
+                    let value = ObjectSerialize(unstable::child(obj, *v));
+                    match key.as_str() {
+                        Some(name) => map.serialize_entry(name, &value)?,
+                        None => map.serialize_entry(&key.to_string(), &value)?,
+                    }
                 }
                 map.end()
             }
@@ -394,5 +433,255 @@ mod tests {
             MontyObject::none(),
         ]);
         roundtrip_eq(&obj);
+    }
+
+    /// Previous implementation, built only on the stable public constructors.
+    /// It is the oracle the arena-filling converters are compared against.
+    fn reference_to_monty(value: &Value) -> MontyObject {
+        match value {
+            Value::Null => MontyObject::none(),
+            Value::Bool(b) => MontyObject::bool(*b),
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    MontyObject::int(i)
+                } else if let Some(u) = n.as_u64() {
+                    MontyObject::bigint(u.into())
+                } else {
+                    MontyObject::float(n.as_f64().unwrap_or(0.0))
+                }
+            }
+            Value::String(s) => MontyObject::string(s.clone()),
+            Value::Array(items) => MontyObject::list(items.iter().map(reference_to_monty)),
+            Value::Object(map) => MontyObject::dict(
+                map.iter()
+                    .map(|(k, v)| (MontyObject::string(k.clone()), reference_to_monty(v)))
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+
+    fn nested_100_levels() -> Value {
+        let mut value = json!("leaf");
+        for depth in 0..100 {
+            value = if depth % 2 == 0 {
+                json!([value, depth])
+            } else {
+                json!({"depth": depth, "inner": value})
+            };
+        }
+        value
+    }
+
+    fn float(f: f64) -> Value {
+        Value::Number(Number::from_f64(f).unwrap())
+    }
+
+    fn corpus() -> Vec<Value> {
+        let wide: serde_json::Map<String, Value> = [
+            "zulu", "alpha", "mike", "bravo", "yankee", "charlie", "x-ray", "delta", "whiskey",
+            "echo", "victor", "foxtrot", "uniform", "golf", "tango", "hotel", "sierra", "india",
+            "romeo", "juliet", "quebec", "kilo", "papa",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, k)| ((*k).to_string(), json!(i)))
+        .collect();
+        vec![
+            Value::Null,
+            json!(true),
+            json!(false),
+            json!(0),
+            json!(-1),
+            json!(i64::MIN),
+            json!(i64::MAX),
+            json!(u64::MAX),
+            float(0.5),
+            float(-0.0),
+            float(1e308),
+            json!(""),
+            json!("h\u{e9}llo \u{4e16}\u{754c} \u{1f600}"),
+            json!("quote \" backslash \\ newline \n tab \t nul \u{0}"),
+            json!([]),
+            json!({}),
+            json!([[], [[]], [1, [2, [3, [4]]]]]),
+            json!({"a": {"b": {"c": {}}}, "d": [{"e": null}]}),
+            Value::Object(wide),
+            json!([
+                {"id": 0, "name": "alice", "active": true, "score": 42, "tag": null},
+                {"id": 1, "name": "bob", "active": false, "score": 0.5, "tags": [1, 2, 3]},
+                {"id": 2, "name": "", "active": true, "score": u64::MAX, "nested": {"z": 1, "a": 2}},
+            ]),
+            nested_100_levels(),
+        ]
+    }
+
+    /// Deterministic xorshift64 generator, so the documents are reproducible.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    fn random_string(rng: &mut Rng) -> String {
+        const ALPHABET: [&str; 9] = ["a", "Z", "0", " ", "_", "\"", "\n", "\u{e9}", "\u{1f600}"];
+        (0..rng.below(8))
+            .map(|_| ALPHABET[rng.below(ALPHABET.len() as u64) as usize])
+            .collect()
+    }
+
+    fn random_value(rng: &mut Rng, depth: u32) -> Value {
+        // The root is always a container so that documents exercise nesting.
+        let kind = if depth == 0 {
+            7 + rng.below(2)
+        } else {
+            rng.below(if depth >= 5 { 7 } else { 9 })
+        };
+        match kind {
+            0 => Value::Null,
+            1 => Value::Bool(rng.below(2) == 0),
+            2 => json!(rng.next() as i64),
+            3 => json!(rng.next()),
+            4 => float((rng.next() as i64 as f64) / 1024.0),
+            5 | 6 => Value::String(random_string(rng)),
+            7 => Value::Array(
+                (0..rng.below(6))
+                    .map(|_| random_value(rng, depth + 1))
+                    .collect(),
+            ),
+            _ => Value::Object(
+                (0..rng.below(6))
+                    .map(|_| (random_string(rng), random_value(rng, depth + 1)))
+                    .collect(),
+            ),
+        }
+    }
+
+    fn assert_matches_reference(value: &Value) {
+        let expected = reference_to_monty(value);
+        for actual in [json_into_monty(value.clone()), json_to_monty(value)] {
+            assert_eq!(actual, expected, "structural mismatch for {value}");
+            assert_eq!(
+                actual.py_repr(),
+                expected.py_repr(),
+                "py_repr mismatch for {value}"
+            );
+            // `==` and `py_repr` cannot tell `Int(5)` from `BigInt(5)`; the arenas can.
+            assert_eq!(
+                unstable::graph_parts(&actual),
+                unstable::graph_parts(&expected),
+                "arena mismatch for {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn json_to_monty_matches_public_constructor_reference_on_corpus() {
+        for value in corpus() {
+            assert_matches_reference(&value);
+        }
+    }
+
+    #[test]
+    fn json_to_monty_matches_public_constructor_reference_on_generated_documents() {
+        let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+        for _ in 0..2_000 {
+            assert_matches_reference(&random_value(&mut rng, 0));
+        }
+    }
+
+    #[test]
+    fn json_to_monty_arena_has_exact_size_and_root_last() {
+        for value in corpus() {
+            for monty in [json_into_monty(value.clone()), json_to_monty(&value)] {
+                let (graph, root) = unstable::graph_parts(&monty);
+                assert_eq!(graph.len(), count_nodes(&value), "node count for {value}");
+                assert_eq!(root.index(), graph.len() - 1, "root position for {value}");
+            }
+            for monty in [json_into_monty(value.clone()), json_to_monty(&value)] {
+                let nodes = unstable::into_graph_parts(monty).0.into_nodes();
+                assert_eq!(
+                    nodes.capacity(),
+                    count_nodes(&value),
+                    "capacity for {value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn json_into_monty_round_trips_through_json() {
+        for value in corpus() {
+            let monty = json_into_monty(value.clone());
+            assert_eq!(
+                serde_json::to_vec(&MontySerialize(&monty)).unwrap(),
+                serde_json::to_vec(&value).unwrap()
+            );
+            assert_eq!(monty_to_json(monty).unwrap(), value);
+        }
+    }
+
+    #[test]
+    fn monty_serialize_borrowed_keys_match_value_path() {
+        let pairs = |entries: Vec<(MontyObject, MontyObject)>| MontyObject::dict(entries);
+        let samples = [
+            pairs(vec![
+                (MontyObject::string(String::from("b")), MontyObject::int(1)),
+                (MontyObject::string(String::from("a")), MontyObject::int(2)),
+                (MontyObject::string(String::new()), MontyObject::none()),
+                (
+                    MontyObject::string(String::from("caf\u{e9} \"q\"\n")),
+                    MontyObject::bool(true),
+                ),
+            ]),
+            pairs(vec![
+                (
+                    MontyObject::int(7),
+                    MontyObject::string(String::from("int")),
+                ),
+                (
+                    MontyObject::bool(true),
+                    MontyObject::string(String::from("bool")),
+                ),
+                (
+                    MontyObject::none(),
+                    MontyObject::string(String::from("none")),
+                ),
+                (
+                    MontyObject::float(1.5),
+                    MontyObject::string(String::from("float")),
+                ),
+                (
+                    MontyObject::string(String::from("s")),
+                    MontyObject::float(0.5),
+                ),
+            ]),
+            MontyObject::list(vec![
+                pairs(vec![]),
+                pairs(vec![(
+                    MontyObject::string(String::from("nested")),
+                    pairs(vec![(MontyObject::int(1), MontyObject::list(vec![]))]),
+                )]),
+            ]),
+        ];
+        for obj in samples {
+            let value = monty_to_json(obj.clone()).unwrap();
+            assert_eq!(
+                serde_json::to_vec(&MontySerialize(&obj)).unwrap(),
+                serde_json::to_vec(&value).unwrap()
+            );
+            assert_eq!(
+                serde_json::to_vec_pretty(&MontySerialize(&obj)).unwrap(),
+                serde_json::to_vec_pretty(&value).unwrap()
+            );
+        }
     }
 }

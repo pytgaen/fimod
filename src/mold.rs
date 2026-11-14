@@ -157,6 +157,18 @@ impl MoldSource {
         }
     }
 
+    /// Filename shown in Python tracebacks: the reference the user typed
+    /// (`./local.py`, `@registry/name`, URL), or `<expr>` for `-e`. Like
+    /// [`MoldSource::label`], it never exposes resolved registry or cache paths.
+    pub fn script_name(&self) -> &str {
+        match self {
+            MoldSource::File { display_ref, .. } | MoldSource::Url { display_ref, .. } => {
+                display_ref
+            }
+            MoldSource::Inline(_) => "<expr>",
+        }
+    }
+
     /// Override `display_ref` (no-op for `Inline`). Used by `from_mold_str`
     /// to preserve the user-typed form (`@registry/name`) after delegating
     /// resolution to the registry.
