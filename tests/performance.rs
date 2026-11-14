@@ -12,6 +12,7 @@ use fimod::pipeline::{
     build_scripts, execute_chain_to_value, ChainExecCtx, PipelineMetadata, ScriptRef,
 };
 use fimod::sandbox::SandboxPolicy;
+use monty_types::unstable;
 use serde_json::{Map, Value};
 
 const RUNS: usize = 5;
@@ -215,6 +216,31 @@ fn json_parse_convert_and_serialize_large_array_under_budget() {
         "json parse + Monty round-trip + compact serialize",
         elapsed,
         perf_budget(350, 3_500),
+    );
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn value_to_monty_conversion_large_array_under_budget() {
+    let input = large_json_array(100_000);
+    let value = DataFormat::JsonCompact.parse(&input).unwrap();
+    // Clones are prepared and results kept outside the timed section, so only
+    // the conversion itself is measured (no clone, no arena drop).
+    let mut inputs: Vec<Value> = (0..=RUNS).map(|_| value.clone()).collect();
+    let mut outputs = Vec::with_capacity(RUNS + 1);
+
+    let elapsed = median_elapsed(|| {
+        let monty = json_into_monty(black_box(inputs.pop().unwrap()));
+        let nodes = unstable::graph_parts(&monty).0.len();
+        outputs.push(monty);
+        nodes
+    });
+    black_box(&outputs);
+
+    assert_under_budget(
+        "serde_json::Value to Monty conversion",
+        elapsed,
+        perf_budget(200, 4_000),
     );
 }
 
@@ -602,6 +628,44 @@ fn cli_final_ndjson_output_under_budget() {
         assert_eq!(last["id"], 19_999);
         assert_under_budget(
             &format!("CLI NDJSON output ({mode})"),
+            elapsed,
+            perf_budget(300, 3_000),
+        );
+    }
+}
+
+#[test]
+#[ignore = "performance smoke test; run with `task test:performance`"]
+fn cli_default_indented_json_output_under_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("users.json");
+    let output = dir.path().join("out.json");
+    let mold = dir.path().join("identity.py");
+    fs::write(&input, large_json_array(20_000)).unwrap();
+    fs::write(&mold, "def transform(data, **_):\n    return data\n").unwrap();
+    let fimod = PathBuf::from(env!("CARGO_BIN_EXE_fimod"));
+    for destination in ["stdout", "file"] {
+        let mut args = os_args(&[
+            OsStr::new("s"),
+            OsStr::new("-i"),
+            input.as_os_str(),
+            OsStr::new("-m"),
+            mold.as_os_str(),
+        ]);
+        if destination == "file" {
+            args.extend(os_args(&[OsStr::new("-o"), output.as_os_str()]));
+        }
+        let (elapsed, stdout) = median_command_elapsed(&fimod, &args);
+        let text = if destination == "file" {
+            assert!(stdout.is_empty());
+            fs::read_to_string(&output).unwrap()
+        } else {
+            String::from_utf8(stdout).unwrap()
+        };
+        let parsed: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.as_array().unwrap().len(), 20_000);
+        assert_under_budget(
+            &format!("CLI indented JSON output ({destination})"),
             elapsed,
             perf_budget(300, 3_000),
         );

@@ -4,6 +4,8 @@ mod args;
 mod batch;
 #[path = "cli/chain.rs"]
 mod chain;
+#[path = "cli/closed_stdout.rs"]
+mod closed_stdout;
 #[path = "cli/cookbook.rs"]
 mod cookbook;
 #[path = "cli/cross_format.rs"]

@@ -54,7 +54,7 @@ push / pull_request
 │   └── PowerShell installer + real binary transformation
 │
 ├── msrv          (ubuntu-latest)
-│   └── cargo check with Rust 1.95  ← minimum supported version
+│   └── cargo check with Rust 1.98  ← minimum supported version
 │
 └── security      (ubuntu-latest)
     ├── cargo audit   (RustSec advisory database)

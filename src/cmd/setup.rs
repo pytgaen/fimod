@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
+use fimod::{stdout_print, stdout_println};
+
 use crate::cli::{SetupSandboxKey, SetupSandboxPreset};
 use crate::registry::{
     self,
@@ -236,7 +238,7 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
     let has_examples = has_registry_url(&cfg, EXAMPLES_URL);
 
     if !needs_official_migration && has_powered && has_examples {
-        println!("Community registries are already configured.");
+        stdout_println!("Community registries are already configured.");
         return Ok(());
     }
 
@@ -268,20 +270,22 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
     // ── Ask confirmation ──
     let pref = setup_pref(SetupBlock::Registry, options);
     if matches!(pref, SetupPref::Ask) {
-        println!("\nAdd community registries?");
+        stdout_println!("\nAdd community registries?");
         if needs_official_migration {
-            println!("  • migrate official → examples");
+            stdout_println!("  • migrate official → examples");
         }
         for entry in &to_install {
-            println!(
+            stdout_println!(
                 "  • {:<16} ({})    P{}",
-                entry.name, entry.label, entry.priority
+                entry.name,
+                entry.label,
+                entry.priority
             );
         }
-        println!();
+        stdout_println!();
     }
     if !apply_pref(pref, "Install?", true)? {
-        println!("Skipped. Run 'fimod setup registry defaults --if-needed' at any time.");
+        stdout_println!("Skipped. Run 'fimod setup registry defaults --if-needed' at any time.");
         return Ok(());
     }
 
@@ -291,7 +295,7 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
         cfg.priority.remove("official");
         cfg.priority.insert(EXAMPLES_NAME.to_string(), 99);
         save_config(&cfg)?;
-        println!("Migrated registry 'official' → 'examples' (P99).");
+        stdout_println!("Migrated registry 'official' → 'examples' (P99).");
         cfg = load_config()?;
     }
 
@@ -302,7 +306,7 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
         }
         let name = if cfg.sources.contains_key(entry.name) {
             let alt = format!("fimod-{}", entry.name);
-            println!(
+            stdout_println!(
                 "Note: registry name '{}' is already taken, using '{alt}' instead.",
                 entry.name
             );
@@ -314,7 +318,7 @@ pub fn registry_defaults(options: SetupOptions) -> Result<()> {
             registry::set_priority(entry.name, Some(entry.priority), false, false)?;
             entry.name.to_string()
         };
-        println!("✓ Added {} (P{})", name, entry.priority);
+        stdout_println!("✓ Added {} (P{})", name, entry.priority);
     }
 
     Ok(())
@@ -336,7 +340,7 @@ pub fn sandbox_defaults(
 
     if path.exists() && !options.force {
         if options.if_needed {
-            println!("Sandbox policy already exists: {}", path.display());
+            stdout_println!("Sandbox policy already exists: {}", path.display());
             return Ok(());
         }
         bail!(
@@ -347,27 +351,27 @@ pub fn sandbox_defaults(
 
     let pref = setup_pref(SetupBlock::Sandbox, options);
     if matches!(pref, SetupPref::Ask) {
-        println!(
+        stdout_println!(
             "This will {} {} with the {preset:?} preset:",
             if path.exists() { "overwrite" } else { "create" },
             path.display()
         );
-        println!();
+        stdout_println!();
         for line in rendered.lines().filter(|l| !l.trim().is_empty()) {
-            println!("  {line}");
+            stdout_println!("  {line}");
         }
-        println!();
+        stdout_println!();
     }
 
     let default_yes = options.if_needed && !path.exists();
     if !apply_pref(pref, "Continue?", default_yes)? {
-        println!("Skipped. Run 'fimod setup sandbox defaults --if-needed' at any time.");
+        stdout_println!("Skipped. Run 'fimod setup sandbox defaults --if-needed' at any time.");
         return Ok(());
     }
 
     write_sandbox_config_with_content(&path, &rendered)?;
 
-    println!("✓ Wrote {}", path.display());
+    stdout_println!("✓ Wrote {}", path.display());
     Ok(())
 }
 
@@ -375,7 +379,7 @@ pub fn sandbox_defaults(
 pub fn sandbox_show(sandbox_file: Option<String>) -> Result<()> {
     let path = sandbox_target_path(sandbox_file.as_deref())?;
     let config = read_sandbox_config_or_recommended(&path)?;
-    print!("{}", render_sandbox_config(&config));
+    stdout_print!("{}", render_sandbox_config(&config));
     Ok(())
 }
 
@@ -384,13 +388,13 @@ pub fn sandbox_get(key: SetupSandboxKey, sandbox_file: Option<String>) -> Result
     let path = sandbox_target_path(sandbox_file.as_deref())?;
     let config = read_sandbox_config_or_recommended(&path)?;
     match key {
-        SetupSandboxKey::AllowClock => println!("{}", config.allow_clock),
-        SetupSandboxKey::MaxDuration => println!("{}", config.max_duration),
-        SetupSandboxKey::MaxMemory => println!("{}", config.max_memory),
-        SetupSandboxKey::MaxSuspensions => println!("{}", config.max_suspensions),
+        SetupSandboxKey::AllowClock => stdout_println!("{}", config.allow_clock),
+        SetupSandboxKey::MaxDuration => stdout_println!("{}", config.max_duration),
+        SetupSandboxKey::MaxMemory => stdout_println!("{}", config.max_memory),
+        SetupSandboxKey::MaxSuspensions => stdout_println!("{}", config.max_suspensions),
         SetupSandboxKey::AllowEnv => {
             for pattern in config.allow_env {
-                println!("{pattern}");
+                stdout_println!("{pattern}");
             }
         }
     }
@@ -447,14 +451,14 @@ pub fn sandbox_set(options: SandboxSetOptions) -> Result<()> {
 
     config.validate()?;
     write_sandbox_config(&path, &config)?;
-    println!("✓ Wrote {}", path.display());
+    stdout_println!("✓ Wrote {}", path.display());
     Ok(())
 }
 
 /// Run `registry_defaults` then `sandbox_defaults`, stopping at the first failure.
 pub fn all_defaults(options: SetupOptions, preset: SetupSandboxPreset) -> Result<()> {
     registry_defaults(options)?;
-    println!();
+    stdout_println!();
     sandbox_defaults(options, preset, None)?;
     Ok(())
 }

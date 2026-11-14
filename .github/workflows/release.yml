@@ -147,13 +147,25 @@ jobs:
           mkdir -p "${{ steps.bin.outputs.package_dir }}"
           cp "${{ steps.bin.outputs.path }}" "${{ steps.bin.outputs.package_path }}"
 
+      # Zopfli-level gzip (pigz -11): still a plain .tar.gz that every `tar xzf`
+      # reads, about 4 % smaller than `tar czf` for binaries not packed by UPX.
+      - name: Install pigz
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          command -v pigz >/dev/null && exit 0
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install pigz
+          else
+            sudo apt-get update -qq && sudo apt-get install -y -qq pigz
+          fi
+
       - name: Package (tar.gz)
         if: matrix.ext == 'tar.gz'
         shell: bash
         run: |
-          tar czf "${{ steps.bin.outputs.asset }}" \
-            -C "${{ steps.bin.outputs.package_dir }}" \
-            "${{ steps.bin.outputs.package_bin }}"
+          tar cf - -C "${{ steps.bin.outputs.package_dir }}" "${{ steps.bin.outputs.package_bin }}" \
+            | pigz -11 > "${{ steps.bin.outputs.asset }}"
 
       - name: Package (zip, Windows)
         if: matrix.ext == 'zip'

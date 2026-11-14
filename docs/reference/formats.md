@@ -73,8 +73,9 @@ cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 
 ## ⚙️ TOML (`.toml`)
 
-- **Input**: Parsed into JSON-compatible structure.
-- **Output**: Serialized as TOML.
+- **Input**: Parsed into JSON-compatible structure. Dates, times and datetimes
+  become RFC 3339 strings (`2024-01-02T03:04:05Z`, `2024-01-02`, `03:04:05`).
+- **Output**: Serialized as TOML. Datetime values are written back as quoted strings.
 
 !!! warning "TOML requires a root-level object"
     Arrays or scalars at the root will fail — TOML spec constraint.

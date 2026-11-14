@@ -531,7 +531,7 @@ fn test_version_flag() {
         .assert()
         .success()
         .stdout(format!(
-            "fimod {} {variant} (Monty 1.5.0)\n",
+            "fimod {} {variant} (Monty 1.6.0)\n",
             env!("CARGO_PKG_VERSION")
         ))
         .stderr("");
@@ -648,6 +648,7 @@ fn test_error_registry_label_preserves_at_form() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("step 1/1 (@broken)"))
+        .stderr(predicate::str::contains("File \"@broken\", line 2"))
         .stderr(predicate::str::contains("KeyError"))
         // Resolved tmpdir path must NOT leak into the error label.
         .stderr(predicate::str::contains(resolved_path.as_str()).not());

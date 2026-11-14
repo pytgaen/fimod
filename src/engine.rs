@@ -13,7 +13,7 @@ use monty::{MontyRun, RunProgress};
 use monty_types::{
     CompileOptions, ExcType, ExtFunctionResult, MontyDate, MontyDateTime, MontyException,
     MontyObject, MontyUuid, NameLookupResult, OsFunctionCall, PrintWriter, PrintWriterCallback,
-    ResourceLimits, ResourceTracker,
+    ResourceLimits, ResourceTracker, StackFrame,
 };
 use serde_json::{Number, Value};
 
@@ -89,17 +89,74 @@ impl std::fmt::Display for SandboxLimitExceeded {
 
 impl std::error::Error for SandboxLimitExceeded {}
 
-/// Custom PrintWriterCallback that redirects Monty's print() output to stderr.
-/// Used in --debug mode so that Python print statements don't corrupt stdout.
-struct StderrPrint;
+/// Routes a mold's `print()` output.
+///
+/// In `--debug` mode stdout text goes to stderr so that it does not mix with
+/// the data. Otherwise it goes to stdout, where a closed pipe (`BrokenPipe`)
+/// is a normal end: writing stops and the mold keeps running. Any other write
+/// failure is raised to the mold. `print(..., file=sys.stderr)` always goes to
+/// stderr.
+struct MoldPrint {
+    debug: bool,
+    stdout_closed: bool,
+    /// First stdout write failure other than `BrokenPipe`.
+    write_error: Option<String>,
+}
 
-impl PrintWriterCallback for StderrPrint {
+impl MoldPrint {
+    fn new(debug: bool) -> Self {
+        Self {
+            debug,
+            stdout_closed: false,
+            write_error: None,
+        }
+    }
+
+    fn write_stdout(&mut self, bytes: &[u8]) -> Result<(), MontyException> {
+        use std::io::{self, Write};
+        if self.stdout_closed {
+            return Ok(());
+        }
+        match io::stdout().write_all(bytes) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
+                self.stdout_closed = true;
+                Ok(())
+            }
+            Err(error) => {
+                let message = format!("Failed to write to stdout: {error}");
+                self.write_error.get_or_insert_with(|| message.clone());
+                Err(MontyException::new(ExcType::OSError, Some(message)))
+            }
+        }
+    }
+}
+
+impl PrintWriterCallback for MoldPrint {
     fn stdout_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
+        if self.debug {
+            eprint!("{output}");
+            Ok(())
+        } else {
+            self.write_stdout(output.as_bytes())
+        }
+    }
+
+    fn stdout_push(&mut self, end: char) -> Result<(), MontyException> {
+        if self.debug {
+            eprint!("{end}");
+            Ok(())
+        } else {
+            self.write_stdout(end.encode_utf8(&mut [0; 4]).as_bytes())
+        }
+    }
+
+    fn stderr_write(&mut self, output: Cow<'_, str>) -> Result<(), MontyException> {
         eprint!("{output}");
         Ok(())
     }
 
-    fn stdout_push(&mut self, end: char) -> Result<(), MontyException> {
+    fn stderr_push(&mut self, end: char) -> Result<(), MontyException> {
         eprint!("{end}");
         Ok(())
     }
@@ -123,6 +180,8 @@ pub struct PipelineMetadata<'a> {
 
 /// Runtime options for mold execution.
 pub struct MoldOptions<'a> {
+    /// Filename shown in Python tracebacks: the mold reference as typed, or `<expr>`.
+    pub script_name: &'a str,
     pub extra_args: &'a [(String, String)],
     pub arg_specs: &'a [MoldArgSpec],
     pub env_value: &'a Value,
@@ -157,6 +216,9 @@ pub struct MoldOptions<'a> {
 /// Internal runtime context — extends MoldOptions with mutable shared state.
 struct MoldContext<'a> {
     objects: HostObjects,
+    script_name: &'a str,
+    /// Line of the `transform(...)` call appended to the mold script.
+    invocation_line: u32,
     debug: bool,
     msg_level: u8,
     legacy_builtins: bool,
@@ -927,16 +989,20 @@ pub(crate) fn execute_mold_with_chain_start(
         eprintln!("---");
     }
 
+    let invocation_line = u32::try_from(full_script.lines().count()).unwrap_or(u32::MAX);
     let runner = MontyRun::new(
         full_script,
-        "mold.py",
-        input_names,
+        opts.script_name,
+        input_names.clone(),
         CompileOptions::default(),
     )
+    .map_err(|err| script_compile_error(script, opts.script_name, input_names, err))
     .context("Failed to compile mold script")?;
 
     let ctx = MoldContext {
         objects,
+        script_name: opts.script_name,
+        invocation_line,
         debug: opts.debug,
         msg_level: opts.msg_level,
         legacy_builtins: std::env::var("FIMOD_LEGACY_BUILTINS").is_ok_and(|value| value == "1"),
@@ -1008,12 +1074,57 @@ impl SuspensionBudget {
     }
 }
 
+/// Reports a compile error against the mold script alone.
+///
+/// An unclosed bracket in the script swallows the appended `transform(...)`
+/// call, so the error compiling the full script points at that generated line.
+/// Compiling the script without it locates the error where the user wrote it.
+/// Runs only after a failure, so successful compiles pay nothing.
+fn script_compile_error(
+    script: &str,
+    script_name: &str,
+    input_names: Vec<String>,
+    err: MontyException,
+) -> MontyException {
+    MontyRun::new(
+        script.to_owned(),
+        script_name,
+        input_names,
+        CompileOptions::default(),
+    )
+    .err()
+    .unwrap_or(err)
+}
+
+impl MoldContext<'_> {
+    /// Translates a Monty exception without the traceback frame of the
+    /// `transform(...)` call fimod appends: users never wrote that line.
+    fn monty_error(&self, err: MontyException) -> anyhow::Error {
+        let is_invocation = |frame: &StackFrame| {
+            frame.filename == self.script_name && frame.start.line == self.invocation_line
+        };
+        let err = if err.traceback().iter().any(is_invocation) {
+            let frames = err
+                .traceback()
+                .iter()
+                .filter(|frame| !is_invocation(frame))
+                .cloned()
+                .collect();
+            MontyException::with_traceback(err.exc_type(), err.message().map(str::to_owned), frames)
+                .with_data(err.data().clone())
+        } else {
+            err
+        };
+        translate_monty_error(err, self.policy)
+    }
+}
+
 fn run_loop(
     runner: MontyRun,
     inputs: Vec<MontyObject>,
     ctx: &MoldContext<'_>,
 ) -> Result<MontyObject> {
-    let mut sp = StderrPrint;
+    let mut sp = MoldPrint::new(ctx.debug);
     let mut limits = sandbox_resource_limits(ctx.policy);
     if let (Some(started_at), Some(max_duration)) = (ctx.chain_started_at, ctx.policy.max_duration)
     {
@@ -1029,16 +1140,8 @@ fn run_loop(
     let tracker = ResourceTracker::new(limits);
     let mut progress = runner
         .with_os_policy(sandbox_os_policy())
-        .start(
-            inputs,
-            tracker,
-            if ctx.debug {
-                PrintWriter::Callback(&mut sp)
-            } else {
-                PrintWriter::Stdout
-            },
-        )
-        .map_err(|e| translate_monty_error(e, ctx.policy))?;
+        .start(inputs, tracker, PrintWriter::Callback(&mut sp))
+        .map_err(|e| ctx.monty_error(e))?;
 
     let mut budget = SuspensionBudget::new(ctx.policy.max_suspensions);
     loop {
@@ -1046,7 +1149,13 @@ fn run_loop(
             budget.charge()?;
         }
         match progress {
-            RunProgress::Complete(result) => return Ok(result),
+            RunProgress::Complete(result) => {
+                // The mold may have swallowed the OSError raised by print().
+                if let Some(message) = sp.write_error.take() {
+                    anyhow::bail!(message);
+                }
+                return Ok(result);
+            }
             RunProgress::FunctionCall(call) => {
                 let function_name = call.function_name.clone();
                 let mut positional: Vec<_> = call.args.args().map(|v| v.to_owned()).collect();
@@ -1068,41 +1177,25 @@ fn run_loop(
                         anyhow::anyhow!("External function '{function_name}' failed: {e}")
                     })?
                 };
-                let mut sp2 = StderrPrint;
                 progress = call
-                    .resume(
-                        result,
-                        if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                    )
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                    .resume(result, PrintWriter::Callback(&mut sp))
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::OsCall(call) => {
-                let mut sp2 = StderrPrint;
                 progress = call
-                    .resume_with(
+                    .resume_with(PrintWriter::Callback(&mut sp), |function_call| {
+                        let function_name = function_call.to_string();
+                        let result = dispatch_os_call(function_call, ctx.policy);
                         if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                        |function_call| {
-                            let function_name = function_call.to_string();
-                            let result = dispatch_os_call(function_call, ctx.policy);
-                            if ctx.debug {
-                                eprintln!(
-                                    "[debug] OsCall {} -> {}",
-                                    function_name,
-                                    describe_os_result(&result)
-                                );
-                            }
-                            result.into()
-                        },
-                    )
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                            eprintln!(
+                                "[debug] OsCall {} -> {}",
+                                function_name,
+                                describe_os_result(&result)
+                            );
+                        }
+                        result.into()
+                    })
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::NameLookup(lookup) => {
                 let name = lookup.name.clone();
@@ -1119,17 +1212,9 @@ fn run_loop(
                 } else {
                     NameLookupResult::Undefined
                 };
-                let mut sp2 = StderrPrint;
                 progress = lookup
-                    .resume(
-                        result,
-                        if ctx.debug {
-                            PrintWriter::Callback(&mut sp2)
-                        } else {
-                            PrintWriter::Stdout
-                        },
-                    )
-                    .map_err(|e| translate_monty_error(e, ctx.policy))?;
+                    .resume(result, PrintWriter::Callback(&mut sp))
+                    .map_err(|e| ctx.monty_error(e))?;
             }
             RunProgress::ResolveFutures(_) => {
                 anyhow::bail!("Async futures are not supported in fimod molds");
@@ -1174,7 +1259,7 @@ pub fn sandbox_os_call_result(
 /// - `os.getenv(key)`: returns `None` silently when `key` is not in `allow_env` — mirrors the standard Python behavior for unset vars.
 /// - `os.environ`: returns an empty dict when denied (no raise).
 /// - `Path.*`: returns `None` (legacy behavior; proper filesystem gating lands with `[[mount]]`).
-/// - `open()`: raises `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
+/// - `open()` and exclusive file creation: raise `PermissionError` when filesystem access is not implemented, because returning `None` would hand mold code a non-file object.
 /// - `import` of a module Monty does not bundle (e.g. a local `.py` file): `ModuleNotFoundError`; `typing.get_type_hints()` host hints: `{}`. Both use Monty's own unserved-call answer.
 fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> OsCallOutcome {
     match function_call {
@@ -1213,7 +1298,9 @@ fn dispatch_os_call(function_call: OsFunctionCall, policy: &SandboxPolicy) -> Os
             OsCallOutcome::Value(lookup_env(&args.key, args.default, policy))
         }
         OsFunctionCall::GetEnviron => OsCallOutcome::Value(empty_environ()),
-        call @ OsFunctionCall::Open(_) => OsCallOutcome::Error(call.on_no_handler()),
+        call @ (OsFunctionCall::Open(_) | OsFunctionCall::CreateExclusive(_)) => {
+            OsCallOutcome::Error(call.on_no_handler())
+        }
         OsFunctionCall::Exists(_)
         | OsFunctionCall::IsFile(_)
         | OsFunctionCall::IsDir(_)
