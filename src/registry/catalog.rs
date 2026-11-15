@@ -396,7 +396,7 @@ fn compute_mold_hash(base: &Path, rel_path: &str) -> Result<String> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
             let rel = if prefix.is_empty() {
-                name.clone()
+                name
             } else {
                 format!("{prefix}/{name}")
             };
