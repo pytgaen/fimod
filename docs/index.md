@@ -9,7 +9,7 @@
 >
 > *💡 DRY your pipelines · Slim your container images · Tame your configs*
 
-**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~3.3 MB in the UPX-compressed standard build). You write the transform logic; fimod handles parsing, format detection, and I/O.
+**fimod** (**F**lexible **I**nput, **M**old **O**utput **D**ata) embeds [Pydantic Monty](https://github.com/pydantic/monty) (a Rust implementation of Python) in a single binary (~4.2 MB in the UPX-compressed standard build). You write the transform logic; fimod handles parsing, format detection, and I/O.
 
 !!! info "Python syntax, Monty runtime"
     Fimod runs molds on Monty, not CPython: use familiar Python syntax and built-ins, with Rust-powered helpers for data shaping.
@@ -44,7 +44,7 @@ fimod s -i https://api.github.com/repos/pytgaen/fimod -e 'data["name"]' --output
 
     ---
 
-    No runtime, no `pip install`, no dependencies. One ~3.3 MB standard binary after UPX compression; use `slim` when you do not need HTTP input, or `fimod-fast` for large CPU-heavy runs.
+    No runtime, no `pip install`, no dependencies. One ~4.2 MB standard binary after UPX compression; use `slim` when you do not need HTTP input, or `fimod-fast` for large CPU-heavy runs.
 
 -   :material-swap-horizontal:{ .lg .middle } **All the formats**
 
@@ -247,7 +247,7 @@ Lookup tables and complete specifications.
 !!! warning "Early-stage software"
     fimod is young software, built with AI-assisted development ("vibe coding").
 
-    - **[Monty](https://github.com/pydantic/monty)** is Pydantic's Rust implementation of a Python subset. Fimod pins Monty 1.5.0; this is not CPython or full standard-library parity.
+    - **[Monty](https://github.com/pydantic/monty)** is Pydantic's Rust implementation of a Python subset. Fimod pins Monty 1.6.0; this is not CPython or full standard-library parity.
     - **fimod** is still pre-1.0. Supported mold APIs may evolve as the project matures.
     - Versioning follows [Semantic Versioning](https://semver.org/). Before 1.0, breaking changes bump the minor version; after 1.0, they bump the major version.
     - Mold scripts can use Python syntax, common built-ins, and selected stdlib modules, but not arbitrary PyPI packages or full stdlib parity.

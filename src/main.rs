@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     let matches = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&matches)?;
-    let result = dispatch(cli, &matches);
+    let result = dispatch(cli, &matches).and_then(report_stdout_write_error);
 
     match result {
         Ok(CliResult::Done) => Ok(()),
@@ -40,6 +40,26 @@ fn main() -> Result<()> {
             }
             Err(e)
         }
+    }
+}
+
+/// A command that would exit with status 0 fails when writing to stdout failed
+/// for a reason other than a closed pipe. A command that exits with another
+/// status keeps that status but still reports the write failure on stderr. A
+/// command that already fails keeps its own error.
+fn report_stdout_write_error(result: CliResult) -> Result<CliResult> {
+    if !matches!(result, CliResult::Done | CliResult::Exit(_)) {
+        return Ok(result);
+    }
+    match (result, fimod::stdout::take_write_error()) {
+        (CliResult::Done | CliResult::Exit(0), Some(error)) => {
+            Err(anyhow::Error::new(error).context("Failed to write output to stdout"))
+        }
+        (result @ CliResult::Exit(_), Some(error)) => {
+            eprintln!("Error: Failed to write output to stdout: {error}");
+            Ok(result)
+        }
+        (result, None) => Ok(result),
     }
 }
 

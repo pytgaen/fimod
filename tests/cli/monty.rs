@@ -256,3 +256,133 @@ fn test_monty_class_names_do_not_impersonate_native_containers() {
             .stderr(predicate::str::contains("panicked").not());
     }
 }
+
+const HOST_BUILT_INPUT: &str = r#"{
+  "null": null,
+  "yes": true,
+  "no": false,
+  "zero": 0,
+  "neg": -1,
+  "min": -9223372036854775808,
+  "max": 9223372036854775807,
+  "n": 18446744073709551615,
+  "half": 0.5,
+  "negzero": -0.0,
+  "big": 1e308,
+  "empty": "",
+  "text": "héllo 世界 \"quoted\" \\ back\nline",
+  "list": [],
+  "dict": {},
+  "nested": {"z": [1, [2, [3, {"k": null}]]], "a": {"b": {"c": []}}},
+  "records": [{"id": 1, "tags": ["a", "b"]}, {"id": 2, "tags": []}]
+}"#;
+
+fn run_host_built_mold(dir: &assert_fs::TempDir, mold: &str, input: &str, format: &str) -> Vec<u8> {
+    let mold_file = dir.child("mold.py");
+    mold_file.write_str(mold).unwrap();
+    let input_file = dir.child("input.json");
+    input_file.write_str(input).unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args([
+            "s",
+            "-i",
+            input_file.path().to_str().unwrap(),
+            "-m",
+            mold_file.path().to_str().unwrap(),
+            "--output-format",
+            format,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone()
+}
+
+#[test]
+fn test_monty_graph_host_built_input_round_trips_through_vm() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let expected: serde_json::Value = serde_json::from_str(HOST_BUILT_INPUT).unwrap();
+    for format in ["json", "json-compact"] {
+        let output = run_host_built_mold(
+            &dir,
+            "def transform(data, **_):\n    return data\n",
+            HOST_BUILT_INPUT,
+            format,
+        );
+        let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(value, expected, "format {format}");
+        // Key order and float/int distinction must survive, not only equality.
+        let text = String::from_utf8(output).unwrap();
+        assert!(text.contains("-0.0"), "negative zero lost: {text}");
+        assert!(text.contains("0.5"), "float lost: {text}");
+        let keys: Vec<&str> = expected
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let positions: Vec<usize> = keys
+            .iter()
+            .map(|k| text.find(&format!("\"{k}\"")).unwrap())
+            .collect();
+        assert!(
+            positions.windows(2).all(|w| w[0] < w[1]),
+            "key order changed: {text}"
+        );
+    }
+}
+
+#[test]
+fn test_monty_graph_host_built_input_has_python_types() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = "def transform(data, **_):\n    \
+        out = {k: type(v).__name__ for k, v in data.items()}\n    \
+        out['key_type'] = type(list(data.keys())[0]).__name__\n    \
+        out['n_is_u64_max'] = data['n'] == 18446744073709551615\n    \
+        out['n_plus_one'] = data['n'] + 1 == 18446744073709551616\n    \
+        out['min_is_int'] = data['min'] == -9223372036854775808\n    \
+        return out\n";
+    let input = r#"{"a": null, "b": true, "c": 1, "d": 1.5, "e": "s", "f": [1], "g": {"x": 1}, "n": 18446744073709551615, "min": -9223372036854775808}"#;
+    for format in ["json", "json-compact"] {
+        let output = run_host_built_mold(&dir, mold, input, format);
+        let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "a": "NoneType", "b": "bool", "c": "int", "d": "float", "e": "str",
+                "f": "list", "g": "dict", "n": "int", "min": "int",
+                "key_type": "str",
+                "n_is_u64_max": true,
+                "n_plus_one": true,
+                "min_is_int": true,
+            }),
+            "format {format}"
+        );
+    }
+}
+
+#[test]
+fn test_monty_graph_host_built_records_are_independent() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = "def transform(data, **_):\n    \
+        data[0]['name'] = 'changed'\n    \
+        data[0].pop('extra')\n    \
+        data[1]['tags'].append('added')\n    \
+        return data\n";
+    let record = serde_json::json!({"name": "same", "extra": 1, "tags": ["t"], "inner": {"k": 1}});
+    let input = serde_json::to_string(&serde_json::json!([record, record, record])).unwrap();
+    for format in ["json", "json-compact"] {
+        let output = run_host_built_mold(&dir, mold, &input, format);
+        let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!([
+                {"name": "changed", "tags": ["t"], "inner": {"k": 1}},
+                {"name": "same", "extra": 1, "tags": ["t", "added"], "inner": {"k": 1}},
+                {"name": "same", "extra": 1, "tags": ["t"], "inner": {"k": 1}},
+            ]),
+            "format {format}"
+        );
+    }
+}

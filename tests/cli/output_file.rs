@@ -82,6 +82,152 @@ fn test_inferred_output_does_not_hide_nonfinite_float_errors() {
     assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
 }
 
+#[test]
+fn test_default_json_output_is_identical_on_direct_and_value_paths() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (expression, expected) in [
+        (
+            "[{'id': 1, 'name': 'alice'}, {'id': 2, 'name': 'bob'}]",
+            "[\n  {\n    \"id\": 1,\n    \"name\": \"alice\"\n  },\n  {\n    \"id\": 2,\n    \"name\": \"bob\"\n  }\n]\n",
+        ),
+        (
+            "{'b': [1, [2, {'c': None}]], 'a': {'x': []}}",
+            "{\n  \"b\": [\n    1,\n    [\n      2,\n      {\n        \"c\": null\n      }\n    ]\n  ],\n  \"a\": {\n    \"x\": []\n  }\n}\n",
+        ),
+        ("[]", "[]\n"),
+        ("{}", "{}\n"),
+        ("'h\u{e9}llo \u{4e16}\u{754c}'", "\"h\u{e9}llo \u{4e16}\u{754c}\"\n"),
+        ("'say \"hi\"\\nbye'", "\"say \\\"hi\\\"\\nbye\"\n"),
+        ("0.5", "0.5\n"),
+        ("1.0", "1.0\n"),
+        ("-0.0", "-0.0\n"),
+        ("18446744073709551615", "18446744073709551615\n"),
+        ("True", "true\n"),
+        ("False", "false\n"),
+        ("None", "null\n"),
+    ] {
+        let plain = setup_mold(
+            &dir,
+            "plain.py",
+            &format!("def transform(data, **_):\n    return {expression}\n"),
+        );
+        let overridden = setup_mold(
+            &dir,
+            "override.py",
+            &format!(
+                "def transform(data, **_):\n    set_output_format('json')\n    return {expression}\n"
+            ),
+        );
+        let target = dir.path().join("out.json");
+        for debug in [false, true] {
+            for mode in ["stdout", "explicit", "file", "override"] {
+                let mold = if mode == "override" { &overridden } else { &plain };
+                let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+                cmd.args(["s", "--no-input", "-m", mold]);
+                match mode {
+                    "explicit" => {
+                        cmd.args(["--output-format", "json"]);
+                    }
+                    "file" => {
+                        let _ = std::fs::remove_file(&target);
+                        cmd.arg("-o").arg(&target);
+                    }
+                    _ => {}
+                }
+                if debug {
+                    cmd.arg("--debug");
+                }
+                if mode == "file" {
+                    cmd.assert().success();
+                    assert_eq!(
+                        std::fs::read_to_string(&target).unwrap(),
+                        expected,
+                        "{expression} ({mode}, debug={debug})"
+                    );
+                } else {
+                    cmd.assert().success().stdout(expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_default_json_output_keeps_value_path_for_non_native_results() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    for (expression, expected) in [
+        ("(1, 'a')", "[\n  1,\n  \"a\"\n]\n"),
+        ("date(2026, 9, 9)", "\"2026-09-09\"\n"),
+        ("{1: 'first', '1': 'last'}", "{\n  \"1\": \"last\"\n}\n"),
+        ("18446744073709551616", "\"18446744073709551616\"\n"),
+    ] {
+        let mold = setup_mold(
+            &dir,
+            "native.py",
+            &format!(
+                "from datetime import date\ndef transform(data, **_):\n    return {expression}\n"
+            ),
+        );
+        for debug in [false, true] {
+            let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+            cmd.args(["s", "--no-input", "-m", &mold]);
+            if debug {
+                cmd.arg("--debug");
+            }
+            cmd.assert().success().stdout(expected);
+        }
+    }
+}
+
+#[test]
+fn test_default_json_output_errors_leave_target_untouched() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("out.json");
+    std::fs::write(&target, "keep me").unwrap();
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-e", "float('nan')", "-o"])
+        .arg(&target)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Cannot represent float"));
+    assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
+}
+
+#[test]
+fn test_default_json_output_write_errors_keep_value_path_messages() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("missing").join("out.json");
+    for debug in [false, true] {
+        let mut cmd = assert_cmd::cargo_bin_cmd!("fimod");
+        cmd.args(["s", "--no-input", "-e", "[1]", "-o"])
+            .arg(&target);
+        if debug {
+            cmd.arg("--debug");
+        }
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Failed to write output file"));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_default_json_output_to_full_stdout_keeps_value_path_message() {
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fimod"))
+        .args(["s", "--no-input", "-e", "[1]"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(full))
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .unwrap();
+    assert_ne!(output.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Failed to write output to stdout"));
+}
+
 // ── set_output_file() basic behaviour ──────────────────────────────────────────
 
 /// set_output_file() writes output to the specified file instead of stdout.
@@ -340,4 +486,84 @@ def transform(data, args, env, headers, **_):
 
     let content = std::fs::read_to_string(&out_path).unwrap();
     assert!(content.contains("3"));
+}
+
+// ── Atomic output files ────────────────────────────────────────────────────────
+
+/// A write interrupted by the file-size limit (SIGXFSZ kills the process
+/// mid-write) must leave the previous target intact, never a truncated file.
+#[cfg(unix)]
+#[test]
+fn test_interrupted_output_write_leaves_target_intact() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("out.json");
+    for (args, data_flag) in [
+        (vec!["-o", target.to_str().unwrap()], "--no-input"),
+        (vec!["--in-place"], "-i"),
+    ] {
+        std::fs::write(&target, r#"{"keep": "me"}"#).unwrap();
+        let mut command = vec!["s".to_string(), data_flag.to_string()];
+        if data_flag == "-i" {
+            command.push(target.to_str().unwrap().to_string());
+        }
+        command.extend(["-e".into(), "['x' * 100 for _ in range(10000)]".into()]);
+        command.extend(args.iter().map(|arg| arg.to_string()));
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(r#"ulimit -f 4; exec "$0" "$@""#)
+            .arg(env!("CARGO_BIN_EXE_fimod"))
+            .args(&command)
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(
+            !status.success(),
+            "{command:?} must hit the file-size limit"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            r#"{"keep": "me"}"#,
+            "{command:?}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_in_place_through_symlink_keeps_link_and_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = assert_fs::TempDir::new().unwrap();
+    let target = dir.path().join("target.json");
+    let link = dir.path().join("link.json");
+    std::fs::write(&target, r#"{"a": 1}"#).unwrap();
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+    std::os::unix::fs::symlink("target.json", &link).unwrap();
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-e", "{'b': 2}", "--in-place", "-i"])
+        .arg(&link)
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(&link).unwrap().is_symlink());
+    let target_meta = std::fs::metadata(&target).unwrap();
+    assert_eq!(target_meta.permissions().mode() & 0o777, 0o640);
+    assert!(std::fs::read_to_string(&target)
+        .unwrap()
+        .contains(r#""b": 2"#));
+    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_output_to_special_file_is_written_in_place() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "--no-input", "-e", "[1]", "-o", "/dev/null"])
+        .assert()
+        .success();
 }

@@ -105,3 +105,38 @@ fn test_malformed_csv_unclosed_quote_fails_cleanly() {
         .failure()
         .stderr(predicate::str::contains("panicked at").not());
 }
+
+#[test]
+fn test_runtime_traceback_names_mold_and_hides_invocation_line() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let mold = setup_mold(
+        &dir,
+        "lookup.py",
+        "def transform(data, **_):\n    return data[\"missing\"]\n",
+    );
+
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-m", &mold, "--input-format", "json"])
+        .write_stdin("{}")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "File \"{mold}\", line 2, in transform"
+        )))
+        .stderr(predicate::str::contains("KeyError"))
+        .stderr(predicate::str::contains("mold.py").not())
+        .stderr(predicate::str::contains("transform(data, args=args").not());
+}
+
+#[test]
+fn test_inline_syntax_error_points_at_expression() {
+    assert_cmd::cargo_bin_cmd!("fimod")
+        .args(["s", "-e", "data[", "--input-format", "json"])
+        .write_stdin("[1]")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("File \"<expr>\""))
+        .stderr(predicate::str::contains("return data["))
+        .stderr(predicate::str::contains("SyntaxError"))
+        .stderr(predicate::str::contains("transform(data, args=args").not());
+}

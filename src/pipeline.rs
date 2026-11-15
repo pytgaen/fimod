@@ -1,6 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, BufRead, BufReader, BufWriter, Read};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -18,7 +19,7 @@ use crate::sandbox::SandboxPolicy;
 use crate::{convert, engine, format, http, mold};
 
 const MAX_DYNAMIC_PIPELINE_STEPS: usize = 1_024;
-static STREAM_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
+static OUTPUT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A single pipeline step reference — either a mold path/name or an inline expression.
 #[derive(Debug, Clone)]
@@ -231,6 +232,7 @@ pub fn execute_chain(
             .collect();
 
         let opts = engine::MoldOptions {
+            script_name: steps[i].source.script_name(),
             extra_args: ctx.extra_args,
             arg_specs: &steps[i].defaults.arg_specs,
             env_value: ctx.env_value,
@@ -943,6 +945,67 @@ fn reader_starts_with_json_array<R: BufRead>(reader: &mut R) -> Result<bool> {
     }
 }
 
+/// Writer that remembers whether the underlying stdout reported `BrokenPipe`.
+///
+/// The streaming conversions wrap errors in several layers (serde, csv,
+/// anyhow); this record (the `Display` text of the `BrokenPipe` error) tells
+/// [`end_on_closed_stdout`] that the failure came from the reader of stdout
+/// going away rather than from the data.
+struct ClosedStdoutTracker<'a, W: Write> {
+    inner: W,
+    closed: &'a RefCell<Option<String>>,
+}
+
+impl<W: Write> ClosedStdoutTracker<'_, W> {
+    fn note<T>(&self, result: io::Result<T>) -> io::Result<T> {
+        if let Err(error) = &result {
+            if error.kind() == io::ErrorKind::BrokenPipe {
+                *self.closed.borrow_mut() = Some(error.to_string());
+            }
+        }
+        result
+    }
+}
+
+impl<W: Write> Write for ClosedStdoutTracker<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let result = self.inner.write(buf);
+        self.note(result)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let result = self.inner.flush();
+        self.note(result)
+    }
+}
+
+/// A closed stdout ends a streaming conversion normally; any other error stays.
+///
+/// Call it while the writer is still alive: drop-time flushes can raise
+/// `BrokenPipe` after a genuine data error. The extra condition that the
+/// returned error chain contains the recorded write failure text covers
+/// writers that flush on drop inside `format.rs` (`csv::Writer`). It is an
+/// AND condition: it can only report more errors, never fewer.
+fn end_on_closed_stdout(result: Result<()>, closed: &RefCell<Option<String>>) -> Result<()> {
+    match result {
+        Err(error) => match closed.borrow().as_deref() {
+            Some(text) if format!("{error:#}").contains(text) => Ok(()),
+            _ => Err(error),
+        },
+        ok => ok,
+    }
+}
+
+/// Write `bytes` to stdout and flush. A closed stdout (`BrokenPipe`) means the
+/// reader has all it wanted: that is a normal end, not an error.
+fn write_stdout(bytes: &[u8]) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    match stdout.write_all(bytes).and_then(|()| stdout.flush()) {
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
+    }
+}
+
 fn write_json_array_reader_as_format<R: Read>(
     reader: R,
     output_path: Option<&str>,
@@ -950,19 +1013,24 @@ fn write_json_array_reader_as_format<R: Read>(
     csv_opts: &CsvOptions,
 ) -> Result<()> {
     match output_path {
-        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+        Some(path) => write_output_file(path, |writer| match out_fmt {
             DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
             DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
             _ => unreachable!("guard restricts streamable JSON array output formats"),
         }),
         None => {
+            let closed = RefCell::new(None);
             let stdout = io::stdout();
-            let writer = BufWriter::new(stdout.lock());
-            match out_fmt {
-                DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, writer),
-                DataFormat::Csv => format::stream_json_array_to_csv(reader, writer, csv_opts),
+            let mut writer = BufWriter::new(ClosedStdoutTracker {
+                inner: stdout.lock(),
+                closed: &closed,
+            });
+            let result = match out_fmt {
+                DataFormat::Ndjson => format::stream_json_array_to_ndjson(reader, &mut writer),
+                DataFormat::Csv => format::stream_json_array_to_csv(reader, &mut writer, csv_opts),
                 _ => unreachable!("guard restricts streamable JSON array output formats"),
-            }
+            };
+            end_on_closed_stdout(result, &closed)
         }
     }
 }
@@ -973,37 +1041,68 @@ fn write_ndjson_reader_as_json<R: BufRead>(
     out_fmt: DataFormat,
 ) -> Result<()> {
     match output_path {
-        Some(path) => write_stream_output_file(path, |writer| match out_fmt {
+        Some(path) => write_output_file(path, |writer| match out_fmt {
             DataFormat::Json => format::stream_ndjson_to_json(reader, writer),
             DataFormat::JsonCompact => format::stream_ndjson_to_json_compact(reader, writer),
             _ => unreachable!("guard restricts streaming NDJSON output formats"),
         }),
         None => {
+            let closed = RefCell::new(None);
             let stdout = io::stdout();
-            let writer = BufWriter::new(stdout.lock());
-            match out_fmt {
-                DataFormat::Json => format::stream_ndjson_to_json(reader, writer),
-                DataFormat::JsonCompact => format::stream_ndjson_to_json_compact(reader, writer),
+            let mut writer = BufWriter::new(ClosedStdoutTracker {
+                inner: stdout.lock(),
+                closed: &closed,
+            });
+            let result = match out_fmt {
+                DataFormat::Json => format::stream_ndjson_to_json(reader, &mut writer),
+                DataFormat::JsonCompact => {
+                    format::stream_ndjson_to_json_compact(reader, &mut writer)
+                }
                 _ => unreachable!("guard restricts streaming NDJSON output formats"),
-            }
+            };
+            end_on_closed_stdout(result, &closed)
         }
     }
 }
 
-fn write_stream_output_file(
+/// Writes an output file without ever exposing a truncated target: data goes to
+/// a temporary sibling that replaces the target by rename once complete.
+///
+/// A symlinked target is resolved so the link survives. Targets that are not
+/// regular files (`/dev/null`, FIFOs, terminals) cannot be replaced and are
+/// written in place.
+fn write_output_file(
     output_path: &str,
     write: impl FnOnce(BufWriter<fs::File>) -> Result<()>,
 ) -> Result<()> {
-    let output = Path::new(output_path);
-    let existing_permissions = match fs::metadata(output) {
-        Ok(metadata) => Some(metadata.permissions()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+    let requested = Path::new(output_path);
+    let (output, existing_permissions) = match fs::metadata(requested) {
+        Ok(metadata) if !metadata.is_file() => {
+            let file = fs::OpenOptions::new()
+                .write(true)
+                .open(requested)
+                .with_context(|| format!("Failed to open output: {}", requested.display()))?;
+            return write(BufWriter::new(file));
+        }
+        Ok(metadata) => {
+            let output = if fs::symlink_metadata(requested)?.is_symlink() {
+                fs::canonicalize(requested).with_context(|| {
+                    format!("Failed to resolve output link: {}", requested.display())
+                })?
+            } else {
+                requested.to_path_buf()
+            };
+            (output, Some(metadata.permissions()))
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => (requested.to_path_buf(), None),
         Err(error) => {
-            return Err(error)
-                .with_context(|| format!("Failed to inspect output file: {}", output.display()));
+            return Err(error).with_context(|| {
+                format!("Failed to inspect output file: {}", requested.display())
+            });
         }
     };
-    let temporary = stream_output_temp_path(output);
+    let output = output.as_path();
+    let temporary = output_temp_path(output);
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -1027,22 +1126,31 @@ fn write_stream_output_file(
         }
     }
 
-    install_stream_output(&temporary, output)
+    install_output_file(&temporary, output)
 }
 
-fn stream_output_temp_path(output: &Path) -> PathBuf {
+fn output_temp_path(output: &Path) -> PathBuf {
     let file_name = output
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("output");
-    let counter = STREAM_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let counter = OUTPUT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     output.with_file_name(format!(
-        ".{file_name}.fimod-stream-{}-{counter}.tmp",
+        ".{file_name}.fimod-{}-{counter}.tmp",
         std::process::id()
     ))
 }
 
-fn install_stream_output(temporary: &Path, output: &Path) -> Result<()> {
+/// Writes complete output bytes through [`write_output_file`].
+fn write_output_bytes(path: &str, bytes: &[u8]) -> Result<()> {
+    write_output_file(path, |mut writer| {
+        writer.write_all(bytes)?;
+        writer.flush()?;
+        Ok(())
+    })
+}
+
+fn install_output_file(temporary: &Path, output: &Path) -> Result<()> {
     if let Err(rename_error) = fs::rename(temporary, output) {
         let _ = fs::remove_file(temporary);
         return Err(rename_error)
@@ -1222,10 +1330,12 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
             );
         // Preserve the existing explicit-format path. Newly eligible outputs
         // keep Value normalization for dates/tuples, key collisions and errors.
-        if matches!(
+        // Indented JSON is never "previously direct": it requires a JSON-native value.
+        if (matches!(
             out_fmt,
             DataFormat::JsonCompact | DataFormat::Ndjson | DataFormat::Lines | DataFormat::Txt
-        ) && (previously_direct || convert::is_json_native(monty))
+        ) && (previously_direct || convert::is_json_native(monty)))
+            || (out_fmt == DataFormat::Json && convert::is_json_native(monty))
         {
             let value = monty.as_ref();
             let bytes = match out_fmt {
@@ -1256,6 +1366,12 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
                     None => serde_json::to_vec(&convert::MontySerialize(monty))
                         .context("Failed to serialize txt output")?,
                 },
+                DataFormat::Json => {
+                    let mut b = serde_json::to_vec_pretty(&convert::MontySerialize(monty))
+                        .context("Failed to serialize output as JSON")?;
+                    b.push(b'\n');
+                    b
+                }
                 _ => {
                     let mut b = serde_json::to_vec(&convert::MontySerialize(monty))
                         .context("Failed to serialize output as compact JSON")?;
@@ -1263,7 +1379,11 @@ pub fn process_single_input(opts: SingleRunOptions<'_>) -> Result<CliResult> {
                     b
                 }
             };
-            write_bytes_to(actual_output, &bytes)?;
+            if out_fmt == DataFormat::Json {
+                write_output(actual_output, &bytes)?;
+            } else {
+                write_bytes_to(actual_output, &bytes)?;
+            }
             if let Some(code) = result.exit_code {
                 return Ok(CliResult::Exit(code));
             }
@@ -1386,18 +1506,25 @@ pub fn output_result(
     };
 
     // Write output
-    match output_path {
-        Some(path) => {
-            fs::write(path, &output_str)
-                .with_context(|| format!("Failed to write output file: {path}"))?;
-        }
-        None => {
-            print!("{output_str}");
-        }
-    }
+    write_output(output_path, output_str.as_bytes())?;
 
     debug_phase(debug, "serialize", serialize_start);
 
+    Ok(())
+}
+
+/// Writes final output bytes with the messages of the `Value` output path.
+/// Shared by `output_result` and direct indented JSON so they cannot drift.
+fn write_output(output_path: Option<&str>, bytes: &[u8]) -> Result<()> {
+    match output_path {
+        Some(path) => {
+            write_output_bytes(path, bytes)
+                .with_context(|| format!("Failed to write output file: {path}"))?;
+        }
+        None => {
+            write_stdout(bytes).context("Failed to write output to stdout")?;
+        }
+    }
     Ok(())
 }
 
@@ -1487,13 +1614,10 @@ pub fn url_filename(url: &str) -> Result<String> {
 /// Write `bytes` to either a file at `actual_output` or stdout when `None`.
 /// Used by the binary / raw output paths in `pipeline` and `cmd::shape`.
 pub fn write_bytes_to(actual_output: Option<&str>, bytes: &[u8]) -> Result<()> {
-    use std::io::Write;
     match actual_output {
-        Some(path) => fs::write(path, bytes)
+        Some(path) => write_output_bytes(path, bytes)
             .with_context(|| format!("Failed to write binary output to: {path}")),
-        None => io::stdout()
-            .write_all(bytes)
-            .context("Failed to write binary output to stdout"),
+        None => write_stdout(bytes).context("Failed to write binary output to stdout"),
     }
 }
 

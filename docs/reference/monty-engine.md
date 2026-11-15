@@ -2,7 +2,7 @@
 
 Monty is a Python interpreter written in Rust from scratch by Pydantic. It is **not** CPython with restrictions, nor Python compiled to WASM. It is a custom bytecode VM that uses Ruff's parser to convert Python source into its own bytecode format.
 
-Fimod uses Monty (v1.5.0) as its execution engine for mold scripts.
+Fimod uses Monty (v1.6.0) as its execution engine for mold scripts.
 
 **Source**: [pydantic/monty](https://github.com/pydantic/monty) — [blog post](https://pydantic.dev/articles/pydantic-monty)
 
@@ -253,7 +253,7 @@ The `fimod monty repl` command opens an interactive Python session powered by Mo
 
 ```
 $ fimod monty repl
-Monty REPL v1.5.0 — fimod v0.12.1 (exit or Ctrl+D to quit)
+Monty REPL v1.6.0 — fimod v0.12.1 (exit or Ctrl+D to quit)
 >>> data = {"name": "Alice", "age": 30}
 >>> data["name"].upper()
 'ALICE'

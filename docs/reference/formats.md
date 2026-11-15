@@ -10,6 +10,18 @@ fimod supports seamless conversion between multiple formats. Formats are **auto-
 - **Output**: Serialized as pretty-printed JSON.
 - **Structure**: Can be Object `{}`, Array `[]`, or any JSON value.
 
+!!! warning "Integers beyond 64 bits"
+    JSON, NDJSON and YAML input keep integers exact from
+    `-9223372036854775808` to `18446744073709551615`. Larger integers silently
+    become floats and lose precision: `12345678901234567890123` reaches the mold
+    as the float `1.2345678901234568e+22`. Numbers beyond the float range, such
+    as `1e400`, are rejected (`number out of range`). TOML rejects integers
+    beyond 64 bits, as its specification requires, and CSV values stay strings.
+
+    If you control the producer, write large identifiers as strings. Integers a
+    mold computes beyond the same range (`2**70`) are written as decimal
+    strings: `"1180591620717411303424"`.
+
 ---
 
 ## 📃 NDJSON (`.ndjson`, `.jsonl`)
@@ -73,8 +85,9 @@ cat *.json | fimod s --slurp -e 'data' --output-format ndjson
 
 ## ⚙️ TOML (`.toml`)
 
-- **Input**: Parsed into JSON-compatible structure.
-- **Output**: Serialized as TOML.
+- **Input**: Parsed into JSON-compatible structure. Dates, times and datetimes
+  become RFC 3339 strings (`2024-01-02T03:04:05Z`, `2024-01-02`, `03:04:05`).
+- **Output**: Serialized as TOML. Datetime values are written back as quoted strings.
 
 !!! warning "TOML requires a root-level object"
     Arrays or scalars at the root will fail — TOML spec constraint.

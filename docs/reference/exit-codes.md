@@ -85,3 +85,14 @@ case $? in
     3) echo "⚠️  Missing port" >&2 ;;
 esac
 ```
+
+## 🔌 Closed stdout
+
+If the reader of stdout closes the pipe early (for example `fimod s -i data.json -e 'data' | head -1`), fimod stops writing and ends quietly. This is not an error and does not change the exit status: it is `0`, or the code requested through `set_exit()`. Any other failure to write to stdout, such as a full disk, is an error with a message on stderr: the command exits with `1`, or keeps its own non-zero exit code (for example `1` for `fimod mold test` with a failing case) and still prints the message.
+
+The rule applies to every command, not only `fimod shape`: `mold list`, `mold test`, `registry list`, `setup …` and `monty repl` end quietly too, and `fimod mold test` still exits `1` when a case fails. A write failure other than a closed pipe makes a command that would have succeeded fail with `Failed to write output to stdout`.
+
+```bash
+fimod s -i big.json -e 'data' | head -1
+echo "${PIPESTATUS[0]}"   # 0
+```
