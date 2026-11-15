@@ -24,7 +24,7 @@
       
       
       <link rel="icon" href="../../assets/logo-favicon.jpg">
-      <meta name="generator" content="zensical-0.1.0">
+      <meta name="generator" content="zensical-0.1.1">
     
     
       
@@ -35,7 +35,7 @@
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.4ab2de0c.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ebb7f775.min.css">
       
         
           
@@ -1774,7 +1774,7 @@ this transition; no removal version is scheduled yet.</p>
 <p><code>count=0</code> replaces all matches in both substitution APIs; a negative count
 replaces all in the legacy helper but nothing in native <code>re.sub</code>. Backslash
 handling also differs, so test existing replacement strings before migration.
-Monty 1.5.0 has limitations: callable replacements are not implemented,
+Monty 1.6.0 has limitations: callable replacements are not implemented,
 <code>re.ASCII</code> does not currently restrict <code>\w</code> to ASCII, and a numbered replacement
 followed by a suffix (<code>r"\1_suffix"</code>) needs the explicit form <code>r"\g&lt;1&gt;_suffix"</code>.</p>
 <p><code>FIMOD_REGEX_BACKTRACK_LIMIT</code> controls only the legacy regex helpers
@@ -2001,6 +2001,10 @@ compatibility when an existing mold depends on it.</p>
 </tbody>
 </table>
 <div class="admonition tip">
+<p class="admonition-title">Per-record access on large lists</p>
+<p>Each <code>dp_*</code> call crosses from the Python VM to Rust and back. When the path is known and present, direct indexing is faster in a loop: on 100,000 records (whole command, standard build), <code>[r["name"] for r in data]</code> takes about 300 ms against 490 ms for <code>[dp_get(r, "name") for r in data]</code>. Keep <code>dp_get</code> for deep or optional paths.</p>
+</div>
+<div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>Missing intermediate keys or out-of-range indices return <code>None</code> for <code>dp_get</code>. <code>dp_set</code> creates missing intermediate keys automatically. <code>dp_delete</code> is a silent no-op when the path is missing; it shifts array elements (no null holes) and rejects empty paths.</p>
 </div>
@@ -2073,6 +2077,10 @@ remain available by default. Native Python can also handle many of these operati
 <div class="admonition warning">
 <p class="admonition-title">Field name, not lambda</p>
 <p><code>it_group_by</code>, <code>it_sort_by</code>, <code>it_unique_by</code>, <code>it_count_by</code>, <code>it_min_by</code>, and <code>it_max_by</code> take a <strong>field name string</strong> — not a lambda.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Large lists: prefer native Python</p>
+<p>Helpers run in Rust, but each call crosses from the Python VM to Rust and back, and a helper that receives the whole list copies it on the way in and out. On large lists, native Python is faster: on 100,000 records (whole command, standard build), <code>sorted(data, key=lambda r: r["score"])</code> takes about 590 ms against 1,000 ms for <code>it_sort_by(data, "score")</code>. Keep the helpers for short, readable molds; on large inputs, prefer <code>sorted(..., key=..., reverse=...)</code> and comprehensions.</p>
 </div>
 <div class="admonition info">
 <p class="admonition-title">it_flatten is recursive</p>
@@ -2463,7 +2471,7 @@ before the mold runs:</p>
       <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.indexes","navigation.top","content.code.copy","content.tabs.link","search.highlight","search.suggest"],"redirect":null,"search":"../../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d31f0ffa.min.js"></script>
+      <script src="../../assets/javascripts/bundle.3cb411a8.min.js"></script>
       
     
   </body>
