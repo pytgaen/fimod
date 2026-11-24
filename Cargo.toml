@@ -52,7 +52,7 @@ mimalloc = "0.1"
 minijinja = { version = "3", features = ["json", "loop_controls", "preserve_order", "serde"] }
 indexmap = "2.14.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-notify = { version = "8", optional = true }
+notify = { version = "9", optional = true }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
